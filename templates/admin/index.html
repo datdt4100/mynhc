@@ -331,10 +331,15 @@
                 {% endif %}
               </td>
               <td>
-                <div class="d-flex gap-1">
+                <div class="d-flex gap-1 flex-wrap">
+                  <button type="button" class="btn btn-sm btn-outline-info fw-semibold" style="font-size:.72rem; border-radius:6px;"
+                          onclick="resetPassword({{ t.id }}, '{{ t.full_name|e }}', 'teacher')"
+                          {% if t.is_first_login %}disabled title="Tài khoản chưa kích hoạt"{% endif %}>
+                    <i class="bi bi-key"></i> Khôi phục MK
+                  </button>
                   <form method="POST" action="{{ url_for('admin_teachers_reset', teacher_id=t.id) }}" class="mb-0">
                     <button type="button" class="btn btn-sm btn-outline-warning fw-semibold" style="font-size:.72rem; border-radius:6px;"
-                            onclick="showConfirmSubmit(this,{title:'Reset tài khoản?',msg:'Reset tài khoản giáo viên <strong>{{ t.full_name }}</strong>? Mật khẩu sẽ về mặc định.',confirmText:'Reset',confirmClass:'btn-warning'})">
+                            onclick="showConfirmSubmit(this,{title:'Reset tài khoản?',msg:'Reset tài khoản giáo viên <strong>{{ t.full_name }}</strong>? Tài khoản sẽ về trạng thái chưa kích hoạt.',confirmText:'Reset',confirmClass:'btn-warning'})">
                       <i class="bi bi-arrow-counterclockwise"></i> Reset
                     </button>
                   </form>
@@ -419,7 +424,12 @@
               <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">{{ s.class_name }}</span></td>
               <td><span class="badge bg-light text-dark border" style="font-size:.72rem;">{{ s.grade }}</span></td>
               <td>
-                <div class="d-flex gap-1">
+                <div class="d-flex gap-1 flex-wrap">
+                  <button type="button" class="btn btn-sm btn-outline-info fw-semibold" style="font-size:.72rem; border-radius:6px;"
+                          onclick="resetPassword({{ s.id }}, '{{ s.full_name|e }}', 'student')"
+                          {% if s.is_first_login %}disabled title="Tài khoản chưa kích hoạt"{% endif %}>
+                    <i class="bi bi-key"></i> Khôi phục MK
+                  </button>
                   <form method="POST" action="{{ url_for('admin_students_reset', student_id=s.id) }}" class="mb-0">
                     <button type="button" class="btn btn-sm btn-outline-warning fw-semibold" style="font-size:.72rem; border-radius:6px;"
                             onclick="showConfirmSubmit(this,{title:'Reset đăng ký môn học?',msg:'Xóa toàn bộ đăng ký môn học của <strong>{{ s.full_name }}</strong>?',confirmText:'Reset',confirmClass:'btn-warning'})">
@@ -546,6 +556,41 @@
   </div>
 </div>
 
+<!-- ═══ Modal: Hiển thị mật khẩu tạm thời ═══ -->
+<div class="modal fade" id="modalResetPw" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header border-0" style="background:linear-gradient(135deg,#92400e,#D97706); padding:18px 20px;">
+        <h5 class="modal-title fw-bold text-white d-flex align-items-center gap-2">
+          <i class="bi bi-key-fill"></i> Mật khẩu tạm thời
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <p class="text-muted mb-3" style="font-size:.88rem;">
+          Mật khẩu tạm của <strong id="rp-name"></strong>. Hãy gửi cho người dùng — họ sẽ được yêu cầu đổi mật khẩu mới sau khi đăng nhập.
+        </p>
+        <div class="d-flex align-items-center gap-2 p-3 rounded-3"
+             style="background:#FEF3C7; border:1.5px solid #FCD34D;">
+          <code id="rp-pw" style="font-size:1.15rem; font-weight:700; letter-spacing:.08em; color:#92400E; flex:1; word-break:break-all;"></code>
+          <button type="button" class="btn btn-sm btn-outline-secondary" style="border-radius:6px; flex-shrink:0;"
+                  onclick="copyTempPw()" title="Sao chép">
+            <i class="bi bi-copy" id="rp-copy-icon"></i>
+          </button>
+        </div>
+        <div class="mt-3 d-flex align-items-start gap-2 p-2 rounded-2"
+             style="background:#FFF7ED; border:1px solid #FED7AA; font-size:.78rem; color:#92400E;">
+          <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1" style="color:#F59E0B;"></i>
+          <span>Mật khẩu này chỉ hiển thị <strong>một lần</strong>. Vui lòng sao chép trước khi đóng.</span>
+        </div>
+      </div>
+      <div class="modal-footer border-top" style="padding:12px 20px;">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-radius:8px;">Đóng</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -570,6 +615,42 @@ function toggleReg(type) {
     })
     .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
     .finally(() => { btn.disabled = false; });
+}
+
+function resetPassword(userId, userName, userType) {
+  showConfirm(
+    'Khôi phục mật khẩu?',
+    'Tạo mật khẩu tạm thời cho <strong>' + userName + '</strong>?<br>'
+    + '<span style="font-size:.85rem;color:#64748B;">Người dùng sẽ phải đổi mật khẩu sau khi đăng nhập.</span>',
+    async function () {
+      const url = '/' + (userType === 'teacher' ? 'admin/teachers' : 'admin/students')
+                  + '/' + userId + '/reset-password';
+      try {
+        const res  = await fetch(url, { method: 'POST' });
+        const data = await res.json();
+        if (!data.ok) {
+          showAlert(data.error || 'Có lỗi xảy ra.', 'error');
+          return;
+        }
+        document.getElementById('rp-name').textContent = data.name || userName;
+        document.getElementById('rp-pw').textContent   = data.new_password;
+        document.getElementById('rp-copy-icon').className = 'bi bi-copy';
+        new bootstrap.Modal(document.getElementById('modalResetPw')).show();
+      } catch {
+        showAlert('Lỗi kết nối máy chủ.', 'error');
+      }
+    },
+    { confirmText: 'Khôi phục', confirmClass: 'btn-warning' }
+  );
+}
+
+function copyTempPw() {
+  const pw = document.getElementById('rp-pw').textContent;
+  navigator.clipboard.writeText(pw).then(() => {
+    const icon = document.getElementById('rp-copy-icon');
+    icon.className = 'bi bi-check2';
+    setTimeout(() => { icon.className = 'bi bi-copy'; }, 1500);
+  });
 }
 </script>
 {% endblock %}

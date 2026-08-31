@@ -1,6 +1,10 @@
 import os
+import re
 import json
 import io
+import secrets
+import string
+import unicodedata
 from functools import wraps
 from datetime import datetime
 
@@ -11,7 +15,7 @@ from flask import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import (
     create_engine, MetaData, Table, Column, Integer, Text,
-    insert, select, update, delete, and_, or_, func
+    insert, select, update, delete, and_, or_, func, text
 )
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -44,6 +48,7 @@ teachers = Table(
     Column("email", Text, nullable=True),
     Column("password_hash", Text, nullable=True),
     Column("is_first_login", Integer, default=1),
+    Column("must_change_password", Integer, default=0),
 )
 
 students = Table(
@@ -55,6 +60,7 @@ students = Table(
     Column("grade", Integer, nullable=False),         # 10 / 11 / 12
     Column("password_hash", Text, nullable=True),
     Column("is_first_login", Integer, default=1),
+    Column("must_change_password", Integer, default=0),
 )
 
 classes = Table(
@@ -94,9 +100,18 @@ settings_table = Table(
 
 def init_db():
     metadata.create_all(engine)
-    # Ensure unique constraint on enrollments(student_id, class_id) via index
-    # SQLAlchemy handles this via the schema; for SQLite we add it manually if needed.
     with engine.connect() as conn:
+        # Migrate: add must_change_password column if not exists (for existing DBs)
+        for stmt in [
+            "ALTER TABLE teachers ADD COLUMN must_change_password INTEGER DEFAULT 0",
+            "ALTER TABLE students ADD COLUMN must_change_password INTEGER DEFAULT 0",
+        ]:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
         # Seed default settings
         for key, value in [("admin_password", "admin123"),
                            ("teacher_reg_open", "0"),
@@ -115,6 +130,34 @@ with app.app_context():
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+# Allowed special chars (excludes ' " ` ; \ which are DB-dangerous)
+_PW_ALLOWED_SPECIALS = r"!@#$%^&*()\-_+=\[\]{}|<>,.?/~"
+_PW_PATTERN = re.compile(r'^[A-Za-z0-9' + _PW_ALLOWED_SPECIALS + r']+$')
+
+
+def validate_password(pw: str):
+    """Normalize and validate password. Returns (ok, error_msg)."""
+    pw = unicodedata.normalize('NFKC', pw).strip()
+    if len(pw) < 8:
+        return False, "Mật khẩu phải có ít nhất 8 ký tự."
+    if not _PW_PATTERN.match(pw):
+        return False, (
+            "Mật khẩu chỉ được chứa chữ hoa, chữ thường, chữ số "
+            "và ký tự đặc biệt hợp lệ (!@#$%^&*()-_+=[]{}|<>,.?/~). "
+            "Không dùng dấu nháy (', \"), dấu chấm phẩy (;) hoặc dấu gạch chéo (\\)."
+        )
+    return True, None
+
+
+def normalize_password(pw: str) -> str:
+    return unicodedata.normalize('NFKC', pw).strip()
+
+
+def generate_temp_password(length: int = 12) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
 
 def get_setting(key, default=None):
     with engine.connect() as conn:
@@ -273,7 +316,7 @@ def login_step2():
     full_name = (data.get("full_name") or "").strip()
     cccd = (data.get("cccd") or "").strip()
     user_type = data.get("user_type")
-    password = data.get("password") or ""
+    password = normalize_password(data.get("password") or "")
     email = (data.get("email") or "").strip()
 
     if user_type == "teacher":
@@ -291,8 +334,9 @@ def login_step2():
             # First login: set email + password
             if not email:
                 return jsonify(ok=False, error="Vui lòng nhập email.")
-            if not password or len(password) < 6:
-                return jsonify(ok=False, error="Mật khẩu phải có ít nhất 6 ký tự.")
+            ok, err = validate_password(password)
+            if not ok:
+                return jsonify(ok=False, error=err)
             pw_hash = generate_password_hash(password)
             with engine.connect() as conn:
                 conn.execute(
@@ -300,6 +344,7 @@ def login_step2():
                         email=email,
                         password_hash=pw_hash,
                         is_first_login=0,
+                        must_change_password=0,
                     )
                 )
                 conn.commit()
@@ -315,6 +360,10 @@ def login_step2():
         session["full_name"] = teacher.full_name
         session["gender"] = teacher.gender
         session["subject_group"] = teacher.subject_group
+
+        must_change = getattr(teacher, 'must_change_password', 0) or 0
+        if must_change and not teacher.is_first_login:
+            return jsonify(ok=True, must_change=True, redirect=url_for("change_password_page"))
         return jsonify(ok=True, redirect=url_for("teacher_dashboard"))
 
     elif user_type == "student":
@@ -330,14 +379,16 @@ def login_step2():
 
         if student.is_first_login:
             # First login: set password (no email required for students)
-            if not password or len(password) < 6:
-                return jsonify(ok=False, error="Mật khẩu phải có ít nhất 6 ký tự.")
+            ok, err = validate_password(password)
+            if not ok:
+                return jsonify(ok=False, error=err)
             pw_hash = generate_password_hash(password)
             with engine.begin() as conn:
                 conn.execute(
                     update(students).where(students.c.id == student.id).values(
                         password_hash=pw_hash,
                         is_first_login=0,
+                        must_change_password=0,
                     )
                 )
         else:
@@ -351,6 +402,10 @@ def login_step2():
         session["user_id"] = student.id
         session["full_name"] = student.full_name
         session["grade"] = student.grade
+
+        must_change = getattr(student, 'must_change_password', 0) or 0
+        if must_change and not student.is_first_login:
+            return jsonify(ok=True, must_change=True, redirect=url_for("change_password_page"))
         return jsonify(ok=True, redirect=url_for("student_dashboard"))
 
     return jsonify(ok=False, error="Loại tài khoản không hợp lệ.")
@@ -360,6 +415,45 @@ def login_step2():
 def logout():
     session.clear()
     return redirect(url_for("login_page"))
+
+
+@app.route("/change-password", methods=["GET"])
+def change_password_page():
+    user_type = session.get("user_type")
+    if user_type not in ("teacher", "student"):
+        return redirect(url_for("login_page"))
+    return render_template("change_password.html")
+
+
+@app.route("/change-password", methods=["POST"])
+def change_password_submit():
+    user_type = session.get("user_type")
+    user_id   = session.get("user_id")
+    if user_type not in ("teacher", "student") or not user_id:
+        return jsonify(ok=False, error="Phiên đăng nhập hết hạn.")
+
+    data = request.get_json(force=True)
+    new_pw  = normalize_password(data.get("new_password") or "")
+    confirm = normalize_password(data.get("confirm_password") or "")
+
+    ok, err = validate_password(new_pw)
+    if not ok:
+        return jsonify(ok=False, error=err)
+    if new_pw != confirm:
+        return jsonify(ok=False, error="Mật khẩu xác nhận không khớp.")
+
+    pw_hash = generate_password_hash(new_pw)
+    table = teachers if user_type == "teacher" else students
+    with engine.begin() as conn:
+        conn.execute(
+            update(table).where(table.c.id == user_id).values(
+                password_hash=pw_hash,
+                must_change_password=0,
+            )
+        )
+
+    redirect_url = url_for("teacher_dashboard") if user_type == "teacher" else url_for("student_dashboard")
+    return jsonify(ok=True, redirect=redirect_url)
 
 # ---------------------------------------------------------------------------
 # Teacher routes
@@ -939,6 +1033,30 @@ def admin_teachers_reset(teacher_id):
     return redirect(url_for("admin_index"))
 
 
+@app.route("/admin/teachers/<int:teacher_id>/reset-password", methods=["POST"])
+@admin_required
+def admin_teachers_reset_password(teacher_id):
+    with engine.connect() as conn:
+        teacher = conn.execute(
+            select(teachers.c.id, teachers.c.full_name, teachers.c.is_first_login)
+            .where(teachers.c.id == teacher_id)
+        ).fetchone()
+    if not teacher:
+        return jsonify(ok=False, error="Không tìm thấy giáo viên.")
+    if teacher.is_first_login:
+        return jsonify(ok=False, error="Tài khoản chưa kích hoạt, không cần khôi phục mật khẩu.")
+
+    temp_pw = generate_temp_password()
+    with engine.begin() as conn:
+        conn.execute(
+            update(teachers).where(teachers.c.id == teacher_id).values(
+                password_hash=generate_password_hash(temp_pw),
+                must_change_password=1,
+            )
+        )
+    return jsonify(ok=True, new_password=temp_pw, name=teacher.full_name)
+
+
 @app.route("/admin/teachers/<int:teacher_id>", methods=["DELETE"])
 @admin_required
 def admin_teachers_delete(teacher_id):
@@ -1112,6 +1230,30 @@ def admin_students_reset(student_id):
         )
     flash("Đã reset tài khoản và xóa đăng ký của học sinh.", "success")
     return redirect(url_for("admin_index"))
+
+
+@app.route("/admin/students/<int:student_id>/reset-password", methods=["POST"])
+@admin_required
+def admin_students_reset_password(student_id):
+    with engine.connect() as conn:
+        student = conn.execute(
+            select(students.c.id, students.c.full_name, students.c.is_first_login)
+            .where(students.c.id == student_id)
+        ).fetchone()
+    if not student:
+        return jsonify(ok=False, error="Không tìm thấy học sinh.")
+    if student.is_first_login:
+        return jsonify(ok=False, error="Tài khoản chưa kích hoạt, không cần khôi phục mật khẩu.")
+
+    temp_pw = generate_temp_password()
+    with engine.begin() as conn:
+        conn.execute(
+            update(students).where(students.c.id == student_id).values(
+                password_hash=generate_password_hash(temp_pw),
+                must_change_password=1,
+            )
+        )
+    return jsonify(ok=True, new_password=temp_pw, name=student.full_name)
 
 
 @app.route("/admin/students/<int:student_id>", methods=["DELETE"])

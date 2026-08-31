@@ -221,6 +221,9 @@
                 <i class="bi bi-eye"></i>
               </button>
             </div>
+            <div class="field-hint" id="pw-rules" style="display:none;">
+              Ít nhất 8 ký tự · chữ hoa, chữ thường, số, ký tự đặc biệt (<code>!@#$%^&amp;*()-_+=[]{}|&lt;&gt;,.?/~</code>) · không dùng <code>' " ; \</code>
+            </div>
           </div>
 
           <!-- Confirm password (first login only) -->
@@ -384,6 +387,7 @@
       greetEl.textContent = title + ' ' + (data.full_name || full_name);
 
       /* Configure step-2 fields */
+      const pwRules = document.getElementById('pw-rules');
       if (_firstLogin && _role === 'teacher') {
         /* Teacher first login: email + new password + confirm */
         hdrText.textContent = 'Thiết lập tài khoản';
@@ -395,6 +399,7 @@
         pwField.placeholder        = 'Nhập mật khẩu mới';
         pwField.setAttribute('autocomplete', 'new-password');
         cfHint.textContent = 'Mật khẩu phải trùng khớp';
+        if (pwRules) pwRules.style.display = '';
       } else if (_firstLogin && _role === 'student') {
         /* Student first login: new password + confirm (no email) */
         hdrText.textContent = 'Thiết lập mật khẩu';
@@ -406,6 +411,7 @@
         pwField.placeholder        = 'Nhập mật khẩu mới';
         pwField.setAttribute('autocomplete', 'new-password');
         cfHint.textContent = 'Mật khẩu phải trùng khớp';
+        if (pwRules) pwRules.style.display = '';
       } else {
         /* Returning user (teacher or student): only password */
         hdrText.textContent = 'Xác thực danh tính';
@@ -416,6 +422,7 @@
         pwLabel.textContent        = 'Mật khẩu';
         pwField.placeholder        = 'Nhập mật khẩu';
         pwField.setAttribute('autocomplete', 'current-password');
+        if (pwRules) pwRules.style.display = 'none';
       }
 
       /* Reset step-2 inputs */
@@ -498,7 +505,7 @@
         return;
       }
 
-      /* Redirect on success */
+      /* Redirect on success (may be forced change-password) */
       window.location.href = data.redirect || '/';
 
     } catch (err) {

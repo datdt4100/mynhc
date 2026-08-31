@@ -324,10 +324,11 @@
               </td>
               <td>
                 {% if t.is_first_login %}
-                  <span class="badge bg-warning text-dark">Chưa đăng ký</span>
+                  <span class="badge bg-secondary">Chưa kích hoạt</span>
+                {% elif t.must_change_password %}
+                  <span class="badge bg-warning text-dark">Cần đổi MK</span>
                 {% else %}
                   <span class="badge bg-success">Đã kích hoạt</span>
-                  {% if t.email %}<div style="font-size:.7rem; color:#64748B; margin-top:2px;">{{ t.email }}</div>{% endif %}
                 {% endif %}
               </td>
               <td>
@@ -412,7 +413,8 @@
               <th>CCCD</th>
               <th>Lớp</th>
               <th>Khối</th>
-              <th style="width:140px;">Thao tác</th>
+              <th>Trạng thái TK</th>
+              <th style="width:180px;">Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -423,6 +425,15 @@
               <td><code style="font-size:.78rem;">{{ s.cccd }}</code></td>
               <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">{{ s.class_name }}</span></td>
               <td><span class="badge bg-light text-dark border" style="font-size:.72rem;">{{ s.grade }}</span></td>
+              <td>
+                {% if s.is_first_login %}
+                  <span class="badge bg-secondary">Chưa kích hoạt</span>
+                {% elif s.must_change_password %}
+                  <span class="badge bg-warning text-dark">Cần đổi MK</span>
+                {% else %}
+                  <span class="badge bg-success">Đã kích hoạt</span>
+                {% endif %}
+              </td>
               <td>
                 <div class="d-flex gap-1 flex-wrap">
                   <button type="button" class="btn btn-sm btn-outline-info fw-semibold" style="font-size:.72rem; border-radius:6px;"
@@ -448,7 +459,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="6" class="text-center text-muted py-5">
+              <td colspan="7" class="text-center text-muted py-5">
                 <i class="bi bi-people" style="font-size:2rem; display:block; margin-bottom:8px;"></i>
                 Chưa có học sinh nào
               </td>

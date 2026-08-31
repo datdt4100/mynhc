@@ -3,30 +3,13 @@
 {% block hero %}{% endblock %}
 
 {% block header_right %}
-<div class="d-flex align-items-center gap-2">
-  <a href="{{ url_for('admin_index') }}" class="topbar-btn topbar-btn-back">
-    <i class="bi bi-arrow-left"></i>
-    <span class="d-none d-md-inline">Quay lại</span>
-  </a>
-  <button class="topbar-btn topbar-btn-solid" id="btn-toggle-reg" onclick="toggleTeacherReg()">
-    {% if teacher_reg_open %}
-    <i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng đăng ký</span>
-    {% else %}
-    <i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở đăng ký</span>
-    {% endif %}
-  </button>
-  <a href="{{ url_for('admin_class_reg_export') }}" class="topbar-btn" title="Tải Excel phân phòng">
-    <i class="bi bi-file-earmark-arrow-down"></i>
-    <span class="d-none d-lg-inline">Excel phân phòng</span>
-  </a>
-  <form id="frmImportRooms" method="POST" action="{{ url_for('admin_classes_import_rooms') }}" enctype="multipart/form-data" class="m-0">
-    <input type="file" id="fileImportRooms" name="file" accept=".xlsx,.xls" style="display:none;" onchange="document.getElementById('frmImportRooms').submit()">
-  </form>
-  <button type="button" class="topbar-btn" title="Upload phân phòng" onclick="document.getElementById('fileImportRooms').click()">
-    <i class="bi bi-file-earmark-arrow-up"></i>
-    <span class="d-none d-lg-inline">Upload phân phòng</span>
-  </button>
-</div>
+<button class="topbar-btn topbar-btn-solid" id="btn-toggle-reg" onclick="toggleTeacherReg()">
+  {% if teacher_reg_open %}
+  <i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng đăng ký</span>
+  {% else %}
+  <i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở đăng ký</span>
+  {% endif %}
+</button>
 {% endblock %}
 
 {% block head %}
@@ -98,6 +81,9 @@
 
 <div class="container pb-5">
   <div class="d-flex align-items-center gap-2 mb-4 pt-4">
+    <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 flex-shrink-0" style="border-radius:8px; font-size:.8rem;">
+      <i class="bi bi-arrow-left"></i><span class="d-none d-sm-inline">Quay lại</span>
+    </a>
     <h1 style="font-size:1.1rem; font-weight:800; color:#0c4a6e; margin:0;">
       <i class="bi bi-journal-plus me-2" style="color:#0EA5E9;"></i>Quản lý đăng ký mở lớp
     </h1>
@@ -129,6 +115,17 @@
       <i class="bi bi-table"></i>
       <span>Tổng hợp theo giáo viên</span>
       <span class="text-muted ms-1" style="font-weight:400; font-size:.8rem;">(click để xem chi tiết)</span>
+      <div class="ms-auto d-flex gap-2">
+        <a href="{{ url_for('admin_class_reg_export') }}" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;" title="Tải Excel phân phòng">
+          <i class="bi bi-file-earmark-arrow-down"></i><span class="d-none d-sm-inline">Tải Excel</span>
+        </a>
+        <form id="frmImportRooms" method="POST" action="{{ url_for('admin_classes_import_rooms') }}" enctype="multipart/form-data" class="m-0">
+          <input type="file" id="fileImportRooms" name="file" accept=".xlsx,.xls" style="display:none;" onchange="document.getElementById('frmImportRooms').submit()">
+        </form>
+        <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;" title="Upload phân phòng" onclick="document.getElementById('fileImportRooms').click()">
+          <i class="bi bi-file-earmark-arrow-up"></i><span class="d-none d-sm-inline">Upload</span>
+        </button>
+      </div>
     </div>
     <div class="table-responsive-admin">
       <table class="table admin-table mb-0" id="teacher-summary-table">

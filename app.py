@@ -796,12 +796,15 @@ def student_cancel_enroll(class_id):
 
 @app.route("/api/class-counts")
 def api_class_counts():
-    if not session.get("user_type"):
+    is_admin = session.get("is_admin") is True
+    user_type = session.get("user_type")
+    if not is_admin and not user_type:
         return jsonify({}), 401
 
-    user_type = session.get("user_type")
     with engine.connect() as conn:
-        if user_type == "student":
+        if is_admin:
+            where_clause = classes.c.is_published == 1
+        elif user_type == "student":
             student_grade = session.get("grade")
             where_clause = and_(
                 classes.c.is_published == 1,
@@ -1711,6 +1714,7 @@ def admin_enrollment_students(class_id):
         {
             "id": s.id,
             "full_name": s.full_name,
+            "cccd": s.cccd,
             "class_name": s.class_name,
             "grade": s.grade,
             "enrolled_at": s.enrolled_at,

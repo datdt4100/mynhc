@@ -156,9 +156,9 @@
               <span class="badge bg-light text-dark border" style="font-size:.72rem;">Khối {{ cls.grade }}</span>
             </td>
             <td style="white-space:nowrap; font-size:.78rem;">
-              {{ day_name(cls.day_of_week) if day_name is callable else cls.day_of_week }},
-              {{ session_label(cls.session_type, cls.start_session, cls.duration) if session_label is callable else cls.session_type }},
-              tiết {{ cls.start_session }}–{{ cls.start_session + cls.duration - 1 }}
+              {{ day_name(cls.day_of_week) if day_name is callable else cls.day_of_week }} -
+              {{ "Sáng" if cls.session_type == "morning" else "Chiều" }} -
+              Tiết {{ cls.start_session }}{% if cls.duration > 1 %}–{{ cls.start_session + cls.duration - 1 }}{% endif %}
             </td>
             <td style="font-size:.8rem;">{{ cls.location or '—' }}</td>
             <td class="text-center">
@@ -328,7 +328,8 @@ function refreshCounts() {
       ALL_CLASS_IDS.forEach(id => {
         const el = document.getElementById('count-' + id);
         if (!el) return;
-        const cnt = data[id] ?? 0;
+        const raw = data[String(id)] ?? data[id] ?? 0;
+        const cnt = (raw && typeof raw === 'object') ? (raw.count ?? 0) : Number(raw);
         const max = el.dataset.max ? parseInt(el.dataset.max) : null;
         el.className = 'count-badge ' + (
           cnt >= 45 ? 'count-badge-red' :
@@ -376,8 +377,8 @@ function viewStudents(classId) {
                 <th style="padding:8px 12px; font-weight:700; color:#475569; border:none; width:44px;">STT</th>
                 <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Họ tên</th>
                 <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">CCCD</th>
-                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Lớp</th>
                 <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Khối</th>
+                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Lớp</th>
               </tr>
             </thead>
             <tbody>
@@ -387,8 +388,8 @@ function viewStudents(classId) {
           <td style="padding:8px 12px; color:#94A3B8;">${i+1}</td>
           <td style="padding:8px 12px; font-weight:600;">${s.full_name}</td>
           <td style="padding:8px 12px;"><code style="font-size:.75rem;">${s.cccd}</code></td>
-          <td style="padding:8px 12px;">${s.class_name ?? '—'}</td>
           <td style="padding:8px 12px;">${s.grade ?? '—'}</td>
+          <td style="padding:8px 12px;">${s.class_name ?? '—'}</td>
         </tr>`;
       });
       html += '</tbody></table></div>';

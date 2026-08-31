@@ -142,6 +142,27 @@
     width: 1px; height: 22px; background: #E2E8F0; margin: 0 4px;
   }
 
+  /* ── Search box ── */
+  .search-box {
+    position: relative; flex: 1; min-width: 160px; max-width: 260px;
+  }
+  .search-box i {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: #94A3B8; font-size: .85rem; pointer-events: none;
+  }
+  .search-box input {
+    width: 100%; padding: 5px 10px 5px 30px;
+    border: 1.5px solid #E2E8F0; border-radius: 8px;
+    font-size: .78rem; color: #334155; background: #fff;
+    transition: border-color .15s;
+    outline: none;
+  }
+  .search-box input:focus { border-color: #0EA5E9; }
+  .search-empty {
+    display: none; text-align: center;
+    padding: 28px; color: #94A3B8; font-size: .84rem;
+  }
+
   /* ── Icon-only action buttons ── */
   .adm-icon-btn {
     display: inline-flex; align-items: center; justify-content: center;
@@ -299,18 +320,20 @@
               data-bs-toggle="modal" data-bs-target="#modalAddTeacher">
         <i class="bi bi-person-plus me-1"></i>Thêm giáo viên
       </button>
-      <div class="ms-auto">
-        <form method="POST" action="{{ url_for('admin_teachers_clear') }}" class="mb-0">
-          <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
-                  onclick="showConfirmSubmit(this,{title:'Xóa toàn bộ giáo viên?',msg:'Hành động này sẽ xóa <strong>toàn bộ danh sách giáo viên</strong> và không thể hoàn tác.',confirmText:'Xóa tất cả',confirmClass:'btn-danger'})">
-            <i class="bi bi-trash3 me-1"></i>Xóa tất cả
-          </button>
-        </form>
+      <div class="search-box ms-auto">
+        <i class="bi bi-search"></i>
+        <input type="search" id="searchTeacher" placeholder="Tìm tên hoặc CCCD…" oninput="filterTable('teacher')">
       </div>
+      <form method="POST" action="{{ url_for('admin_teachers_clear') }}" class="mb-0">
+        <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
+                onclick="showConfirmSubmit(this,{title:'Xóa toàn bộ giáo viên?',msg:'Hành động này sẽ xóa <strong>toàn bộ danh sách giáo viên</strong> và không thể hoàn tác.',confirmText:'Xóa tất cả',confirmClass:'btn-danger'})">
+          <i class="bi bi-trash3 me-1"></i>Xóa tất cả
+        </button>
+      </form>
     </div>
     <div class="section-card-body p-0">
       <div class="table-responsive-admin">
-        <table class="table table-hover admin-table mb-0">
+        <table id="tableTeacher" class="table table-hover admin-table mb-0">
           <thead>
             <tr>
               <th style="width:44px;">STT</th>
@@ -325,7 +348,7 @@
           </thead>
           <tbody>
             {% for t in teacher_list %}
-            <tr>
+            <tr data-search="{{ t.full_name|lower }} {{ t.cccd }}">
               <td class="text-muted" style="font-size:.75rem;">{{ loop.index }}</td>
               <td class="fw-semibold">{{ t.full_name }}</td>
               <td><code style="font-size:.78rem;">{{ t.cccd }}</code></td>
@@ -382,6 +405,10 @@
             {% endfor %}
           </tbody>
         </table>
+        <div class="search-empty" id="emptyTeacher">
+          <i class="bi bi-search" style="font-size:1.4rem; display:block; margin-bottom:6px;"></i>
+          Không tìm thấy giáo viên phù hợp
+        </div>
       </div>
     </div>
   </div>
@@ -412,18 +439,20 @@
               data-bs-toggle="modal" data-bs-target="#modalAddStudent">
         <i class="bi bi-person-plus me-1"></i>Thêm học sinh
       </button>
-      <div class="ms-auto">
-        <form method="POST" action="{{ url_for('admin_students_clear') }}" class="mb-0">
-          <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
-                  onclick="showConfirmSubmit(this,{title:'Xóa toàn bộ học sinh?',msg:'Hành động này sẽ xóa <strong>toàn bộ danh sách học sinh</strong> và không thể hoàn tác.',confirmText:'Xóa tất cả',confirmClass:'btn-danger'})">
-            <i class="bi bi-trash3 me-1"></i>Xóa tất cả
-          </button>
-        </form>
+      <div class="search-box ms-auto">
+        <i class="bi bi-search"></i>
+        <input type="search" id="searchStudent" placeholder="Tìm tên hoặc CCCD…" oninput="filterTable('student')">
       </div>
+      <form method="POST" action="{{ url_for('admin_students_clear') }}" class="mb-0">
+        <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
+                onclick="showConfirmSubmit(this,{title:'Xóa toàn bộ học sinh?',msg:'Hành động này sẽ xóa <strong>toàn bộ danh sách học sinh</strong> và không thể hoàn tác.',confirmText:'Xóa tất cả',confirmClass:'btn-danger'})">
+          <i class="bi bi-trash3 me-1"></i>Xóa tất cả
+        </button>
+      </form>
     </div>
     <div class="section-card-body p-0">
       <div class="table-responsive-admin">
-        <table class="table table-hover admin-table mb-0">
+        <table id="tableStudent" class="table table-hover admin-table mb-0">
           <thead>
             <tr>
               <th style="width:44px;">STT</th>
@@ -438,7 +467,7 @@
           </thead>
           <tbody>
             {% for s in student_list %}
-            <tr>
+            <tr data-search="{{ s.full_name|lower }} {{ s.cccd }}">
               <td class="text-muted" style="font-size:.75rem;">{{ loop.index }}</td>
               <td class="fw-semibold">{{ s.full_name }}</td>
               <td><code style="font-size:.78rem;">{{ s.cccd }}</code></td>
@@ -495,6 +524,10 @@
             {% endfor %}
           </tbody>
         </table>
+        <div class="search-empty" id="emptyStudent">
+          <i class="bi bi-search" style="font-size:1.4rem; display:block; margin-bottom:6px;"></i>
+          Không tìm thấy học sinh phù hợp
+        </div>
       </div>
     </div>
   </div>
@@ -681,6 +714,20 @@ function resetPassword(userId, userName, userType) {
     },
     { confirmText: 'Khôi phục', confirmClass: 'btn-warning' }
   );
+}
+
+function filterTable(type) {
+  const q = document.getElementById('search' + (type === 'teacher' ? 'Teacher' : 'Student'))
+              .value.trim().toLowerCase();
+  const tbody = document.querySelector('#table' + (type === 'teacher' ? 'Teacher' : 'Student') + ' tbody');
+  const empty = document.getElementById('empty' + (type === 'teacher' ? 'Teacher' : 'Student'));
+  let visible = 0;
+  tbody.querySelectorAll('tr[data-search]').forEach(tr => {
+    const match = !q || tr.dataset.search.includes(q);
+    tr.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  empty.style.display = (q && visible === 0) ? 'block' : 'none';
 }
 
 function copyTempPw() {

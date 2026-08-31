@@ -31,7 +31,16 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///classreg.db")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(DATABASE_URL, future=True)
+_engine_kwargs = {"future": True, "pool_pre_ping": True}
+if not DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs.update({
+        "pool_size": 5,
+        "max_overflow": 2,
+        "pool_recycle": 300,
+        "pool_timeout": 30,
+        "connect_args": {"sslmode": "require"},
+    })
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
 metadata = MetaData()
 
 # ---------------------------------------------------------------------------

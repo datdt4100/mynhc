@@ -92,6 +92,18 @@
     color: var(--muted);
     margin-top: 4px;
   }
+  /* Password checklist */
+  .pw-checklist-box {
+    display: flex; flex-direction: column; gap: 6px;
+    background: #F8FAFC; border: 1px solid #E2E8F0;
+    border-radius: 8px; padding: 10px 14px; margin-top: 8px;
+  }
+  .pw-chk {
+    display: flex; align-items: center; gap: 8px;
+    font-size: .8rem; color: #94A3B8; transition: color .18s;
+  }
+  .pw-chk.ok { color: #16A34A; }
+  .pw-chk i  { font-size: .82rem; flex-shrink: 0; }
 </style>
 {% endblock %}
 
@@ -221,8 +233,12 @@
                 <i class="bi bi-eye"></i>
               </button>
             </div>
-            <div class="field-hint" id="pw-rules" style="display:none;">
-              Ít nhất 8 ký tự · chữ hoa, chữ thường, số, ký tự đặc biệt (<code>!@#$%^&amp;*()-_+=[]{}|&lt;&gt;,.?/~</code>) · không dùng <code>' " ; \</code>
+            <div id="pw-rules" class="pw-checklist-box" style="display:none;">
+              <div class="pw-chk" id="chk-len">  <i class="bi bi-circle"></i><span>Ít nhất 8 ký tự</span></div>
+              <div class="pw-chk" id="chk-upper"><i class="bi bi-circle"></i><span>Chữ hoa (A–Z)</span></div>
+              <div class="pw-chk" id="chk-lower"><i class="bi bi-circle"></i><span>Chữ thường (a–z)</span></div>
+              <div class="pw-chk" id="chk-digit"><i class="bi bi-circle"></i><span>Số (0–9)</span></div>
+              <div class="pw-chk" id="chk-special"><i class="bi bi-circle"></i><span>Ký tự đặc biệt (!@#$%&amp;*_+…)</span></div>
             </div>
           </div>
 
@@ -399,7 +415,7 @@
         pwField.placeholder        = 'Nhập mật khẩu mới';
         pwField.setAttribute('autocomplete', 'new-password');
         cfHint.textContent = 'Mật khẩu phải trùng khớp';
-        if (pwRules) pwRules.style.display = '';
+        if (pwRules) pwRules.style.display = 'flex';
       } else if (_firstLogin && _role === 'student') {
         /* Student first login: new password + confirm (no email) */
         hdrText.textContent = 'Thiết lập mật khẩu';
@@ -411,7 +427,7 @@
         pwField.placeholder        = 'Nhập mật khẩu mới';
         pwField.setAttribute('autocomplete', 'new-password');
         cfHint.textContent = 'Mật khẩu phải trùng khớp';
-        if (pwRules) pwRules.style.display = '';
+        if (pwRules) pwRules.style.display = 'flex';
       } else {
         /* Returning user (teacher or student): only password */
         hdrText.textContent = 'Xác thực danh tính';
@@ -521,6 +537,46 @@
     sec1.style.display = '';
     clearError(err1Wrap);
     document.getElementById('full_name').focus();
+  });
+
+  /* ── Strip disallowed chars & live password checklist ── */
+  const DISALLOWED_PW = /['";\\]/g;
+  const SPECIAL_PW    = /[!@#$%^&*()\-_+=[\]{}|<>,.?/~]/;
+  function updatePwChecklist(val) {
+    const rules = [
+      ['chk-len',     val.length >= 8],
+      ['chk-upper',   /[A-Z]/.test(val)],
+      ['chk-lower',   /[a-z]/.test(val)],
+      ['chk-digit',   /[0-9]/.test(val)],
+      ['chk-special', SPECIAL_PW.test(val)],
+    ];
+    for (const [id, ok] of rules) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      el.classList.toggle('ok', ok);
+      el.querySelector('i').className = ok ? 'bi bi-check-circle-fill' : 'bi bi-circle';
+    }
+  }
+  pwField.addEventListener('input', () => {
+    const s = pwField.selectionStart;
+    const before = pwField.value;
+    const after  = before.replace(DISALLOWED_PW, '');
+    if (before !== after) {
+      pwField.value = after;
+      const moved = before.length - after.length;
+      pwField.setSelectionRange(Math.max(0, s - moved), Math.max(0, s - moved));
+    }
+    if (_firstLogin) updatePwChecklist(pwField.value);
+  });
+  cfField.addEventListener('input', () => {
+    const s = cfField.selectionStart;
+    const before = cfField.value;
+    const after  = before.replace(DISALLOWED_PW, '');
+    if (before !== after) {
+      cfField.value = after;
+      const moved = before.length - after.length;
+      cfField.setSelectionRange(Math.max(0, s - moved), Math.max(0, s - moved));
+    }
   });
 
   /* ── Live confirm-password match hint ────────────────── */

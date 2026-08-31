@@ -34,7 +34,7 @@
   }
 
   /* ── Tables ── */
-  .admin-table { font-size: .82rem; }
+  .admin-table { font-size: .82rem; min-width: 600px; }
   .admin-table thead th {
     background: linear-gradient(135deg, #075985 0%, #0369A1 100%);
     color: #fff; font-weight: 700; border: none;
@@ -194,17 +194,17 @@
                 <!-- Detail classes table -->
                 {% if t_classes %}
                 <div class="table-responsive-admin">
-                  <table class="table table-sm mb-0" style="font-size:.8rem;">
+                  <table class="table table-sm mb-0" style="font-size:.8rem; min-width:680px;">
                     <thead>
-                      <tr style="background:#F1F5F9;">
-                        <th style="font-weight:700; color:#475569; border:none; padding:8px 10px;">Khối</th>
-                        <th style="font-weight:700; color:#475569; border:none; padding:8px 10px;">Thứ</th>
-                        <th style="font-weight:700; color:#475569; border:none; padding:8px 10px;">Buổi / Tiết</th>
-                        <th style="font-weight:700; color:#475569; border:none; padding:8px 10px;">Số tiết</th>
-                        <th style="font-weight:700; color:#475569; border:none; padding:8px 10px; min-width:130px;">Địa điểm</th>
-                        <th style="font-weight:700; color:#475569; border:none; padding:8px 10px; width:80px;">Sĩ số</th>
-                        <th style="font-weight:700; color:#475569; border:none; padding:8px 10px;" class="text-center">HS đăng ký</th>
-                        <th style="font-weight:700; color:#475569; border:none; padding:8px 10px; width:26px;"></th>
+                      <tr style="background:#DBEAFE;">
+                        <th style="font-weight:700; color:#1E40AF; border:none; padding:8px 10px; white-space:nowrap;">Khối</th>
+                        <th style="font-weight:700; color:#1E40AF; border:none; padding:8px 10px; white-space:nowrap;">Thứ</th>
+                        <th style="font-weight:700; color:#1E40AF; border:none; padding:8px 10px; white-space:nowrap;">Buổi / Tiết</th>
+                        <th style="font-weight:700; color:#1E40AF; border:none; padding:8px 10px; white-space:nowrap;">Số tiết</th>
+                        <th style="font-weight:700; color:#1E40AF; border:none; padding:8px 10px; min-width:130px; white-space:nowrap;">Địa điểm</th>
+                        <th style="font-weight:700; color:#1E40AF; border:none; padding:8px 10px; width:80px; white-space:nowrap;">Sĩ số</th>
+                        <th style="font-weight:700; color:#1E40AF; border:none; padding:8px 10px; white-space:nowrap;" class="text-center">HS đăng ký</th>
+                        <th style="font-weight:700; color:#1E40AF; border:none; padding:8px 10px; width:26px;"></th>
                       </tr>
                     </thead>
                     <tbody>

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Đăng nhập quản trị – mynhc{% endblock %}
+{% block hero %}{% endblock %}
+
+{% block head %}
+<style>
+  body {
+    background: linear-gradient(135deg, #0c4a6e 0%, #0EA5E9 60%, #22D3EE 100%);
+    min-height: 100vh;
+  }
+  .site-header {
+    background: rgba(12,74,110,.85);
+    backdrop-filter: blur(8px);
+  }
+  .main-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 120px);
+    padding: 32px 16px;
+  }
+  .login-card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    padding: 40px 36px;
+    width: 100%;
+    max-width: 400px;
+  }
+  .login-icon {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0EA5E9, #14B8A6);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 20px;
+    box-shadow: 0 4px 16px rgba(14,165,233,.4);
+  }
+  @media (max-width: 480px) {
+    .login-card { padding: 28px 20px; border-radius: 16px; }
+    .main-content { padding: 20px 12px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-card">
+  <div class="login-icon">
+    <i class="bi bi-shield-lock-fill text-white" style="font-size:1.6rem;"></i>
+  </div>
+  <h4 class="text-center fw-bold mb-1" style="color:#0c4a6e;">Quản trị viên</h4>
+  <p class="text-center text-muted mb-4" style="font-size:.88rem;">Hệ thống đăng ký lớp học – mynhc</p>
+
+  {% if error %}
+  <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" style="border-radius:10px; font-size:.88rem;">
+    <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
+    <span>{{ error }}</span>
+  </div>
+  {% endif %}
+
+  <form method="POST">
+    <div class="mb-4">
+      <label class="form-label fw-semibold" for="password" style="font-size:.88rem; color:#475569;">
+        <i class="bi bi-key me-1"></i>Mật khẩu quản trị
+      </label>
+      <input type="password" id="password" name="password"
+             class="form-control custom-input"
+             placeholder="Nhập mật khẩu quản trị"
+             autofocus required>
+    </div>
+    <button type="submit" class="btn btn-primary-custom w-100">
+      <i class="bi bi-box-arrow-in-right me-2"></i>Đăng nhập
+    </button>
+  </form>
+
+  <p class="text-center mt-4 mb-0" style="font-size:.78rem; color:#94A3B8;">
+    Trường THPT Nguyễn Hữu Cầu &nbsp;·&nbsp; Hệ thống mynhc
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,632 @@
+{% extends "base.html" %}
+
+{% block title %}Lịch đăng ký mở lớp{% endblock %}
+
+{% block header_right %}
+<form method="post" action="{{ url_for('logout') }}" class="m-0">
+  <button type="submit" class="admin-link btn p-0 border-0"
+          style="background:rgba(255,255,255,.12); padding:6px 14px !important; border-radius:20px; color:#fff; font-size:.82rem; font-weight:600;">
+    <i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline ms-1">Đăng xuất</span>
+  </button>
+</form>
+{% endblock %}
+
+{% block hero_content %}
+<h1 class="hero-title">Lịch đăng ký mở lớp</h1>
+<p class="hero-sub">Năm học 2026–2027</p>
+{% endblock %}
+
+{% block head %}
+<style>
+/* ── Calendar wrap ── */
+.cal-outer {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 0 0 16px 16px;
+}
+
+/* ── Calendar table ── */
+.cal-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+/* Column widths */
+.cal-table colgroup .col-label { width: 68px; }
+.cal-table colgroup .col-day   { width: calc((100% - 68px) / 6); }
+
+/* ── Header row ── */
+.cal-head th {
+  padding: 11px 6px;
+  text-align: center;
+  font-size: .82rem;
+  font-weight: 700;
+  color: #0c4a6e;
+  background: #F8FAFC;
+  border-bottom: 2px solid #E2E8F0;
+  position: sticky; top: 0; z-index: 2;
+  white-space: nowrap;
+}
+.cal-head th.col-label-th {
+  background: #F8FAFC;
+  border-right: 2px solid #E2E8F0;
+}
+
+/* ── Session divider row ── */
+.ses-divider td {
+  padding: 6px 12px;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  border-top: 2px solid #E2E8F0;
+  border-bottom: 1px solid #E2E8F0;
+  color: #64748B;
+}
+.ses-divider.morning td { background: #FFF7ED; color: #C2410C; }
+.ses-divider.afternoon td { background: #EFF6FF; color: #1D4ED8; }
+
+/* ── Tiết label column ── */
+.tiet-col {
+  padding: 0 8px;
+  text-align: center;
+  font-size: .75rem;
+  font-weight: 700;
+  color: #64748B;
+  background: #FAFAFA;
+  border-right: 2px solid #E2E8F0;
+  border-bottom: 1px solid #F1F5F9;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* ── Calendar cells ── */
+.cal-cell {
+  height: 72px;
+  vertical-align: top;
+  padding: 4px;
+  border: 1px solid #F1F5F9;
+  border-left: none;
+  position: relative;
+  transition: background .15s;
+}
+
+/* Empty cell */
+.cal-cell--empty {
+  background: #fff;
+}
+.cal-cell--empty.clickable {
+  cursor: pointer;
+}
+.cal-cell--empty.clickable:hover {
+  background: #F0F9FF;
+}
+.cal-cell--empty.clickable:hover .cal-add-hint {
+  opacity: 1;
+  transform: scale(1);
+}
+.cal-add-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(.8);
+  transition: opacity .15s, transform .15s;
+  color: #0EA5E9;
+  font-size: 1.3rem;
+}
+
+/* Filled cell — registered */
+.cal-cell--registered {
+  background: #F0FDF4;
+  border-left: 3px solid #22C55E;
+  border-bottom: 1px solid #BBF7D0;
+  padding-left: 5px;
+}
+
+/* Class card inside cell */
+.cal-class-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  padding: 4px 6px;
+  cursor: default;
+  border-radius: 6px;
+  position: relative;
+}
+.cal-grade {
+  font-size: .7rem;
+  font-weight: 700;
+  color: #15803D;
+  line-height: 1.2;
+}
+.cal-subject {
+  font-size: .75rem;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.cal-count {
+  font-size: .68rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(34,197,94,.12);
+  color: #15803D;
+}
+.cal-room {
+  font-size: .65rem;
+  color: #15803D;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  margin-top: 1px;
+}
+.cal-status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #22C55E;
+}
+
+/* Delete btn on cell */
+.cal-del-btn {
+  position: absolute;
+  top: 3px; right: 3px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(239,68,68,.1);
+  color: #EF4444;
+  font-size: .6rem;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s, background .15s;
+  padding: 0;
+  line-height: 1;
+}
+.cal-cell--registered:hover .cal-del-btn { opacity: 1; }
+.cal-del-btn:hover { background: rgba(239,68,68,.25); }
+
+/* ── Legend ── */
+.cal-legend {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 16px;
+  border-top: 1.5px solid #E2E8F0;
+  background: #FAFAFA;
+  border-radius: 0 0 16px 16px;
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: flex; align-items: center; gap: 5px;
+  font-size: .75rem; color: #64748B;
+}
+.legend-dot {
+  width: 10px; height: 10px;
+  border-radius: 2px;
+}
+
+/* ── Summary row ── */
+.summary-row {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.summary-pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: .82rem; font-weight: 600;
+  border: 1.5px solid;
+}
+.summary-pill.total { background:#EFF6FF; color:#0369A1; border-color:#BAE6FD; }
+.summary-pill.reg   { background:#F0FDF4; color:#15803D; border-color:#BBF7D0; }
+
+@media (max-width: 576px) {
+  .cal-cell { height: 60px; }
+  .cal-subject { display: none; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-content">
+  <div class="container-fluid px-3" style="max-width:1100px; margin:0 auto;">
+
+    <!-- Teacher info card -->
+    <div class="d-flex align-items-center gap-3 flex-wrap mb-3 p-3 rounded-3"
+         style="background:#fff; border:1.5px solid #E2E8F0; box-shadow:0 1px 4px rgba(0,0,0,.05);">
+      <div class="d-flex align-items-center gap-3 flex-grow-1">
+        <div style="width:46px; height:46px; border-radius:50%;
+                    background:linear-gradient(135deg,#0EA5E9,#14B8A6);
+                    display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <i class="bi bi-person-fill text-white" style="font-size:1.25rem;"></i>
+        </div>
+        <div>
+          <div style="font-weight:700; color:#0c4a6e; font-size:1rem; margin-bottom:5px;">
+            {% if teacher.gender == 'Nữ' %}Cô{% else %}Thầy{% endif %}
+            {{ teacher.full_name }}
+          </div>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span style="display:inline-flex; align-items:center; gap:5px;
+                         background:#EFF6FF; color:#0369A1; border:1.5px solid #BAE6FD;
+                         border-radius:14px; padding:3px 12px; font-size:.82rem; font-weight:700;">
+              <i class="bi bi-book-fill" style="font-size:.75rem;"></i>
+              Bộ môn giảng dạy: {{ teacher.subject_group }}
+            </span>
+            <span style="display:inline-flex; align-items:center; gap:5px;
+                         background:#F8FAFC; color:#64748B; border:1px solid #E2E8F0;
+                         border-radius:14px; padding:3px 12px; font-size:.78rem;">
+              <i class="bi bi-calendar3" style="font-size:.7rem;"></i>
+              Năm học 2026–2027
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="text-center px-4 py-2 rounded-3" id="class-count-pill"
+           style="background:#EFF6FF; border:1.5px solid #BAE6FD; min-width:80px;">
+        <div style="font-size:1.6rem; font-weight:800; color:#0369A1; line-height:1;">{{ classes|length }}</div>
+        <div style="font-size:.72rem; color:#64748B; font-weight:600; margin-top:2px;">Lớp đăng ký</div>
+      </div>
+    </div>
+
+    {% if not teacher_reg_open %}
+    <div class="alert alert-warning d-flex align-items-center gap-2 mb-3">
+      <i class="bi bi-lock-fill"></i>
+      <span>Chưa mở đăng ký lớp. Vui lòng chờ quản trị viên mở đăng ký.</span>
+    </div>
+    {% else %}
+    <div class="alert d-flex align-items-center gap-2 mb-3"
+         style="background:#FFF7ED; border:1px solid #FDBA74; color:#92400E; border-radius:10px;">
+      <i class="bi bi-cursor-fill"></i>
+      <span>Click vào ô trống trong lịch để đăng ký mở lớp mới.</span>
+    </div>
+    {% endif %}
+
+    <!-- Calendar -->
+    <div class="section-card mb-4">
+      <div class="section-card-header">
+        <i class="bi bi-calendar-week me-1"></i>Lịch tuần
+      </div>
+
+      <div class="cal-outer" id="cal-outer">
+        <table class="cal-table">
+          <colgroup>
+            <col class="col-label">
+            {% for d in [2,3,4,5,6,7] %}<col class="col-day">{% endfor %}
+          </colgroup>
+          <thead>
+            <tr class="cal-head">
+              <th class="col-label-th"></th>
+              {% for dn in ['Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'] %}
+              <th>{{ dn }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+
+            {# ── SÁNG ── #}
+            <tr class="ses-divider morning">
+              <td colspan="7"><i class="bi bi-brightness-high me-1"></i>Buổi Sáng</td>
+            </tr>
+            {% for t in [1,2,3,4] %}
+            <tr>
+              <td class="tiet-col">Tiết {{ t }}</td>
+              {% for d in [2,3,4,5,6,7] %}
+                {% set key = d|string ~ '_morning_' ~ t|string %}
+                {% set cell = schedule.get(key) %}
+                {% if cell and cell.status == 'blocked' %}
+                  {# skip — covered by rowspan #}
+                {% elif cell and cell.status == 'start' %}
+                  {% set cls = cell.cls %}
+                  {% set cnt = enrollment_counts.get(cls.id, 0) %}
+                  <td class="cal-cell cal-cell--registered"
+                      rowspan="{{ cell.rowspan }}">
+                    <div class="cal-class-card">
+                      <div>
+                        <div class="cal-grade">Khối {{ cls.grade }}</div>
+                        {% if cls.subject %}<div class="cal-subject">{{ cls.subject }}</div>{% endif %}
+                        <div class="cal-room room-badge" data-class-id="{{ cls.id }}">
+                          {% if cls.location %}<i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> {{ cls.location }}{% endif %}
+                        </div>
+                      </div>
+                      <div class="cal-bottom">
+                        <span class="cal-count count-badge" data-class-id="{{ cls.id }}">{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
+                        <span class="cal-status-dot"></span>
+                      </div>
+                    </div>
+                    {% if teacher_reg_open %}
+                    <button class="cal-del-btn" onclick="deleteClass({{ cls.id }}, event)" title="Xóa lớp này">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                    {% endif %}
+                  </td>
+                {% else %}
+                  <td class="cal-cell cal-cell--empty {% if teacher_reg_open %}clickable{% endif %}"
+                      {% if teacher_reg_open %}onclick="openRegModal({{ d }}, 'morning', {{ t }})"{% endif %}>
+                    {% if teacher_reg_open %}
+                    <div class="cal-add-hint"><i class="bi bi-plus-lg"></i></div>
+                    {% endif %}
+                  </td>
+                {% endif %}
+              {% endfor %}
+            </tr>
+            {% endfor %}
+
+            {# ── CHIỀU ── #}
+            <tr class="ses-divider afternoon">
+              <td colspan="7"><i class="bi bi-sunset me-1"></i>Buổi Chiều</td>
+            </tr>
+            {% for t in [1,2,3,4] %}
+            <tr>
+              <td class="tiet-col">Tiết {{ t }}</td>
+              {% for d in [2,3,4,5,6,7] %}
+                {% set key = d|string ~ '_afternoon_' ~ t|string %}
+                {% set cell = schedule.get(key) %}
+                {% if cell and cell.status == 'blocked' %}
+                  {# skip — covered by rowspan #}
+                {% elif cell and cell.status == 'start' %}
+                  {% set cls = cell.cls %}
+                  {% set cnt = enrollment_counts.get(cls.id, 0) %}
+                  <td class="cal-cell cal-cell--registered"
+                      rowspan="{{ cell.rowspan }}">
+                    <div class="cal-class-card">
+                      <div>
+                        <div class="cal-grade">Khối {{ cls.grade }}</div>
+                        {% if cls.subject %}<div class="cal-subject">{{ cls.subject }}</div>{% endif %}
+                        <div class="cal-room room-badge" data-class-id="{{ cls.id }}">
+                          {% if cls.location %}<i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> {{ cls.location }}{% endif %}
+                        </div>
+                      </div>
+                      <div class="cal-bottom">
+                        <span class="cal-count count-badge" data-class-id="{{ cls.id }}">{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
+                        <span class="cal-status-dot"></span>
+                      </div>
+                    </div>
+                    {% if teacher_reg_open %}
+                    <button class="cal-del-btn" onclick="deleteClass({{ cls.id }}, event)" title="Xóa lớp này">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                    {% endif %}
+                  </td>
+                {% else %}
+                  <td class="cal-cell cal-cell--empty {% if teacher_reg_open %}clickable{% endif %}"
+                      {% if teacher_reg_open %}onclick="openRegModal({{ d }}, 'afternoon', {{ t }})"{% endif %}>
+                    {% if teacher_reg_open %}
+                    <div class="cal-add-hint"><i class="bi bi-plus-lg"></i></div>
+                    {% endif %}
+                  </td>
+                {% endif %}
+              {% endfor %}
+            </tr>
+            {% endfor %}
+
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Legend -->
+      <div class="cal-legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#F0FDF4; border-left:3px solid #22C55E; border-radius:3px;"></div> Đã đăng ký
+        </div>
+        {% if teacher_reg_open %}
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#F1F5F9; border:1.5px dashed #94A3B8; border-radius:3px;"></div>
+          Trống (click để đăng ký)
+        </div>
+        {% else %}
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#F1F5F9; border:1px solid #E2E8F0; border-radius:3px;"></div>
+          Trống
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Register modal -->
+<div class="modal fade" id="regModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Đăng ký mở lớp</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="regError" class="alert alert-danger d-none mb-3"></div>
+
+        <!-- Slot + teacher info (read-only) -->
+        <div class="p-3 mb-3 rounded" style="background:#F0F9FF; border:1.5px solid #BAE6FD; font-size:.87rem;">
+          <div class="d-flex gap-3 flex-wrap align-items-center">
+            <span><i class="bi bi-calendar3 me-1 text-primary"></i><strong id="dispDay"></strong></span>
+            <span><i class="bi bi-brightness-high me-1 text-primary"></i><strong id="dispSession"></strong></span>
+            <span><i class="bi bi-bookmark me-1 text-primary"></i>Tiết <strong id="dispTiet"></strong></span>
+          </div>
+          <div class="mt-2 pt-2" style="border-top:1px solid #BAE6FD;">
+            <i class="bi bi-book me-1" style="color:#0369A1;"></i>
+            <span style="color:#0369A1; font-weight:600;">Bộ môn giảng dạy: {{ teacher.subject_group }}</span>
+          </div>
+        </div>
+
+        <input type="hidden" id="regDay">
+        <input type="hidden" id="regSession">
+        <input type="hidden" id="regStart">
+
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Khối <span class="text-danger">*</span></label>
+            <select id="regGrade" class="form-select custom-input">
+              <option value="10">Khối 10</option>
+              <option value="11">Khối 11</option>
+              <option value="12">Khối 12</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Số tiết <span class="text-danger">*</span></label>
+            <select id="regDuration" class="form-select custom-input">
+              <option value="1">1 tiết</option>
+              <option value="2">2 tiết</option>
+              <option value="3">3 tiết</option>
+              <option value="4">4 tiết</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="durationWarning" class="mt-2 text-danger" style="font-size:.8rem; display:none;">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          Tiết kết thúc vượt quá tiết 4. Vui lòng giảm số tiết.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+        <button type="button" id="regSubmitBtn" class="btn btn-primary-custom" onclick="submitReg()">
+          <i class="bi bi-check-lg me-1"></i>Đăng ký
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const DAY_NAMES = {2:'Thứ Hai',3:'Thứ Ba',4:'Thứ Tư',5:'Thứ Năm',6:'Thứ Sáu',7:'Thứ Bảy'};
+const SES_NAMES = {morning:'Buổi Sáng', afternoon:'Buổi Chiều'};
+
+function openRegModal(day, session, tiét) {
+  document.getElementById('regDay').value     = day;
+  document.getElementById('regSession').value = session;
+  document.getElementById('regStart').value   = tiét;
+  document.getElementById('dispDay').textContent     = DAY_NAMES[day];
+  document.getElementById('dispSession').textContent = SES_NAMES[session];
+  document.getElementById('dispTiet').textContent    = tiét;
+  document.getElementById('regError').classList.add('d-none');
+  document.getElementById('durationWarning').style.display = 'none';
+  document.getElementById('regDuration').value = '1';
+  document.getElementById('regGrade').value = '10';
+  new bootstrap.Modal(document.getElementById('regModal')).show();
+}
+
+document.getElementById('regDuration').addEventListener('change', checkDuration);
+function checkDuration() {
+  const start    = parseInt(document.getElementById('regStart').value);
+  const duration = parseInt(document.getElementById('regDuration').value);
+  const warn     = document.getElementById('durationWarning');
+  const btn      = document.getElementById('regSubmitBtn');
+  const over     = start + duration - 1 > 4;
+  warn.style.display = over ? '' : 'none';
+  btn.disabled = over;
+}
+
+async function refreshCalendar() {
+  try {
+    const res = await fetch(window.location.pathname + '?_=' + Date.now());
+    const html = await res.text();
+    const doc  = new DOMParser().parseFromString(html, 'text/html');
+    const newCal   = doc.getElementById('cal-outer');
+    const newPill  = doc.getElementById('class-count-pill');
+    if (newCal)  document.getElementById('cal-outer').replaceWith(newCal);
+    if (newPill) document.getElementById('class-count-pill').replaceWith(newPill);
+  } catch(e) {
+    window.location.reload();
+  }
+}
+
+function submitReg() {
+  const errEl = document.getElementById('regError');
+  errEl.classList.add('d-none');
+
+  const payload = {
+    grade:         parseInt(document.getElementById('regGrade').value),
+    day_of_week:   parseInt(document.getElementById('regDay').value),
+    session_type:  document.getElementById('regSession').value,
+    start_session: parseInt(document.getElementById('regStart').value),
+    duration:      parseInt(document.getElementById('regDuration').value),
+  };
+
+  if (payload.start_session + payload.duration - 1 > 4) return;
+
+  const btn = document.getElementById('regSubmitBtn');
+  btn.disabled = true;
+
+  fetch('/teacher/classes', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  })
+  .then(r => r.json())
+  .then(async data => {
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('regModal')).hide();
+      await refreshCalendar();
+    } else {
+      errEl.textContent = data.error || 'Đã xảy ra lỗi.';
+      errEl.classList.remove('d-none');
+    }
+  })
+  .catch(() => {
+    errEl.textContent = 'Lỗi kết nối.';
+    errEl.classList.remove('d-none');
+  })
+  .finally(() => { btn.disabled = false; });
+}
+
+function deleteClass(classId, event) {
+  event.stopPropagation();
+  showConfirm('Xóa lớp này?', 'Lớp sẽ bị xóa vĩnh viễn và không thể hoàn tác.', async function() {
+    const res  = await fetch('/teacher/classes/' + classId, {method: 'DELETE'}).catch(() => null);
+    const data = res ? await res.json().catch(() => null) : null;
+    if (data && data.ok) {
+      await refreshCalendar();
+    } else {
+      showAlert((data && data.error) || 'Không thể xóa lớp đã có học sinh đăng ký.', 'error');
+    }
+  }, {confirmText: 'Xóa lớp', confirmClass: 'btn-danger'});
+}
+
+// Poll enrollment counts + room info every 5s
+function updateCounts() {
+  fetch('/api/class-counts')
+    .then(r => r.json())
+    .then(data => {
+      Object.entries(data).forEach(([id, info]) => {
+        // Count badge
+        const badge = document.querySelector('.count-badge[data-class-id="' + id + '"]');
+        if (badge) {
+          const cap = info.max_capacity ? '/' + info.max_capacity : '';
+          badge.textContent = info.count + ' HS' + cap;
+        }
+        // Room badge
+        const room = document.querySelector('.room-badge[data-class-id="' + id + '"]');
+        if (room) {
+          room.innerHTML = info.location
+            ? '<i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> ' + info.location
+            : '';
+        }
+      });
+    })
+    .catch(() => {});
+}
+setInterval(updateCounts, 5000);
+</script>
+{% endblock %}

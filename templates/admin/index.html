@@ -1,0 +1,575 @@
+{% extends "base.html" %}
+{% block title %}Quản trị – mynhc{% endblock %}
+{% block hero %}{% endblock %}
+
+{% block header_right %}
+<form method="POST" action="{{ url_for('admin_logout') }}" class="m-0">
+  <button type="submit" class="topbar-btn">
+    <i class="bi bi-box-arrow-right"></i>
+    <span class="d-none d-sm-inline">Đăng xuất</span>
+  </button>
+</form>
+{% endblock %}
+
+{% block head %}
+<style>
+  body { background: #F0F9FF; }
+
+  /* ── Stat cards ── */
+  .stat-card {
+    background: #fff;
+    border-radius: 14px;
+    border: 1.5px solid #E2E8F0;
+    padding: 18px 20px;
+    display: flex; align-items: center; gap: 14px;
+    transition: box-shadow .2s, transform .2s;
+  }
+  .stat-card:hover { box-shadow: 0 6px 20px rgba(14,165,233,.14); transform: translateY(-2px); }
+  .stat-icon {
+    width: 48px; height: 48px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .stat-label { font-size: .73rem; color: #94A3B8; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+  .stat-value { font-size: 1.7rem; font-weight: 800; color: #0c4a6e; line-height: 1.1; }
+
+  /* ── Big nav boxes ── */
+  .nav-box {
+    background: #fff;
+    border-radius: 16px;
+    border: 1.5px solid #E2E8F0;
+    padding: 26px 24px;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    transition: box-shadow .2s, transform .2s, border-color .2s;
+    height: 100%;
+  }
+  .nav-box:hover {
+    box-shadow: 0 8px 28px rgba(14,165,233,.18);
+    transform: translateY(-3px);
+    border-color: #0EA5E9;
+    color: inherit;
+  }
+  .nav-box-icon {
+    width: 52px; height: 52px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; margin-bottom: 14px;
+  }
+  .nav-box h5 { font-size: 1rem; font-weight: 700; color: #0c4a6e; margin-bottom: 6px; }
+  .nav-box p  { font-size: .82rem; color: #64748B; margin: 0; }
+  .nav-box-arrow { font-size: 1.1rem; color: #0EA5E9; }
+  .color-inherit { color: inherit; }
+  .color-inherit:hover { color: inherit; }
+
+  /* ── Section cards ── */
+  .section-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1.5px solid #E2E8F0;
+    overflow: hidden;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  }
+  .section-card-header {
+    padding: 14px 20px;
+    background: linear-gradient(90deg, #F8FAFC, #EFF6FF);
+    border-bottom: 1.5px solid #E2E8F0;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+    font-size: .9rem; font-weight: 700; color: #0c4a6e;
+  }
+  .section-card-body { padding: 20px; }
+
+  /* ── Reg toggle pill ── */
+  .reg-toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 12px 5px 8px;
+    border-radius: 20px;
+    font-size: .78rem; font-weight: 700; font-family: var(--font);
+    border: none; cursor: pointer;
+    transition: background .2s, box-shadow .2s;
+    white-space: nowrap;
+  }
+  .reg-toggle.open {
+    background: #DCFCE7; color: #15803D;
+    box-shadow: 0 0 0 1.5px #86EFAC;
+  }
+  .reg-toggle.open:hover  { background: #BBF7D0; }
+  .reg-toggle.closed {
+    background: #F1F5F9; color: #64748B;
+    box-shadow: 0 0 0 1.5px #CBD5E1;
+  }
+  .reg-toggle.closed:hover { background: #E2E8F0; }
+  .reg-toggle .toggle-dot {
+    width: 28px; height: 16px; border-radius: 8px;
+    position: relative; flex-shrink: 0;
+    transition: background .2s;
+  }
+  .reg-toggle.open  .toggle-dot { background: #22C55E; }
+  .reg-toggle.closed .toggle-dot { background: #CBD5E1; }
+  .reg-toggle .toggle-dot::after {
+    content: '';
+    position: absolute; top: 2px;
+    width: 12px; height: 12px; border-radius: 50%; background: #fff;
+    transition: left .2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  }
+  .reg-toggle.open  .toggle-dot::after { left: 14px; }
+  .reg-toggle.closed .toggle-dot::after { left: 2px; }
+
+  /* ── Table ── */
+  .admin-table { font-size: .82rem; }
+  .admin-table thead th {
+    background: linear-gradient(135deg, #075985 0%, #0EA5E9 60%, #22D3EE 100%);
+    color: #fff; font-weight: 700; border: none;
+    padding: 11px 10px; white-space: nowrap;
+  }
+  .admin-table tbody tr:hover { background: rgba(224,242,254,.35); }
+  .admin-table td { vertical-align: middle; padding: 9px 10px; }
+
+  /* ── Table scroll on mobile ── */
+  .table-responsive-admin { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ── Section toolbar ── */
+  .section-toolbar {
+    padding: 10px 20px;
+    background: #FAFBFC;
+    border-bottom: 1.5px solid #E2E8F0;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .section-toolbar .divider {
+    width: 1px; height: 22px; background: #E2E8F0; margin: 0 4px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="container pb-5">
+  <div class="d-flex align-items-center gap-2 mb-4 pt-4">
+    <h1 style="font-size:1.15rem; font-weight:800; color:#0c4a6e; margin:0;">
+      <i class="bi bi-grid-1x2-fill me-2" style="color:#0EA5E9;"></i>Quản trị mynhc
+    </h1>
+  </div>
+
+  <!-- ── Stat cards ── -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#EFF6FF;">
+          <i class="bi bi-person-badge" style="color:#0EA5E9;"></i>
+        </div>
+        <div>
+          <div class="stat-label">Giáo viên</div>
+          <div class="stat-value">{{ stats.teachers }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#F0FDF4;">
+          <i class="bi bi-people-fill" style="color:#10B981;"></i>
+        </div>
+        <div>
+          <div class="stat-label">Học sinh</div>
+          <div class="stat-value">{{ stats.students }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#FFF7ED;">
+          <i class="bi bi-journal-bookmark-fill" style="color:#F59E0B;"></i>
+        </div>
+        <div>
+          <div class="stat-label">Lớp đã đăng ký</div>
+          <div class="stat-value">{{ stats.classes }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#FDF4FF;">
+          <i class="bi bi-clipboard2-check-fill" style="color:#A855F7;"></i>
+        </div>
+        <div>
+          <div class="stat-label">Lượt đăng ký</div>
+          <div class="stat-value">{{ stats.enrollments }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Nav boxes ── -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="nav-box d-flex flex-column" style="gap:0;">
+        <a href="{{ url_for('admin_class_reg') }}" class="text-decoration-none color-inherit d-block flex-grow-1 mb-3">
+          <div class="d-flex align-items-start gap-3">
+            <div class="nav-box-icon flex-shrink-0" style="background:#EFF6FF;">
+              <i class="bi bi-journal-plus" style="color:#0EA5E9;"></i>
+            </div>
+            <div class="flex-grow-1">
+              <h5>Giai đoạn 1 — Đăng ký mở lớp (GV)</h5>
+              <p>Xem danh sách lớp giáo viên đã đăng ký mở. Mở/đóng giai đoạn này.</p>
+            </div>
+            <i class="bi bi-arrow-right-circle nav-box-arrow ms-1 mt-1 flex-shrink-0"></i>
+          </div>
+        </a>
+        <div class="d-flex align-items-center justify-content-between pt-2" style="border-top:1.5px solid #E2E8F0;">
+          <span class="text-muted" style="font-size:.78rem; font-weight:600;">Giai đoạn 1</span>
+          <button id="btn-toggle-teacher"
+                  class="reg-toggle {% if teacher_reg_open %}open{% else %}closed{% endif %}"
+                  data-open="{{ 'true' if teacher_reg_open else 'false' }}"
+                  onclick="toggleReg('teacher')">
+            <span class="toggle-dot"></span>
+            <span id="teacher-reg-label">{% if teacher_reg_open %}Đang mở{% else %}Đã đóng{% endif %}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="nav-box d-flex flex-column" style="gap:0;">
+        <a href="{{ url_for('admin_enrollment') }}" class="text-decoration-none color-inherit d-block flex-grow-1 mb-3">
+          <div class="d-flex align-items-start gap-3">
+            <div class="nav-box-icon flex-shrink-0" style="background:#F0FDF4;">
+              <i class="bi bi-card-checklist" style="color:#10B981;"></i>
+            </div>
+            <div class="flex-grow-1">
+              <h5>Giai đoạn 2 — Đăng ký môn học (HS)</h5>
+              <p>Học sinh đăng ký vào các lớp GV đã mở. Theo dõi sĩ số thời gian thực.</p>
+            </div>
+            <i class="bi bi-arrow-right-circle nav-box-arrow ms-1 mt-1 flex-shrink-0" style="color:#10B981;"></i>
+          </div>
+        </a>
+        <div class="d-flex align-items-center justify-content-between pt-2" style="border-top:1.5px solid #E2E8F0;">
+          <span class="text-muted" style="font-size:.78rem; font-weight:600;">Giai đoạn 2</span>
+          <button id="btn-toggle-student"
+                  class="reg-toggle {% if student_reg_open %}open{% else %}closed{% endif %}"
+                  data-open="{{ 'true' if student_reg_open else 'false' }}"
+                  onclick="toggleReg('student')">
+            <span class="toggle-dot"></span>
+            <span id="student-reg-label">{% if student_reg_open %}Đang mở{% else %}Đã đóng{% endif %}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       TEACHER SECTION
+  ════════════════════════════════════════ -->
+  <div class="section-card">
+    <div class="section-card-header">
+      <i class="bi bi-person-badge"></i>
+      <span>Danh sách giáo viên</span>
+      <span class="badge rounded-pill ms-1" style="background:#EFF6FF; color:#0369A1; font-size:.72rem; font-weight:700;">{{ teacher_list | length }}</span>
+    </div>
+    <div class="section-toolbar">
+      <!-- Upload -->
+      <form id="frmUploadTeacher" method="POST" action="{{ url_for('admin_teachers_upload') }}" enctype="multipart/form-data" class="d-contents">
+        <input type="file" id="fileTeacher" name="file" accept=".xlsx,.xls" style="display:none;" onchange="document.getElementById('frmUploadTeacher').submit()">
+      </form>
+      <button type="button" class="btn btn-sm fw-semibold" style="border-radius:8px; font-size:.78rem; background:#16A34A; color:#fff;"
+              onclick="document.getElementById('fileTeacher').click()">
+        <i class="bi bi-upload me-1"></i>Upload Excel
+      </button>
+      <a href="{{ url_for('admin_teachers_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px; font-size:.78rem;">
+        <i class="bi bi-download me-1"></i>Tải file mẫu
+      </a>
+      <div class="divider"></div>
+      <button class="btn btn-sm btn-outline-primary fw-semibold" style="border-radius:8px; font-size:.78rem;"
+              data-bs-toggle="modal" data-bs-target="#modalAddTeacher">
+        <i class="bi bi-person-plus me-1"></i>Thêm giáo viên
+      </button>
+      <div class="ms-auto">
+        <form method="POST" action="{{ url_for('admin_teachers_clear') }}" class="mb-0">
+          <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
+                  onclick="showConfirmSubmit(this,{title:'Xóa toàn bộ giáo viên?',msg:'Hành động này sẽ xóa <strong>toàn bộ danh sách giáo viên</strong> và không thể hoàn tác.',confirmText:'Xóa tất cả',confirmClass:'btn-danger'})">
+            <i class="bi bi-trash3 me-1"></i>Xóa tất cả
+          </button>
+        </form>
+      </div>
+    </div>
+    <div class="section-card-body p-0">
+      <div class="table-responsive-admin">
+        <table class="table table-hover admin-table mb-0">
+          <thead>
+            <tr>
+              <th style="width:44px;">STT</th>
+              <th>Họ tên</th>
+              <th>CCCD</th>
+              <th>Giới tính</th>
+              <th>Tổ bộ môn</th>
+              <th>Email</th>
+              <th>Trạng thái TK</th>
+              <th style="width:140px;">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in teacher_list %}
+            <tr>
+              <td class="text-muted" style="font-size:.75rem;">{{ loop.index }}</td>
+              <td class="fw-semibold">{{ t.full_name }}</td>
+              <td><code style="font-size:.78rem;">{{ t.cccd }}</code></td>
+              <td>{{ t.gender }}</td>
+              <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">{{ t.subject_group }}</span></td>
+              <td style="font-size:.78rem;">
+                {% if t.email %}
+                  <a href="mailto:{{ t.email }}" class="text-primary text-decoration-none">{{ t.email }}</a>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if t.is_first_login %}
+                  <span class="badge bg-warning text-dark">Chưa đăng ký</span>
+                {% else %}
+                  <span class="badge bg-success">Đã kích hoạt</span>
+                  {% if t.email %}<div style="font-size:.7rem; color:#64748B; margin-top:2px;">{{ t.email }}</div>{% endif %}
+                {% endif %}
+              </td>
+              <td>
+                <div class="d-flex gap-1">
+                  <form method="POST" action="{{ url_for('admin_teachers_reset', teacher_id=t.id) }}" class="mb-0">
+                    <button type="button" class="btn btn-sm btn-outline-warning fw-semibold" style="font-size:.72rem; border-radius:6px;"
+                            onclick="showConfirmSubmit(this,{title:'Reset tài khoản?',msg:'Reset tài khoản giáo viên <strong>{{ t.full_name }}</strong>? Mật khẩu sẽ về mặc định.',confirmText:'Reset',confirmClass:'btn-warning'})">
+                      <i class="bi bi-arrow-counterclockwise"></i> Reset
+                    </button>
+                  </form>
+                  <form method="POST" action="{{ url_for('admin_teachers_delete', teacher_id=t.id) }}" class="mb-0">
+                    <input type="hidden" name="_method" value="DELETE">
+                    <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="font-size:.72rem; border-radius:6px;"
+                            onclick="showConfirmSubmit(this,{title:'Xóa giáo viên?',msg:'Xóa giáo viên <strong>{{ t.full_name }}</strong>? Hành động này không thể hoàn tác.',confirmText:'Xóa',confirmClass:'btn-danger'})">
+                      <i class="bi bi-trash"></i> Xóa
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-muted py-5">
+                <i class="bi bi-person-x" style="font-size:2rem; display:block; margin-bottom:8px;"></i>
+                Chưa có giáo viên nào
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       STUDENT SECTION
+  ════════════════════════════════════════ -->
+  <div class="section-card">
+    <div class="section-card-header">
+      <i class="bi bi-people-fill"></i>
+      <span>Danh sách học sinh</span>
+      <span class="badge rounded-pill ms-1" style="background:#F0FDF4; color:#15803D; font-size:.72rem; font-weight:700;">{{ student_list | length }}</span>
+    </div>
+    <div class="section-toolbar">
+      <!-- Upload -->
+      <form id="frmUploadStudent" method="POST" action="{{ url_for('admin_students_upload') }}" enctype="multipart/form-data" class="d-contents">
+        <input type="file" id="fileStudent" name="file" accept=".xlsx,.xls" style="display:none;" onchange="document.getElementById('frmUploadStudent').submit()">
+      </form>
+      <button type="button" class="btn btn-sm fw-semibold" style="border-radius:8px; font-size:.78rem; background:#16A34A; color:#fff;"
+              onclick="document.getElementById('fileStudent').click()">
+        <i class="bi bi-upload me-1"></i>Upload Excel
+      </button>
+      <a href="{{ url_for('admin_students_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px; font-size:.78rem;">
+        <i class="bi bi-download me-1"></i>Tải file mẫu
+      </a>
+      <div class="divider"></div>
+      <button class="btn btn-sm btn-outline-primary fw-semibold" style="border-radius:8px; font-size:.78rem;"
+              data-bs-toggle="modal" data-bs-target="#modalAddStudent">
+        <i class="bi bi-person-plus me-1"></i>Thêm học sinh
+      </button>
+      <div class="ms-auto">
+        <form method="POST" action="{{ url_for('admin_students_clear') }}" class="mb-0">
+          <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
+                  onclick="showConfirmSubmit(this,{title:'Xóa toàn bộ học sinh?',msg:'Hành động này sẽ xóa <strong>toàn bộ danh sách học sinh</strong> và không thể hoàn tác.',confirmText:'Xóa tất cả',confirmClass:'btn-danger'})">
+            <i class="bi bi-trash3 me-1"></i>Xóa tất cả
+          </button>
+        </form>
+      </div>
+    </div>
+    <div class="section-card-body p-0">
+      <div class="table-responsive-admin">
+        <table class="table table-hover admin-table mb-0">
+          <thead>
+            <tr>
+              <th style="width:44px;">STT</th>
+              <th>Họ tên</th>
+              <th>CCCD</th>
+              <th>Lớp</th>
+              <th>Khối</th>
+              <th style="width:140px;">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in student_list %}
+            <tr>
+              <td class="text-muted" style="font-size:.75rem;">{{ loop.index }}</td>
+              <td class="fw-semibold">{{ s.full_name }}</td>
+              <td><code style="font-size:.78rem;">{{ s.cccd }}</code></td>
+              <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">{{ s.class_name }}</span></td>
+              <td><span class="badge bg-light text-dark border" style="font-size:.72rem;">{{ s.grade }}</span></td>
+              <td>
+                <div class="d-flex gap-1">
+                  <form method="POST" action="{{ url_for('admin_students_reset', student_id=s.id) }}" class="mb-0">
+                    <button type="button" class="btn btn-sm btn-outline-warning fw-semibold" style="font-size:.72rem; border-radius:6px;"
+                            onclick="showConfirmSubmit(this,{title:'Reset đăng ký môn học?',msg:'Xóa toàn bộ đăng ký môn học của <strong>{{ s.full_name }}</strong>?',confirmText:'Reset',confirmClass:'btn-warning'})">
+                      <i class="bi bi-arrow-counterclockwise"></i> Reset
+                    </button>
+                  </form>
+                  <form method="POST" action="{{ url_for('admin_students_delete', student_id=s.id) }}" class="mb-0">
+                    <input type="hidden" name="_method" value="DELETE">
+                    <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="font-size:.72rem; border-radius:6px;"
+                            onclick="showConfirmSubmit(this,{title:'Xóa học sinh?',msg:'Xóa học sinh <strong>{{ s.full_name }}</strong>? Hành động này không thể hoàn tác.',confirmText:'Xóa',confirmClass:'btn-danger'})">
+                      <i class="bi bi-trash"></i> Xóa
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="6" class="text-center text-muted py-5">
+                <i class="bi bi-people" style="font-size:2rem; display:block; margin-bottom:8px;"></i>
+                Chưa có học sinh nào
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: Thêm giáo viên
+══════════════════════════════════════════ -->
+<div class="modal fade" id="modalAddTeacher" tabindex="-1" aria-labelledby="modalAddTeacherLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#0c4a6e,#0EA5E9); border:none;">
+        <h5 class="modal-title fw-bold text-white" id="modalAddTeacherLabel">
+          <i class="bi bi-person-plus me-2"></i>Thêm giáo viên
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('admin_teachers_add') }}">
+        <div class="modal-body p-4">
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Họ tên <span class="text-danger">*</span></label>
+            <input type="text" name="full_name" class="form-control custom-input" placeholder="Nguyễn Văn A" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">CCCD <span class="text-danger">*</span></label>
+            <input type="text" name="cccd" class="form-control custom-input" placeholder="012345678901" required maxlength="12">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Giới tính</label>
+            <select name="gender" class="form-select custom-input">
+              <option value="Nam">Nam</option>
+              <option value="Nữ">Nữ</option>
+            </select>
+          </div>
+          <div class="mb-1">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Tổ bộ môn <span class="text-danger">*</span></label>
+            <input type="text" name="subject_group" class="form-control custom-input" placeholder="Tổ Toán – Lý – Tin" required>
+          </div>
+        </div>
+        <div class="modal-footer border-top" style="padding:16px 20px;">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal" style="border-radius:8px;">Hủy</button>
+          <button type="submit" class="btn btn-primary-custom" style="border-radius:8px; min-height:40px; padding:8px 22px;">
+            <i class="bi bi-check2 me-1"></i>Thêm giáo viên
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: Thêm học sinh
+══════════════════════════════════════════ -->
+<div class="modal fade" id="modalAddStudent" tabindex="-1" aria-labelledby="modalAddStudentLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#065f46,#10B981); border:none;">
+        <h5 class="modal-title fw-bold text-white" id="modalAddStudentLabel">
+          <i class="bi bi-person-plus me-2"></i>Thêm học sinh
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('admin_students_add') }}">
+        <div class="modal-body p-4">
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Họ tên <span class="text-danger">*</span></label>
+            <input type="text" name="full_name" class="form-control custom-input" placeholder="Trần Thị B" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">CCCD <span class="text-danger">*</span></label>
+            <input type="text" name="cccd" class="form-control custom-input" placeholder="012345678901" required maxlength="12">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Lớp <span class="text-danger">*</span></label>
+            <input type="text" name="class_name" class="form-control custom-input" placeholder="10A1" required>
+          </div>
+          <div class="mb-1">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Khối <span class="text-danger">*</span></label>
+            <select name="grade" class="form-select custom-input" required>
+              <option value="">-- Chọn khối --</option>
+              <option value="10">Khối 10</option>
+              <option value="11">Khối 11</option>
+              <option value="12">Khối 12</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer border-top" style="padding:16px 20px;">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal" style="border-radius:8px;">Hủy</button>
+          <button type="submit" class="btn btn-primary-custom" style="background:linear-gradient(135deg,#065f46,#10B981); border-radius:8px; min-height:40px; padding:8px 22px;">
+            <i class="bi bi-check2 me-1"></i>Thêm học sinh
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleReg(type) {
+  const url = type === 'teacher'
+    ? '{{ url_for("admin_class_reg_toggle") }}'
+    : '{{ url_for("admin_enrollment_toggle") }}';
+
+  const btn   = document.getElementById('btn-toggle-' + type);
+  const label = document.getElementById(type + '-reg-label');
+  btn.disabled = true;
+
+  fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+    .then(r => r.json())
+    .then(data => {
+      const nowOpen = data.open;
+      btn.dataset.open = nowOpen ? 'true' : 'false';
+      btn.classList.toggle('open',   nowOpen);
+      btn.classList.toggle('closed', !nowOpen);
+      label.textContent = nowOpen ? 'Đang mở' : 'Đã đóng';
+    })
+    .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+    .finally(() => { btn.disabled = false; });
+}
+</script>
+{% endblock %}

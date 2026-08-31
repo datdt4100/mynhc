@@ -1,0 +1,798 @@
+{% extends "base.html" %}
+
+{% block title %}Đăng ký môn học – {{ student.full_name }}{% endblock %}
+
+{# ── Top-bar: student identity + logout ─────────────────────── #}
+{% block header_right %}
+<div class="d-flex align-items-center gap-2 flex-wrap">
+  <span class="text-white small fw-semibold d-none d-sm-inline"
+        style="background:rgba(255,255,255,.12); padding:5px 12px; border-radius:20px;">
+    <i class="bi bi-person-circle me-1"></i>
+    {{ student.full_name }} &ndash; Lớp {{ student.class_name }}
+  </span>
+  <form method="POST" action="{{ url_for('logout') }}" class="m-0">
+    <button type="submit" class="btn p-0 border-0"
+            style="background:rgba(255,255,255,.12); padding:6px 14px !important; border-radius:20px; color:#fff; font-size:.82rem; font-weight:600;">
+      <i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline ms-1">Đăng xuất</span>
+    </button>
+  </form>
+</div>
+{% endblock %}
+
+{# ── Hero ───────────────────────────────────────────────────── #}
+{% block hero_content %}
+<h1 class="hero-title">
+  <i class="bi bi-pencil-square me-2" style="font-size:.85em;"></i>Đăng ký môn học
+</h1>
+<p class="hero-sub">
+  {{ student.full_name }} &ndash; Lớp {{ student.class_name }}
+</p>
+{% endblock %}
+
+{# ── Main content ────────────────────────────────────────────── #}
+{% block content %}
+<style>
+@media (max-width: 575.98px) {
+  .action-col {
+    flex-direction: row-reverse !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100%;
+  }
+}
+/* ── Student timetable ── */
+.stu-cal-outer { overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:0 0 16px 16px; }
+.stu-cal-table { width:100%; min-width:640px; border-collapse:separate; border-spacing:0; table-layout:fixed; }
+.stu-cal-table colgroup .col-label { width:60px; }
+.stu-cal-table colgroup .col-day   { width:calc((100% - 60px) / 6); }
+.stu-cal-head th {
+  padding:10px 5px; text-align:center; font-size:.8rem; font-weight:700;
+  color:#0c4a6e; background:#F8FAFC; border-bottom:2px solid #E2E8F0;
+  position:sticky; top:0; z-index:2; white-space:nowrap;
+}
+.stu-cal-head th.col-label-th { background:#F8FAFC; border-right:2px solid #E2E8F0; }
+.stu-ses-divider td {
+  padding:5px 10px; font-size:.72rem; font-weight:700; letter-spacing:.4px;
+  text-transform:uppercase; border-top:2px solid #E2E8F0; border-bottom:1px solid #E2E8F0; color:#64748B;
+}
+.stu-ses-divider.morning td   { background:#FFF7ED; color:#C2410C; }
+.stu-ses-divider.afternoon td { background:#EFF6FF; color:#1D4ED8; }
+.stu-tiet-col {
+  padding:0 6px; text-align:center; font-size:.72rem; font-weight:700; color:#64748B;
+  background:#FAFAFA; border-right:2px solid #E2E8F0; border-bottom:1px solid #F1F5F9;
+  white-space:nowrap; vertical-align:middle;
+}
+.stu-cal-cell {
+  height:72px; vertical-align:top; padding:4px;
+  border:1px solid #F1F5F9; border-left:none;
+}
+.stu-cal-cell--empty { background:#fff; }
+.stu-cal-cell--enrolled {
+  background:#F0FDF4; border-left:3px solid #22C55E;
+  border-bottom:1px solid #BBF7D0; padding-left:5px;
+}
+.stu-class-card {
+  display:flex; flex-direction:column; justify-content:space-between;
+  height:100%; padding:4px 6px; border-radius:6px;
+}
+.stu-subject  { font-size:.75rem; font-weight:700; color:#065f46; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.stu-teacher  { font-size:.68rem; color:#15803D; line-height:1.2; }
+.stu-room     { font-size:.65rem; color:#15803D; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.stu-count    { font-size:.65rem; font-weight:600; padding:1px 5px; border-radius:10px; background:rgba(34,197,94,.12); color:#15803D; }
+@media (max-width:576px) { .stu-cal-cell { height:60px; } .stu-teacher { display:none; } }
+/* ── Tab buttons ── */
+.tab-nav { display:flex; gap:8px; margin-bottom:1.5rem; }
+.tab-btn {
+  display:flex; align-items:center; gap:6px;
+  padding:8px 18px; border-radius:20px; font-size:.84rem; font-weight:600;
+  border:1.5px solid #CBD5E1; background:#fff; color:#64748B; cursor:pointer;
+  transition:all .18s;
+}
+.tab-btn:hover { border-color:#0EA5E9; color:#0369A1; background:#F0F9FF; }
+.tab-btn.active { background:var(--p); border-color:var(--p); color:#fff; box-shadow:0 2px 8px rgba(14,165,233,.3); }
+</style>
+<div class="container py-4" style="max-width: 960px;">
+
+  {# ── Tab navigation ─────────────────────────────────────── #}
+  <div class="tab-nav reveal">
+    <button id="btn-schedule" class="tab-btn active" onclick="showTab('schedule')">
+      <i class="bi bi-calendar-week"></i>Thời khoá biểu
+    </button>
+    <button id="btn-enroll" class="tab-btn" onclick="showTab('enroll')">
+      <i class="bi bi-pencil-square"></i>Đăng ký môn học
+    </button>
+  </div>
+
+  {# ══════════════════════════════════════════════════════════
+     TAB 1 — TIMETABLE
+     ══════════════════════════════════════════════════════════ #}
+  <div id="tab-schedule">
+
+  <div class="section-card mb-4" style="border-radius:var(--r); overflow:hidden; box-shadow:var(--sh);">
+    <div class="section-card-header">
+      <i class="bi bi-calendar-week me-1"></i>Thời khoá biểu của tôi — Khối {{ student.grade }}
+    </div>
+
+    <div id="student-cal-outer">
+    <div class="stu-cal-outer">
+      <table class="stu-cal-table">
+        <colgroup>
+          <col class="col-label">
+          {% for d in [2,3,4,5,6,7] %}<col class="col-day">{% endfor %}
+        </colgroup>
+        <thead>
+          <tr class="stu-cal-head">
+            <th class="col-label-th"></th>
+            {% for dn in ['Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'] %}
+            <th>{{ dn }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {# ── SÁNG ── #}
+          <tr class="stu-ses-divider morning">
+            <td colspan="7"><i class="bi bi-brightness-high me-1"></i>Buổi Sáng</td>
+          </tr>
+          {% for t in [1,2,3,4] %}
+          <tr>
+            <td class="stu-tiet-col">Tiết {{ t }}</td>
+            {% for d in [2,3,4,5,6,7] %}
+              {% set key = d|string ~ '_morning_' ~ t|string %}
+              {% set cell = student_schedule.get(key) %}
+              {% if cell and cell.status == 'blocked' %}
+                {# covered by rowspan — skip #}
+              {% elif cell and cell.status == 'start' %}
+                {% set cls = cell.cls %}
+                {% set cnt = enrollment_counts.get(cls.id, 0) %}
+                <td class="stu-cal-cell stu-cal-cell--enrolled" rowspan="{{ cell.rowspan }}">
+                  <div class="stu-class-card">
+                    <div>
+                      <div class="stu-subject">{{ cls.subject or cls.subject_group }}</div>
+                      <div class="stu-teacher"><i class="bi bi-person-fill" style="font-size:.6rem;"></i> {{ cls.teacher_name }}</div>
+                      <div class="stu-room">{% if cls.location %}<i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> {{ cls.location }}{% endif %}</div>
+                    </div>
+                    <div>
+                      <span class="stu-count">{{ cnt }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %} HS</span>
+                    </div>
+                  </div>
+                </td>
+              {% else %}
+                <td class="stu-cal-cell stu-cal-cell--empty"></td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+          {% endfor %}
+
+          {# ── CHIỀU ── #}
+          <tr class="stu-ses-divider afternoon">
+            <td colspan="7"><i class="bi bi-sunset me-1"></i>Buổi Chiều</td>
+          </tr>
+          {% for t in [1,2,3,4] %}
+          <tr>
+            <td class="stu-tiet-col">Tiết {{ t }}</td>
+            {% for d in [2,3,4,5,6,7] %}
+              {% set key = d|string ~ '_afternoon_' ~ t|string %}
+              {% set cell = student_schedule.get(key) %}
+              {% if cell and cell.status == 'blocked' %}
+                {# covered by rowspan — skip #}
+              {% elif cell and cell.status == 'start' %}
+                {% set cls = cell.cls %}
+                {% set cnt = enrollment_counts.get(cls.id, 0) %}
+                <td class="stu-cal-cell stu-cal-cell--enrolled" rowspan="{{ cell.rowspan }}">
+                  <div class="stu-class-card">
+                    <div>
+                      <div class="stu-subject">{{ cls.subject or cls.subject_group }}</div>
+                      <div class="stu-teacher"><i class="bi bi-person-fill" style="font-size:.6rem;"></i> {{ cls.teacher_name }}</div>
+                      <div class="stu-room">{% if cls.location %}<i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> {{ cls.location }}{% endif %}</div>
+                    </div>
+                    <div>
+                      <span class="stu-count">{{ cnt }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %} HS</span>
+                    </div>
+                  </div>
+                </td>
+              {% else %}
+                <td class="stu-cal-cell stu-cal-cell--empty"></td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>{# /stu-cal-outer #}
+
+    {# ── Legend + empty-state notice (inside student-cal-outer so it refreshes too) ── #}
+    <div style="padding:10px 16px; border-top:1.5px solid #E2E8F0; background:#FAFAFA; border-radius:0 0 16px 16px;">
+      {% if not my_class_ids %}
+      <div class="d-flex align-items-center gap-2 mb-2 px-1 py-2 rounded-2"
+           style="background:#FFF7ED; border:1px solid #FED7AA; font-size:.82rem; color:#92400E;">
+        <i class="bi bi-info-circle-fill flex-shrink-0" style="color:#F59E0B;"></i>
+        <span>Bạn chưa đăng ký môn học nào — hãy chuyển sang tab <strong>Đăng ký môn học</strong> để đăng ký.</span>
+      </div>
+      {% endif %}
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;color:#64748B;">
+          <div style="width:10px;height:10px;background:#F0FDF4;border-left:3px solid #22C55E;border-radius:2px;"></div>
+          Lớp đã đăng ký
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;color:#64748B;">
+          <div style="width:10px;height:10px;background:#fff;border:1px solid #E2E8F0;border-radius:2px;"></div>
+          Trống
+        </div>
+      </div>
+    </div>
+    </div>{# /student-cal-outer #}
+  </div>{# /section-card #}
+
+  </div>{# end #tab-schedule #}
+
+  {# ══════════════════════════════════════════════════════════
+     TAB 2 — REGISTRATION
+     ══════════════════════════════════════════════════════════ #}
+  <div id="tab-enroll" style="display:none;">
+
+  {# Registration closed banner #}
+  {% if not student_reg_open %}
+  <div class="alert alert-warning d-flex align-items-center gap-2 mb-4 reveal" role="alert">
+    <i class="bi bi-lock-fill fs-5 flex-shrink-0"></i>
+    <span class="fw-semibold">Đăng ký môn học hiện đang đóng</span>
+  </div>
+  {% endif %}
+
+  {# ── My enrolled classes ──────────────────────────────────── #}
+  <section class="mb-4 reveal" id="enrolled-section"{% if not my_class_ids %} style="display:none"{% endif %}>
+    <h2 class="fw-bold mb-3 d-flex align-items-center gap-2" style="font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);">
+      <i class="bi bi-check2-circle text-success fs-5"></i>
+      Môn đã đăng ký
+      <span class="badge rounded-pill text-bg-success ms-1" style="font-size:.78rem;" id="enrolled-count">{{ my_class_ids | length }}</span>
+    </h2>
+    <div class="row g-2" id="enrolled-list">
+      {% for cls in published_classes %}
+      {% if cls.id in my_class_ids %}
+      <div class="col-12 col-sm-6 col-lg-4" id="enrolled-card-{{ cls.id }}">
+        <div class="card border-0 h-100"
+             style="border-left: 4px solid var(--green) !important;
+                    border-radius: var(--r-sm);
+                    background: rgba(255,255,255,.92);
+                    box-shadow: 0 2px 10px rgba(16,185,129,.12);">
+          <div class="card-body py-2 px-3 d-flex align-items-center gap-2">
+            <div class="flex-grow-1 min-w-0">
+              <div class="fw-bold text-truncate" style="font-size:.88rem;color:#065f46;">
+                {{ cls.subject or cls.subject_group }}
+              </div>
+              <div class="text-muted" style="font-size:.75rem;">
+                {{ cls.teacher_name }}
+                &middot;
+                {{ day_name(cls.day_of_week) }}
+                &middot;
+                {{ session_label(cls.session_type, cls.start_session, cls.duration) }}
+              </div>
+            </div>
+            {% if student_reg_open %}
+            <button class="btn btn-sm btn-outline-danger flex-shrink-0 py-1 px-2"
+                    title="Huỷ đăng ký"
+                    onclick="cancelEnroll({{ cls.id }})">
+              <i class="bi bi-x-lg"></i>
+            </button>
+            {% else %}
+            <span class="badge text-bg-success flex-shrink-0" style="font-size:.72rem;">Đã đăng ký</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ── Available classes list ───────────────────────────────── #}
+  <section class="reveal reveal-delay-1">
+    <h2 class="fw-bold mb-3 d-flex align-items-center gap-2"
+        style="font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);">
+      <i class="bi bi-list-ul fs-5" style="color:var(--p);"></i>
+      Danh sách lớp học &ndash; Khối {{ student.grade }}
+    </h2>
+
+    {% if not published_classes %}
+    <div class="empty-state text-center py-5">
+      <i class="bi bi-calendar-x" style="font-size:2.5rem;color:var(--muted);"></i>
+      <p class="text-muted mt-2 mb-0">Chưa có lớp học nào được mở.</p>
+    </div>
+
+    {% else %}
+    <div class="d-flex flex-column gap-3">
+      {% for cls in published_classes %}
+      {% set count = enrollment_counts.get(cls.id, 0) %}
+      {% set enrolled = cls.id in my_class_ids %}
+      {% set is_full = cls.max_capacity is not none and count >= cls.max_capacity %}
+      {% set threshold = ((cls.max_capacity * 2) // 3) if cls.max_capacity else none %}
+      {% set near_full = threshold is not none and count >= threshold and not is_full and not enrolled %}
+
+      {# Card accent color #}
+      {% if enrolled %}
+        {% set accent_color = 'var(--green)' %}
+      {% elif is_full %}
+        {% set accent_color = '#94a3b8' %}
+      {% else %}
+        {% set accent_color = 'var(--p)' %}
+      {% endif %}
+
+      {# Badge color #}
+      {% if enrolled %}
+        {% set badge_bg = 'var(--green)' %}
+      {% elif is_full %}
+        {% set badge_bg = '#94a3b8' %}
+      {% elif near_full %}
+        {% set badge_bg = 'var(--amber)' %}
+      {% else %}
+        {% set badge_bg = 'var(--p)' %}
+      {% endif %}
+
+      <div class="class-card card border-0 reveal"
+           data-class-id="{{ cls.id }}"
+           data-max-capacity="{{ cls.max_capacity if cls.max_capacity is not none else '' }}"
+           data-enrolled="{{ 'true' if enrolled else 'false' }}"
+           data-subject="{{ cls.subject or cls.subject_group }}"
+           data-teacher="{{ cls.teacher_name }}"
+           data-schedule="{{ day_name(cls.day_of_week) }} · {{ session_label(cls.session_type, cls.start_session, cls.duration) }}"
+           style="border-left: 4px solid {{ accent_color }} !important;
+                  border-radius: var(--r);
+                  background: rgba(255,255,255,.93);
+                  box-shadow: var(--sh);
+                  transition: box-shadow var(--ease);">
+        <div class="card-body p-3">
+
+          {# ── Three-column layout ──────────────────────────── #}
+          <div class="d-flex flex-wrap gap-3 align-items-start">
+
+            {# Left: subject, subject group badge, teacher, grade #}
+            <div class="flex-grow-1" style="min-width:160px;">
+              <div class="fw-bold" style="font-size:1.05rem;color:var(--p-deep);line-height:1.3;">
+                {{ cls.subject or cls.subject_group }}
+              </div>
+              <div class="mt-2 small fw-semibold" style="color:#334155;">
+                <i class="bi bi-person-fill me-1" style="color:var(--p);"></i>{{ cls.teacher_name }}
+              </div>
+              <div class="mt-1">
+                <span class="badge" style="background:#e2e8f0;color:#475569;font-size:.7rem;">
+                  Khối {{ cls.grade }}
+                </span>
+              </div>
+            </div>
+
+            {# Middle: schedule, location, duration, extra tags #}
+            <div class="flex-shrink-0" style="min-width:150px;">
+              <div class="small mb-1">
+                <i class="bi bi-calendar-week me-1" style="color:var(--p);"></i>
+                <span class="fw-semibold">{{ day_name(cls.day_of_week) }}</span>
+              </div>
+              <div class="small mb-1">
+                <i class="bi bi-clock me-1" style="color:var(--p);"></i>
+                {{ session_label(cls.session_type, cls.start_session, cls.duration) }}
+              </div>
+              <div class="small mb-1 location-box-{{ cls.id }}"{% if not cls.location %} style="display:none"{% endif %}>
+                <i class="bi bi-geo-alt-fill me-1" style="color:var(--red);"></i>
+                <span class="fw-semibold location-text-{{ cls.id }}">{{ cls.location or '' }}</span>
+              </div>
+              <div class="small text-muted">
+                <i class="bi bi-hourglass-split me-1"></i>{{ cls.duration }} tiết
+              </div>
+              {# Extra data tags – rendered by JS from data-extra attribute #}
+              <div class="extra-tags mt-2"
+                   data-extra="{{ cls.extra_data | default('{}') | e }}"></div>
+            </div>
+
+            {# Right: enrollment count + action button #}
+            <div class="d-flex flex-column align-items-end gap-2 flex-shrink-0 action-col">
+              <div class="text-center">
+                <div class="count-badge-{{ cls.id }} badge rounded-pill fs-6 px-3 py-2"
+                     style="background:{{ badge_bg }};color:#fff;min-width:52px;font-weight:800;
+                            box-shadow:0 2px 8px rgba(0,0,0,.15);transition:background .3s;">
+                  {{ count }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}
+                </div>
+                <div class="text-muted mt-1" style="font-size:.68rem;white-space:nowrap;">HS đăng ký</div>
+              </div>
+
+              {# Action button #}
+              {% if enrolled %}
+              <button class="btn btn-sm btn-outline-danger action-btn-{{ cls.id }}"
+                      {% if not student_reg_open %}disabled{% endif %}
+                      onclick="cancelEnroll({{ cls.id }})">
+                <i class="bi bi-x-circle me-1"></i>Huỷ đăng ký
+              </button>
+              {% elif is_full %}
+              <button class="btn btn-sm btn-secondary action-btn-{{ cls.id }}" disabled>
+                <i class="bi bi-slash-circle me-1"></i>Đã đủ
+              </button>
+              {% else %}
+              <button class="btn btn-sm btn-primary action-btn-{{ cls.id }}"
+                      {% if not student_reg_open %}disabled{% endif %}
+                      onclick="enrollClass({{ cls.id }})">
+                <i class="bi bi-plus-circle me-1"></i>Đăng ký
+              </button>
+              {% endif %}
+            </div>
+
+          </div>{# end flex row #}
+
+          {# ── Warning boxes ────────────────────────────────── #}
+          {% if near_full %}
+          <div class="alert alert-warning py-2 px-3 mt-3 mb-0 small d-flex align-items-start gap-2 warning-box-{{ cls.id }}"
+               style="border-radius:var(--r-sm);">
+            <span style="font-size:1rem;line-height:1.4;">&#9888;</span>
+            <span>Số lượng học sinh lớp này hiện đã vượt quá {{ threshold }} học sinh, bạn cần cân nhắc có nên tiếp tục lựa chọn lớp này không vì lớp đông học sinh, khó tiếp thu.</span>
+          </div>
+          {% elif is_full %}
+          <div class="alert alert-danger py-2 px-3 mt-3 mb-0 small d-flex align-items-start gap-2 warning-box-{{ cls.id }}"
+               style="border-radius:var(--r-sm);">
+            <span style="font-size:1rem;line-height:1.4;">&#128683;</span>
+            <span>Số lượng học sinh lớp này hiện đã đủ, vui lòng chọn lớp khác.</span>
+          </div>
+          {% else %}
+          <div class="warning-box-{{ cls.id }}"></div>
+          {% endif %}
+
+        </div>{# card-body #}
+      </div>{# class-card #}
+      {% endfor %}
+    </div>{# flex column #}
+    {% endif %}
+  </section>
+
+  </div>{# end #tab-enroll #}
+
+</div>{# container #}
+
+{# ── Time conflict modal ─────────────────────────────────────── #}
+<div class="modal fade" id="conflictModal" tabindex="-1" aria-labelledby="conflictModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+    <div class="modal-content" style="border-radius:var(--r);border:none;box-shadow:var(--sh-lg);">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold d-flex align-items-center gap-2" id="conflictModalLabel">
+          <span class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                style="width:36px;height:36px;background:rgba(239,68,68,.12);">
+            <i class="bi bi-exclamation-triangle-fill text-danger"></i>
+          </span>
+          Trùng lịch học
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+      </div>
+      <div class="modal-body" id="conflictModalBody" style="font-size:.92rem;color:#334155;">
+        Lớp này bị trùng lịch với một lớp bạn đã đăng ký.
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{# ── Scripts ─────────────────────────────────────────────────── #}
+{% block scripts %}
+<script>
+/* ── Tab switching ─────────────────────────────────────────── */
+window.showTab = function(tab) {
+  document.getElementById('tab-schedule').style.display = tab === 'schedule' ? '' : 'none';
+  document.getElementById('tab-enroll').style.display   = tab === 'enroll'   ? '' : 'none';
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  var btn = document.getElementById('btn-' + tab);
+  if (btn) btn.classList.add('active');
+  if (tab === 'schedule') refreshStudentSchedule();
+  try { localStorage.setItem('student_tab', tab); } catch(e) {}
+};
+
+async function refreshStudentSchedule() {
+  var calOuter = document.getElementById('student-cal-outer');
+  if (!calOuter) return;
+  try {
+    var res = await fetch(window.location.pathname + '?_=' + Date.now());
+    var html = await res.text();
+    var doc  = new DOMParser().parseFromString(html, 'text/html');
+    var fresh = doc.getElementById('student-cal-outer');
+    if (fresh) calOuter.replaceWith(fresh);
+  } catch(e) {}
+}
+
+/* Restore last tab on load */
+(function() {
+  var saved = 'schedule';
+  try { saved = localStorage.getItem('student_tab') || 'schedule'; } catch(e) {}
+  if (saved !== 'schedule') {
+    document.getElementById('tab-schedule').style.display = 'none';
+    document.getElementById('tab-enroll').style.display   = '';
+    var btn = document.getElementById('btn-' + saved);
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+  }
+})();
+
+(function () {
+  'use strict';
+
+  /* ── Render extra-data tags from JSON stored in data-extra ── */
+  document.querySelectorAll('.extra-tags').forEach(function (el) {
+    var raw = el.dataset.extra || '{}';
+    try {
+      var data = JSON.parse(raw);
+      var html = Object.entries(data)
+        .filter(function (kv) { return kv[1] != null && String(kv[1]).trim() !== ''; })
+        .map(function (kv) {
+          return '<span class="badge me-1 mb-1" style="background:var(--p-light);color:var(--p-deep);font-size:.7rem;font-weight:600;">'
+            + kv[0] + ': ' + kv[1] + '</span>';
+        })
+        .join('');
+      if (html) el.innerHTML = html;
+    } catch (e) { /* ignore malformed JSON */ }
+  });
+
+  /* ── DOM helpers ────────────────────────────────────────────── */
+  function getEnrolledCount() {
+    return document.getElementById('enrolled-list').children.length;
+  }
+
+  function syncEnrolledSection() {
+    var section = document.getElementById('enrolled-section');
+    var countEl = document.getElementById('enrolled-count');
+    var n = getEnrolledCount();
+    if (countEl) countEl.textContent = n;
+    if (section) section.style.display = n === 0 ? 'none' : '';
+  }
+
+  function addEnrolledCard(classId) {
+    var card = document.querySelector('.class-card[data-class-id="' + classId + '"]');
+    var subject  = card ? card.dataset.subject  : '';
+    var teacher  = card ? card.dataset.teacher  : '';
+    var schedule = card ? card.dataset.schedule : '';
+
+    var col = document.createElement('div');
+    col.className = 'col-12 col-sm-6 col-lg-4';
+    col.id = 'enrolled-card-' + classId;
+    col.innerHTML =
+      '<div class="card border-0 h-100" style="border-left:4px solid var(--green)!important;border-radius:var(--r-sm);background:rgba(255,255,255,.92);box-shadow:0 2px 10px rgba(16,185,129,.12);">'
+      + '<div class="card-body py-2 px-3 d-flex align-items-center gap-2">'
+      + '<div class="flex-grow-1 min-w-0">'
+      + '<div class="fw-bold text-truncate" style="font-size:.88rem;color:#065f46;">' + subject + '</div>'
+      + '<div class="text-muted" style="font-size:.75rem;">' + teacher + ' · ' + schedule + '</div>'
+      + '</div>'
+      + (regOpen
+          ? '<button class="btn btn-sm btn-outline-danger flex-shrink-0 py-1 px-2" title="Huỷ đăng ký" onclick="cancelEnroll(' + classId + ')"><i class="bi bi-x-lg"></i></button>'
+          : '<span class="badge text-bg-success flex-shrink-0" style="font-size:.72rem;">Đã đăng ký</span>')
+      + '</div></div>';
+
+    document.getElementById('enrolled-list').appendChild(col);
+    syncEnrolledSection();
+  }
+
+  function removeEnrolledCard(classId) {
+    var card = document.getElementById('enrolled-card-' + classId);
+    if (card) card.remove();
+    syncEnrolledSection();
+  }
+
+  function setCardEnrolled(classId, enrolled) {
+    var cfg = classConfig[classId];
+    if (!cfg) return;
+    cfg.enrolled = enrolled;
+
+    var card  = document.querySelector('.class-card[data-class-id="' + classId + '"]');
+    var btn   = document.querySelector('.action-btn-' + classId);
+    var badge = document.querySelector('.count-badge-' + classId);
+    var count = badge ? parseInt(badge.textContent, 10) : 0;
+
+    if (card) card.style.borderLeftColor = enrolled ? 'var(--green)' : (cfg.maxCapacity && count >= cfg.maxCapacity ? '#94a3b8' : 'var(--p)');
+    if (badge) badge.style.background    = enrolled ? 'var(--green)' : (cfg.maxCapacity && count >= cfg.maxCapacity ? '#94a3b8' : 'var(--p)');
+
+    if (btn) {
+      if (enrolled) {
+        btn.className = 'btn btn-sm btn-outline-danger action-btn-' + classId;
+        btn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Huỷ đăng ký';
+        btn.disabled  = !regOpen;
+        (function(cid){ btn.onclick = function(){ cancelEnroll(cid); }; }(classId));
+      } else {
+        var isFull = cfg.maxCapacity !== null && count >= cfg.maxCapacity;
+        if (isFull) {
+          btn.className = 'btn btn-sm btn-secondary action-btn-' + classId;
+          btn.innerHTML = '<i class="bi bi-slash-circle me-1"></i>Đã đủ';
+          btn.disabled  = true;
+          btn.onclick   = null;
+        } else {
+          btn.className = 'btn btn-sm btn-primary action-btn-' + classId;
+          btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Đăng ký';
+          btn.disabled  = !regOpen;
+          (function(cid){ btn.onclick = function(){ enrollClass(cid); }; }(classId));
+        }
+      }
+    }
+  }
+
+  /* ── Enroll ─────────────────────────────────────────────────── */
+  window.enrollClass = async function (classId) {
+    try {
+      var res = await fetch('/student/enroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ class_id: classId })
+      });
+      var data = await res.json();
+      if (data.ok) {
+        setCardEnrolled(classId, true);
+        addEnrolledCard(classId);
+        refreshStudentSchedule();
+      } else if (data.conflict_subject) {
+        showConflictModal(data.error, data.conflict_subject, data.conflict_teacher, data.conflict_schedule);
+      } else {
+        showAlert(data.error || 'Đã xảy ra lỗi, vui lòng thử lại.', 'error');
+      }
+    } catch (e) {
+      showAlert('Lỗi kết nối máy chủ, vui lòng thử lại.', 'error');
+    }
+  };
+
+  /* ── Cancel enroll ──────────────────────────────────────────── */
+  window.cancelEnroll = function (classId) {
+    var card = document.querySelector('.class-card[data-class-id="' + classId + '"]');
+    var subject = card ? card.dataset.subject : '';
+    var teacher  = card ? card.dataset.teacher  : '';
+    var label = subject ? (subject + (teacher ? ' – ' + teacher : '')) : 'lớp này';
+    showConfirm('Huỷ đăng ký?', 'Bạn có chắc muốn huỷ đăng ký ' + label + '?', async function() {
+      try {
+        var res = await fetch('/student/enroll/' + classId, { method: 'DELETE' });
+        var data = await res.json();
+        if (data.ok) {
+          setCardEnrolled(classId, false);
+          removeEnrolledCard(classId);
+          refreshStudentSchedule();
+        } else {
+          showAlert(data.error || 'Đã xảy ra lỗi, vui lòng thử lại.', 'error');
+        }
+      } catch (e) {
+        showAlert('Lỗi kết nối máy chủ, vui lòng thử lại.', 'error');
+      }
+    }, {confirmText: 'Huỷ đăng ký', confirmClass: 'btn-warning'});
+  };
+
+  /* ── Conflict modal ─────────────────────────────────────────── */
+  function showConflictModal(errorMsg, subject, teacher, schedule) {
+    var body = document.getElementById('conflictModalBody');
+    body.innerHTML =
+      '<p class="mb-3">' + (errorMsg || 'Trùng lịch học.') + '</p>'
+      + '<div style="background:#FFF1F2;border:1.5px solid #FECDD3;border-radius:10px;padding:12px 14px;font-size:.86rem;">'
+      +   '<div class="fw-bold mb-1" style="color:#BE123C;font-size:.9rem;">'
+      +     '<i class="bi bi-x-circle-fill me-1"></i>Lớp bị trùng'
+      +   '</div>'
+      +   '<div style="color:#1e293b;line-height:1.7;">'
+      +     '<i class="bi bi-book-fill me-1" style="color:#0EA5E9;font-size:.75rem;"></i><strong>' + (subject || '') + '</strong><br>'
+      +     (teacher ? '<i class="bi bi-person-fill me-1" style="color:#64748B;font-size:.75rem;"></i>' + teacher + '<br>' : '')
+      +     (schedule ? '<i class="bi bi-clock me-1" style="color:#64748B;font-size:.75rem;"></i>' + schedule : '')
+      +   '</div>'
+      + '</div>';
+    var modal = new bootstrap.Modal(document.getElementById('conflictModal'));
+    modal.show();
+  }
+
+  /* ── Per-class config for client-side button logic ──────────── */
+  var regOpen = {{ 'true' if student_reg_open else 'false' }};
+
+  var classConfig = {
+    {% for cls in published_classes %}
+    {{ cls.id }}: {
+      maxCapacity: {{ cls.max_capacity | tojson }},
+      enrolled: {{ 'true' if cls.id in my_class_ids else 'false' }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  };
+
+  /* ── Live count updater ─────────────────────────────────────── */
+  function updateCounts(counts) {
+    Object.entries(counts).forEach(function (entry) {
+      var id    = parseInt(entry[0], 10);
+      var info  = entry[1];
+      var count = (info && typeof info === 'object') ? (info.count || 0) : info;
+      var cfg   = classConfig[id];
+      if (!cfg) return;
+
+      /* Sync max_capacity from API (admin may have changed it) */
+      if (info && typeof info === 'object' && info.max_capacity !== undefined) {
+        cfg.maxCapacity = info.max_capacity;
+      }
+
+      /* Update location display */
+      if (info && typeof info === 'object') {
+        var locBox  = document.querySelector('.location-box-' + id);
+        var locText = document.querySelector('.location-text-' + id);
+        if (locBox && locText) {
+          if (info.location) {
+            locText.textContent = info.location;
+            locBox.style.display = '';
+          } else {
+            locBox.style.display = 'none';
+          }
+        }
+      }
+
+      var isFull    = cfg.maxCapacity !== null && count >= cfg.maxCapacity;
+      var threshold = cfg.maxCapacity !== null ? Math.floor(cfg.maxCapacity * 2 / 3) : null;
+      var nearFull  = threshold !== null && count >= threshold && !isFull && !cfg.enrolled;
+
+      /* Badge color + text (count/sĩ số) */
+      var badgeEl = document.querySelector('.count-badge-' + id);
+      if (badgeEl) {
+        badgeEl.textContent = count + (cfg.maxCapacity !== null ? '/' + cfg.maxCapacity : '');
+        if (cfg.enrolled) {
+          badgeEl.style.background = 'var(--green)';
+        } else if (isFull) {
+          badgeEl.style.background = '#94a3b8';
+        } else if (nearFull) {
+          badgeEl.style.background = 'var(--amber)';
+        } else {
+          badgeEl.style.background = 'var(--p)';
+        }
+      }
+
+      /* Card left-border accent */
+      var card = document.querySelector('.class-card[data-class-id="' + id + '"]');
+      if (card) {
+        if (cfg.enrolled) {
+          card.style.borderLeftColor = 'var(--green)';
+        } else if (isFull) {
+          card.style.borderLeftColor = '#94a3b8';
+        } else {
+          card.style.borderLeftColor = 'var(--p)';
+        }
+      }
+
+      /* Action button state (only for non-enrolled classes) */
+      var btn = document.querySelector('.action-btn-' + id);
+      if (btn && !cfg.enrolled) {
+        if (isFull) {
+          btn.disabled = true;
+          btn.className = 'btn btn-sm btn-secondary action-btn-' + id;
+          btn.innerHTML = '<i class="bi bi-slash-circle me-1"></i>Đã đủ';
+          btn.onclick = null;
+        } else if (regOpen) {
+          btn.disabled = false;
+          btn.className = 'btn btn-sm btn-primary action-btn-' + id;
+          btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Đăng ký';
+          (function (cid) {
+            btn.onclick = function () { enrollClass(cid); };
+          }(id));
+        }
+      }
+
+      /* Warning box */
+      var warn = document.querySelector('.warning-box-' + id);
+      if (warn) {
+        if (nearFull) {
+          warn.className = 'alert alert-warning py-2 px-3 mt-3 mb-0 small d-flex align-items-start gap-2 warning-box-' + id;
+          warn.style.borderRadius = 'var(--r-sm)';
+          warn.innerHTML = '<span style="font-size:1rem;line-height:1.4;">&#9888;</span>'
+            + '<span>Số lượng học sinh lớp này hiện đã vượt quá ' + threshold + ' học sinh, bạn cần cân nhắc '
+            + 'có nên tiếp tục lựa chọn lớp này không vì lớp đông học sinh, khó tiếp thu.</span>';
+        } else if (isFull) {
+          warn.className = 'alert alert-danger py-2 px-3 mt-3 mb-0 small d-flex align-items-start gap-2 warning-box-' + id;
+          warn.style.borderRadius = 'var(--r-sm)';
+          warn.innerHTML = '<span style="font-size:1rem;line-height:1.4;">&#128683;</span>'
+            + '<span>Số lượng học sinh lớp này hiện đã đủ, vui lòng chọn lớp khác.</span>';
+        } else {
+          warn.className = 'warning-box-' + id;
+          warn.style.borderRadius = '';
+          warn.innerHTML = '';
+        }
+      }
+    });
+  }
+
+  /* ── Poll /api/class-counts every 5 seconds ─────────────────── */
+  setInterval(async function () {
+    try {
+      var res = await fetch('/api/class-counts');
+      if (res.ok) {
+        var counts = await res.json();
+        updateCounts(counts);
+      }
+    } catch (e) { /* silent fail — next poll will retry */ }
+  }, 5000);
+
+})();
+</script>
+{% endblock %}

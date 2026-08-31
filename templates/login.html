@@ -1,0 +1,545 @@
+{% extends "base.html" %}
+{% block title %}Đăng nhập{% endblock %}
+
+{# Suppress the default hero so the page is centred over the background #}
+{% block hero %}{% endblock %}
+
+{% block head %}
+<style>
+  .main-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 72px - 52px); /* viewport minus header+footer */
+    padding: 40px 16px;
+  }
+  .login-wrap {
+    width: 100%;
+    max-width: 440px;
+  }
+  /* Back link */
+  .btn-back {
+    background: transparent;
+    border: 2px solid var(--border);
+    color: var(--muted);
+    border-radius: var(--r-sm);
+    padding: 11px 18px;
+    min-height: 48px;
+    font-weight: 600;
+    font-family: var(--font);
+    font-size: .93rem;
+    transition: all var(--ease);
+    cursor: pointer;
+  }
+  .btn-back:hover {
+    border-color: var(--p);
+    color: var(--p);
+    background: rgba(14,165,233,.06);
+  }
+  /* Greeting banner */
+  .greeting-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: linear-gradient(135deg, rgba(14,165,233,.12), rgba(20,184,166,.08));
+    border: 1px solid rgba(14,165,233,.25);
+    border-radius: 40px;
+    padding: 6px 14px 6px 10px;
+    font-size: .87rem;
+    font-weight: 700;
+    color: var(--p-deep);
+    margin-bottom: 20px;
+  }
+  .greeting-badge i { font-size: 1rem; color: var(--p); }
+  /* Password toggle */
+  .pw-wrap { position: relative; }
+  .pw-toggle {
+    position: absolute;
+    right: 12px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; padding: 4px;
+    color: var(--muted); cursor: pointer; font-size: 1.05rem;
+    transition: color var(--ease);
+  }
+  .pw-toggle:hover { color: var(--p); }
+  /* Inline error */
+  .inline-error {
+    display: none;
+    background: rgba(239,68,68,.08);
+    border: 1px solid rgba(239,68,68,.25);
+    border-radius: var(--r-sm);
+    padding: 10px 14px;
+    font-size: .87rem;
+    color: #B91C1C;
+    margin-top: 4px;
+  }
+  .inline-error.show { display: flex; align-items: center; gap: 8px; }
+  /* Spinner */
+  .btn-spinner {
+    display: none;
+    width: 18px; height: 18px;
+    border: 2.5px solid rgba(255,255,255,.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading .btn-spinner { display: inline-block; }
+  .loading .btn-text    { display: none; }
+  /* Helper text */
+  .field-hint {
+    font-size: .78rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-wrap">
+
+  <!-- ═══════════ STEP 1 ═══════════ -->
+  <div id="step1-section">
+    <div class="form-card reveal">
+      <div class="form-card-header d-flex align-items-center gap-2">
+        <i class="bi bi-person-badge-fill" style="font-size:1.2rem; opacity:.9;"></i>
+        <span>Đăng nhập hệ thống</span>
+      </div>
+      <div class="form-card-body">
+        <p class="text-muted mb-4" style="font-size:.88rem;">
+          Vui lòng nhập thông tin của bạn để tiếp tục.
+        </p>
+
+        <!-- Step-1 error -->
+        <div class="inline-error mb-3" id="step1-error">
+          <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
+          <span id="step1-error-msg"></span>
+        </div>
+
+        <form id="step1-form" novalidate autocomplete="off">
+          <!-- Full name -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="full_name" style="font-size:.88rem; color:#475569;">
+              <i class="bi bi-person me-1"></i>Họ và tên
+            </label>
+            <input
+              type="text"
+              id="full_name"
+              name="full_name"
+              class="custom-input"
+              placeholder="Nguyễn Văn A"
+              required
+              autocomplete="name"
+            >
+          </div>
+
+          <!-- CCCD -->
+          <div class="mb-4">
+            <label class="form-label fw-semibold" for="cccd" style="font-size:.88rem; color:#475569;">
+              <i class="bi bi-credit-card me-1"></i>Số CCCD
+            </label>
+            <input
+              type="text"
+              id="cccd"
+              name="cccd"
+              class="custom-input"
+              placeholder="012345678901"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              maxlength="12"
+              required
+              autocomplete="off"
+            >
+            <div class="field-hint">Nhập đúng 12 chữ số trên căn cước công dân</div>
+          </div>
+
+          <button type="submit" class="btn btn-primary-custom w-100 d-flex align-items-center justify-content-center gap-2" id="step1-btn">
+            <span class="btn-spinner" id="step1-spinner"></span>
+            <span class="btn-text">Tiếp theo <i class="bi bi-arrow-right ms-1"></i></span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div><!-- /step1-section -->
+
+
+  <!-- ═══════════ STEP 2 ═══════════ -->
+  <div id="step2-section" style="display:none;">
+    <div class="form-card">
+      <div class="form-card-header d-flex align-items-center gap-2">
+        <i class="bi bi-shield-lock-fill" style="font-size:1.2rem; opacity:.9;"></i>
+        <span id="step2-header-text">Xác thực danh tính</span>
+      </div>
+      <div class="form-card-body">
+
+        <!-- Greeting -->
+        <div class="greeting-badge">
+          <i class="bi bi-hand-wave"></i>
+          <span>Xin chào, <span id="greeting-name" class="fw-bold"></span>!</span>
+        </div>
+
+        <!-- Step-2 error -->
+        <div class="inline-error mb-3" id="step2-error">
+          <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
+          <span id="step2-error-msg"></span>
+        </div>
+
+        <form id="step2-form" novalidate autocomplete="off">
+
+          <!-- Email (teacher first login only) -->
+          <div class="mb-3" id="field-email" style="display:none;">
+            <label class="form-label fw-semibold" for="email" style="font-size:.88rem; color:#475569;">
+              <i class="bi bi-envelope me-1"></i>Email
+            </label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              class="custom-input"
+              placeholder="giaovien@nhc.edu.vn"
+              autocomplete="email"
+            >
+            <div class="field-hint">Email dùng để khôi phục mật khẩu nếu cần</div>
+          </div>
+
+          <!-- Password (all cases) -->
+          <div class="mb-3" id="field-password">
+            <label class="form-label fw-semibold" for="password" style="font-size:.88rem; color:#475569;">
+              <i class="bi bi-key me-1"></i><span id="password-label">Mật khẩu</span>
+            </label>
+            <div class="pw-wrap">
+              <input
+                type="password"
+                id="password"
+                name="password"
+                class="custom-input"
+                placeholder="Nhập mật khẩu"
+                autocomplete="current-password"
+                style="padding-right: 44px;"
+              >
+              <button type="button" class="pw-toggle" data-target="password" aria-label="Hiện/ẩn mật khẩu">
+                <i class="bi bi-eye"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Confirm password (first login only) -->
+          <div class="mb-4" id="field-confirm-password" style="display:none;">
+            <label class="form-label fw-semibold" for="confirm_password" style="font-size:.88rem; color:#475569;">
+              <i class="bi bi-key-fill me-1"></i>Xác nhận mật khẩu
+            </label>
+            <div class="pw-wrap">
+              <input
+                type="password"
+                id="confirm_password"
+                name="confirm_password"
+                class="custom-input"
+                placeholder="Nhập lại mật khẩu"
+                autocomplete="new-password"
+                style="padding-right: 44px;"
+              >
+              <button type="button" class="pw-toggle" data-target="confirm_password" aria-label="Hiện/ẩn mật khẩu">
+                <i class="bi bi-eye"></i>
+              </button>
+            </div>
+            <div class="field-hint" id="confirm-hint"></div>
+          </div>
+
+          <!-- Actions -->
+          <div class="d-flex gap-2">
+            <button type="button" class="btn-back flex-shrink-0" id="back-btn">
+              <i class="bi bi-arrow-left me-1"></i>Quay lại
+            </button>
+            <button type="submit" class="btn btn-primary-custom flex-grow-1 d-flex align-items-center justify-content-center gap-2" id="step2-btn">
+              <span class="btn-spinner" id="step2-spinner"></span>
+              <span class="btn-text">Đăng nhập <i class="bi bi-box-arrow-in-right ms-1"></i></span>
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+  </div><!-- /step2-section -->
+
+</div><!-- /login-wrap -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+
+  /* ── State ─────────────────────────────────────────── */
+  let _cccd      = '';
+  let _firstLogin = false;
+  let _role      = '';   /* 'teacher' | 'student' */
+
+  /* ── DOM refs ────────────────────────────────────────── */
+  const sec1  = document.getElementById('step1-section');
+  const sec2  = document.getElementById('step2-section');
+  const form1 = document.getElementById('step1-form');
+  const form2 = document.getElementById('step2-form');
+  const btn1  = document.getElementById('step1-btn');
+  const btn2  = document.getElementById('step2-btn');
+  const sp1   = document.getElementById('step1-spinner');
+  const sp2   = document.getElementById('step2-spinner');
+
+  const err1Wrap = document.getElementById('step1-error');
+  const err1Msg  = document.getElementById('step1-error-msg');
+  const err2Wrap = document.getElementById('step2-error');
+  const err2Msg  = document.getElementById('step2-error-msg');
+
+  const greetEl   = document.getElementById('greeting-name');
+  const hdrText   = document.getElementById('step2-header-text');
+  const pwLabel   = document.getElementById('password-label');
+  const pwField   = document.getElementById('password');
+  const cfField   = document.getElementById('confirm_password');
+  const cfHint    = document.getElementById('confirm-hint');
+
+  const fieldEmail   = document.getElementById('field-email');
+  const fieldConfirm = document.getElementById('field-confirm-password');
+  const emailInput   = document.getElementById('email');
+
+  /* ── Helpers ─────────────────────────────────────────── */
+  function setLoading(btn, spinner, on) {
+    btn.disabled = on;
+    btn.classList.toggle('loading', on);
+    spinner.style.display = on ? 'inline-block' : 'none';
+  }
+
+  function showError(wrap, msgEl, text) {
+    msgEl.textContent = text;
+    wrap.classList.add('show');
+  }
+
+  function clearError(wrap) {
+    wrap.classList.remove('show');
+  }
+
+  function markInvalid(input, bad) {
+    input.classList.toggle('is-invalid', bad);
+  }
+
+  /* ── Password show/hide toggles ──────────────────────── */
+  document.querySelectorAll('.pw-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(btn.dataset.target);
+      const icon  = btn.querySelector('i');
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'bi bi-eye-slash';
+      } else {
+        input.type = 'password';
+        icon.className = 'bi bi-eye';
+      }
+    });
+  });
+
+  /* ── Only allow digits in CCCD field ─────────────────── */
+  document.getElementById('cccd').addEventListener('input', function () {
+    this.value = this.value.replace(/\D/g, '').slice(0, 12);
+  });
+
+  /* ── STEP 1: submit ──────────────────────────────────── */
+  form1.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearError(err1Wrap);
+
+    const full_name = document.getElementById('full_name').value.trim();
+    const cccd      = document.getElementById('cccd').value.trim();
+
+    /* Client-side validation */
+    let valid = true;
+    markInvalid(document.getElementById('full_name'), !full_name);
+    markInvalid(document.getElementById('cccd'), !cccd || cccd.length < 9);
+    if (!full_name || !cccd || cccd.length < 9) {
+      showError(err1Wrap, err1Msg, 'Vui lòng nhập đầy đủ họ tên và số CCCD hợp lệ.');
+      return;
+    }
+
+    setLoading(btn1, sp1, true);
+
+    try {
+      const res  = await fetch('/login/step1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ full_name, cccd }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        showError(err1Wrap, err1Msg, data.error || 'Không tìm thấy thông tin. Vui lòng kiểm tra lại.');
+        markInvalid(document.getElementById('full_name'), true);
+        markInvalid(document.getElementById('cccd'), true);
+        return;
+      }
+
+      /* Store state */
+      _cccd       = cccd;
+      _firstLogin = !!data.is_first_login;
+      _role       = data.user_type || 'student';  /* 'teacher' | 'student' */
+
+      /* Build greeting */
+      const title = data.title || (_role === 'teacher' ? 'Thầy/Cô' : 'Học sinh');
+      greetEl.textContent = title + ' ' + (data.full_name || full_name);
+
+      /* Configure step-2 fields */
+      if (_firstLogin && _role === 'teacher') {
+        /* Teacher first login: email + new password + confirm */
+        hdrText.textContent = 'Thiết lập tài khoản';
+        fieldEmail.style.display   = '';
+        fieldConfirm.style.display = '';
+        emailInput.required        = true;
+        cfField.required           = true;
+        pwLabel.textContent        = 'Tạo mật khẩu';
+        pwField.placeholder        = 'Nhập mật khẩu mới';
+        pwField.setAttribute('autocomplete', 'new-password');
+        cfHint.textContent = 'Mật khẩu phải trùng khớp';
+      } else if (_firstLogin && _role === 'student') {
+        /* Student first login: new password + confirm (no email) */
+        hdrText.textContent = 'Thiết lập mật khẩu';
+        fieldEmail.style.display   = 'none';
+        fieldConfirm.style.display = '';
+        emailInput.required        = false;
+        cfField.required           = true;
+        pwLabel.textContent        = 'Tạo mật khẩu';
+        pwField.placeholder        = 'Nhập mật khẩu mới';
+        pwField.setAttribute('autocomplete', 'new-password');
+        cfHint.textContent = 'Mật khẩu phải trùng khớp';
+      } else {
+        /* Returning user (teacher or student): only password */
+        hdrText.textContent = 'Xác thực danh tính';
+        fieldEmail.style.display   = 'none';
+        fieldConfirm.style.display = 'none';
+        emailInput.required        = false;
+        cfField.required           = false;
+        pwLabel.textContent        = 'Mật khẩu';
+        pwField.placeholder        = 'Nhập mật khẩu';
+        pwField.setAttribute('autocomplete', 'current-password');
+      }
+
+      /* Reset step-2 inputs */
+      form2.reset();
+      markInvalid(pwField, false);
+      markInvalid(cfField, false);
+      clearError(err2Wrap);
+
+      /* Transition */
+      sec1.style.display = 'none';
+      sec2.style.display = '';
+      pwField.focus();
+
+    } catch (err) {
+      showError(err1Wrap, err1Msg, 'Lỗi kết nối. Vui lòng thử lại sau.');
+    } finally {
+      setLoading(btn1, sp1, false);
+    }
+  });
+
+  /* ── STEP 2: submit ──────────────────────────────────── */
+  form2.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearError(err2Wrap);
+
+    const password        = pwField.value;
+    const confirm_password = cfField.value;
+
+    /* Validate */
+    let ok = true;
+    if (!password) { markInvalid(pwField, true); ok = false; }
+    else            markInvalid(pwField, false);
+
+    if (_firstLogin) {
+      if (!confirm_password) {
+        markInvalid(cfField, true); ok = false;
+      } else if (password !== confirm_password) {
+        markInvalid(cfField, true);
+        showError(err2Wrap, err2Msg, 'Mật khẩu xác nhận không khớp. Vui lòng nhập lại.');
+        return;
+      } else {
+        markInvalid(cfField, false);
+      }
+    }
+
+    if (_firstLogin && _role === 'teacher' && emailInput.required) {
+      const emailVal = emailInput.value.trim();
+      if (!emailVal || !emailVal.includes('@')) {
+        markInvalid(emailInput, true); ok = false;
+      } else {
+        markInvalid(emailInput, false);
+      }
+    }
+
+    if (!ok) {
+      showError(err2Wrap, err2Msg, 'Vui lòng điền đầy đủ thông tin.');
+      return;
+    }
+
+    /* Build payload */
+    const full_name = document.getElementById('full_name').value.trim();
+    const payload = { full_name, cccd: _cccd, user_type: _role, password };
+    if (_firstLogin && _role === 'teacher') {
+      payload.email = emailInput.value.trim();
+    }
+
+    setLoading(btn2, sp2, true);
+
+    try {
+      const res  = await fetch('/login/step2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        showError(err2Wrap, err2Msg, data.error || 'Đăng nhập thất bại. Vui lòng thử lại.');
+        markInvalid(pwField, true);
+        return;
+      }
+
+      /* Redirect on success */
+      window.location.href = data.redirect || '/';
+
+    } catch (err) {
+      showError(err2Wrap, err2Msg, 'Lỗi kết nối. Vui lòng thử lại sau.');
+    } finally {
+      setLoading(btn2, sp2, false);
+    }
+  });
+
+  /* ── Back button ─────────────────────────────────────── */
+  document.getElementById('back-btn').addEventListener('click', () => {
+    sec2.style.display = 'none';
+    sec1.style.display = '';
+    clearError(err1Wrap);
+    document.getElementById('full_name').focus();
+  });
+
+  /* ── Live confirm-password match hint ────────────────── */
+  cfField.addEventListener('input', () => {
+    if (!cfField.value) { cfHint.textContent = 'Mật khẩu phải trùng khớp'; markInvalid(cfField, false); return; }
+    const match = cfField.value === pwField.value;
+    markInvalid(cfField, !match);
+    cfHint.textContent = match
+      ? '✓ Mật khẩu trùng khớp'
+      : '✗ Mật khẩu chưa trùng khớp';
+    cfHint.style.color = match ? 'var(--green)' : 'var(--red)';
+  });
+
+  /* ── Ripple effect on primary buttons ─────────────────── */
+  document.querySelectorAll('.btn-primary-custom').forEach(btn => {
+    btn.addEventListener('click', function (e) {
+      const r  = document.createElement('span');
+      const d  = Math.max(btn.clientWidth, btn.clientHeight);
+      const rc = btn.getBoundingClientRect();
+      r.className = 'ripple';
+      r.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX-rc.left-d/2}px;top:${e.clientY-rc.top-d/2}px`;
+      btn.appendChild(r);
+      setTimeout(() => r.remove(), 600);
+    });
+  });
+
+})();
+</script>
+{% endblock %}

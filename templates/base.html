@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}mynhc{% endblock %} – mynhc</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container d-flex align-items-center justify-content-between py-2">
+      <a href="{{ url_for('index') }}" class="brand d-flex align-items-center gap-2 text-decoration-none">
+        <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo" class="brand-logo">
+        <div class="brand-text">
+          <div class="brand-dept">SỞ GIÁO DỤC &amp; ĐÀO TẠO THÀNH PHỐ HỒ CHÍ MINH</div>
+          <div class="brand-title">TRƯỜNG THPT NGUYỄN HỮU CẦU</div>
+        </div>
+      </a>
+      {% block header_right %}{% endblock %}
+    </div>
+  </header>
+
+  <!-- Hero banner -->
+  {% block hero %}
+  <div class="hero-banner">
+    <div class="hero-overlay"></div>
+    <div class="hero-blob hero-blob-1"></div>
+    <div class="hero-blob hero-blob-2"></div>
+    <div class="hero-blob hero-blob-3"></div>
+    <div class="hero-content container py-4">
+      {% block hero_content %}
+      <h1 class="hero-title">mynhc</h1>
+      <p class="hero-sub">mynhc – Hệ thống đăng ký lớp học trực tuyến</p>
+      {% endblock %}
+    </div>
+  </div>
+  {% endblock %}
+
+  <!-- Flash messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="container mt-3">
+    {% for category, message in messages %}
+    <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show flash-alert" role="alert">
+      <i class="bi bi-{{ 'check-circle-fill' if category == 'success' else 'exclamation-triangle-fill' }} me-2"></i>
+      {{ message | safe }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      <div class="flash-alert-bar"></div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endwith %}
+
+  <!-- Main content -->
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <div class="page-bg" style="background-image: url('{{ url_for('static', filename='img/banner.jpg') }}')"></div>
+
+  <footer class="site-footer">
+    <p class="mb-0">© 2026 · mynhc – Trường THPT Nguyễn Hữu Cầu</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  {% block scripts %}{% endblock %}
+
+  <!-- ── Global custom popup modal ── -->
+  <div class="modal fade" id="popupModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+      <div class="modal-content" style="border-radius:18px; overflow:hidden; border:none; box-shadow:0 24px 80px rgba(0,0,0,.22);">
+        <div class="modal-body" style="padding:28px 28px 20px;">
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <div id="popupIcon" style="width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.15rem; flex-shrink:0;"></div>
+            <div>
+              <div id="popupTitle" style="font-size:1rem; font-weight:800; color:#0c4a6e; margin-bottom:4px;"></div>
+              <div id="popupMsg" style="font-size:.875rem; color:#475569; line-height:1.55;"></div>
+            </div>
+          </div>
+          <div class="d-flex gap-2 justify-content-end pt-2">
+            <button type="button" id="popupCancelBtn" class="btn btn-outline-secondary fw-semibold px-4" style="border-radius:10px;">Huỷ</button>
+            <button type="button" id="popupConfirmBtn" class="btn fw-semibold px-4" style="border-radius:10px;">Xác nhận</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    let _cb = null;
+    const _el = document.getElementById('popupModal');
+    const _modal = new bootstrap.Modal(_el);
+    const _icon  = document.getElementById('popupIcon');
+    const _title = document.getElementById('popupTitle');
+    const _msg   = document.getElementById('popupMsg');
+    const _cancel  = document.getElementById('popupCancelBtn');
+    const _confirm = document.getElementById('popupConfirmBtn');
+
+    _confirm.addEventListener('click', () => { _modal.hide(); if (_cb) { _cb(); _cb = null; } });
+    _cancel.addEventListener('click',  () => { _modal.hide(); _cb = null; });
+
+    window.showConfirm = function(title, msg, onConfirm, opts = {}) {
+      _title.textContent = title;
+      _msg.innerHTML = msg;
+      _icon.style.background = opts.iconBg || '#FEF3C7';
+      _icon.innerHTML = opts.icon || '<i class="bi bi-exclamation-triangle-fill" style="color:#F59E0B;"></i>';
+      _confirm.textContent = opts.confirmText || 'Xác nhận';
+      _confirm.className = 'btn fw-semibold px-4 ' + (opts.confirmClass || 'btn-danger');
+      _confirm.style.borderRadius = '10px';
+      _cancel.style.display = '';
+      _cb = onConfirm;
+      _modal.show();
+    };
+
+    window.showAlert = function(msg, type) {
+      const cfg = {
+        error:   { bg:'#FEE2E2', icon:'<i class="bi bi-x-circle-fill" style="color:#EF4444;"></i>', title:'Có lỗi xảy ra',  btn:'btn-danger' },
+        success: { bg:'#DCFCE7', icon:'<i class="bi bi-check-circle-fill" style="color:#16A34A;"></i>', title:'Thành công', btn:'btn-success' },
+        warning: { bg:'#FEF3C7', icon:'<i class="bi bi-exclamation-triangle-fill" style="color:#D97706;"></i>', title:'Cảnh báo', btn:'btn-warning' },
+        info:    { bg:'#EFF6FF', icon:'<i class="bi bi-info-circle-fill" style="color:#0EA5E9;"></i>', title:'Thông báo', btn:'btn-primary' },
+      };
+      const c = cfg[type] || cfg.info;
+      _title.textContent = c.title;
+      _msg.innerHTML = msg;
+      _icon.style.background = c.bg;
+      _icon.innerHTML = c.icon;
+      _confirm.textContent = 'Đóng';
+      _confirm.className = 'btn fw-semibold px-4 ' + c.btn;
+      _confirm.style.borderRadius = '10px';
+      _cancel.style.display = 'none';
+      _cb = null;
+      _modal.show();
+    };
+
+    /* Helper for form-submit confirms */
+    window.showConfirmSubmit = function(btn, opts) {
+      const form = btn.closest('form');
+      showConfirm(opts.title, opts.msg, () => form.submit(), opts);
+    };
+  })();
+  </script>
+
+  <script>
+    /* Scroll-reveal */
+    const _observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('visible'); _observer.unobserve(e.target); }
+      });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.reveal').forEach(el => _observer.observe(el));
+
+    /* Smooth scroll to main content after hero */
+    window.addEventListener('load', () => {
+      const hero = document.querySelector('.hero-banner');
+      const main = document.querySelector('.main-content');
+      if (hero && main) setTimeout(() => main.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+    });
+
+    /* Sticky header hide-on-scroll logic */
+    (function () {
+      const header = document.querySelector('.site-header');
+      const hero   = document.querySelector('.hero-banner');
+      if (!header || !hero) return;
+      function onScroll() {
+        const heroBottom = hero.getBoundingClientRect().bottom + window.scrollY;
+        header.classList.toggle('header-hidden', window.scrollY > heroBottom * 0.75);
+      }
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+
+    /* Auto-dismiss flash alerts after 5 s */
+    document.querySelectorAll('.flash-alert').forEach(el => {
+      setTimeout(() => {
+        const bsAlert = bootstrap.Alert.getOrCreateInstance(el);
+        if (bsAlert) bsAlert.close();
+      }, 5000);
+    });
+  </script>
+</body>
+</html>

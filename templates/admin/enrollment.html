@@ -1,0 +1,520 @@
+{% extends "base.html" %}
+{% block title %}Quản lý đăng ký môn học – mynhc{% endblock %}
+{% block hero %}{% endblock %}
+
+{% block header_right %}
+<div class="d-flex align-items-center gap-2">
+  <a href="{{ url_for('admin_index') }}" class="topbar-btn topbar-btn-back">
+    <i class="bi bi-arrow-left"></i>
+    <span class="d-none d-md-inline">Quay lại</span>
+  </a>
+  <button class="topbar-btn topbar-btn-solid" id="btn-toggle-enrollment" onclick="toggleStudentReg()">
+    {% if student_reg_open %}
+    <i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng đăng ký</span>
+    {% else %}
+    <i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở đăng ký</span>
+    {% endif %}
+  </button>
+  <a href="{{ url_for('admin_enrollment_export') }}" class="topbar-btn" title="Xuất Excel kết quả">
+    <i class="bi bi-file-earmark-excel"></i>
+    <span class="d-none d-sm-inline">Xuất Excel</span>
+  </a>
+</div>
+{% endblock %}
+
+{% block head %}
+<style>
+  body { background: #F0F9FF; }
+
+  /* ── Section cards ── */
+  .section-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1.5px solid #E2E8F0;
+    overflow: hidden;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  }
+  .section-card-header {
+    padding: 13px 20px;
+    background: linear-gradient(90deg, #F8FAFC, #ECFDF5);
+    border-bottom: 1.5px solid #E2E8F0;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+    font-size: .9rem; font-weight: 700; color: #065f46;
+  }
+  .section-card-body { padding: 20px; }
+
+  /* ── Upload zone ── */
+  .upload-zone {
+    border: 2px dashed #6EE7B7;
+    border-radius: 12px;
+    padding: 24px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+    background: #F0FDF4;
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: #10B981;
+    background: #DCFCE7;
+  }
+  .upload-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+
+  /* ── Tables ── */
+  .admin-table { font-size: .82rem; }
+  .admin-table thead th {
+    background: linear-gradient(135deg, #065f46 0%, #10B981 60%, #34D399 100%);
+    color: #fff; font-weight: 700; border: none;
+    padding: 11px 10px; white-space: nowrap;
+  }
+  .admin-table tbody tr { transition: background .15s; }
+  .admin-table tbody tr:hover { background: rgba(209,250,229,.35); }
+  .admin-table td { vertical-align: middle; padding: 9px 10px; }
+
+  /* ── Count badge colors ── */
+  .count-badge-green  { background: #DCFCE7; color: #15803D; border: 1px solid #86EFAC; }
+  .count-badge-yellow { background: #FEF9C3; color: #92400E; border: 1px solid #FDE047; }
+  .count-badge-red    { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
+  .count-badge {
+    display: inline-block; min-width: 52px; text-align: center;
+    padding: 4px 10px; border-radius: 20px;
+    font-size: .78rem; font-weight: 700;
+    transition: background .3s, color .3s;
+  }
+
+  /* ── Responsive ── */
+  .table-responsive-admin { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="container pb-5">
+  <div class="d-flex align-items-center gap-2 mb-4 pt-4">
+    <h1 style="font-size:1.1rem; font-weight:800; color:#0c4a6e; margin:0;">
+      <i class="bi bi-card-checklist me-2" style="color:#10B981;"></i>Quản lý đăng ký môn học
+    </h1>
+  </div>
+
+  <!-- ── Status badge ── -->
+  <div class="mb-4 d-flex align-items-center gap-3 flex-wrap">
+    <div id="enrollment-status-badge">
+      {% if student_reg_open %}
+      <span class="badge fs-6 px-3 py-2" style="background:#10B981; border-radius:10px;">
+        <i class="bi bi-circle-fill me-1" style="font-size:.5rem; vertical-align:middle;"></i>
+        Giai đoạn 2 đang mở — HS đăng ký môn học
+      </span>
+      {% else %}
+      <span class="badge fs-6 px-3 py-2 bg-secondary" style="border-radius:10px;">
+        <i class="bi bi-lock-fill me-1" style="font-size:.75rem;"></i>
+        Giai đoạn 2 đã đóng — HS chỉ xem
+      </span>
+      {% endif %}
+    </div>
+    <span class="text-muted" style="font-size:.82rem;">
+      <strong>{{ published_classes | length }}</strong> lớp đang mở cho học sinh đăng ký
+    </span>
+  </div>
+
+  <!-- ── Upload section ── -->
+  <div class="section-card mb-4">
+    <div class="section-card-header">
+      <i class="bi bi-cloud-upload"></i>
+      <span>Cập nhật thông tin lớp (Upload Excel)</span>
+    </div>
+    <div class="section-card-body">
+      <div class="row g-4 align-items-start">
+        <div class="col-md-6">
+          <form method="POST" action="{{ url_for('admin_enrollment_upload') }}" enctype="multipart/form-data">
+            <div class="upload-zone mb-3" id="uploadZone">
+              <input type="file" name="file" accept=".xlsx,.xls" id="uploadInput" required
+                     onchange="updateUploadLabel(this)">
+              <i class="bi bi-file-earmark-excel" style="font-size:2rem; color:#10B981; display:block; margin-bottom:8px;"></i>
+              <div class="fw-semibold" style="font-size:.88rem; color:#065f46;" id="uploadLabel">
+                Kéo thả file hoặc click để chọn
+              </div>
+              <div class="text-muted mt-1" style="font-size:.76rem;">
+                Cột yêu cầu: <code>id</code>, <code>Địa điểm</code>, <code>Sĩ số</code> + cột bổ sung tùy ý
+              </div>
+            </div>
+            <button type="submit" class="btn fw-semibold w-100" style="border-radius:8px; background:linear-gradient(135deg,#065f46,#10B981); color:#fff; min-height:42px;">
+              <i class="bi bi-upload me-1"></i>Upload cập nhật
+            </button>
+          </form>
+        </div>
+        <div class="col-md-6 d-flex flex-column justify-content-center">
+          <div class="mb-3">
+            <button class="btn btn-outline-success fw-semibold" style="border-radius:8px;"
+                    data-bs-toggle="modal" data-bs-target="#modalAddClass">
+              <i class="bi bi-plus-circle me-1"></i>Thêm lớp thủ công
+            </button>
+          </div>
+          <div class="text-muted" style="font-size:.8rem; line-height:1.6;">
+            <i class="bi bi-info-circle me-1"></i>
+            File Excel phải có cột <strong>id</strong> (ID lớp đã publish).
+            Các cột <em>Địa điểm</em> và <em>Sĩ số</em> là bắt buộc. Các cột còn lại sẽ được lưu
+            làm dữ liệu bổ sung và hiển thị trong bảng.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Classes table ── -->
+  <div class="section-card">
+    <div class="section-card-header">
+      <i class="bi bi-table"></i>
+      <span>Danh sách lớp đã publish</span>
+      <span class="badge ms-1" style="background:#DCFCE7; color:#15803D; font-size:.72rem; font-weight:700;">
+        {{ published_classes | length }}
+      </span>
+      <span class="ms-auto text-muted" style="font-size:.75rem; font-weight:400;">
+        <i class="bi bi-arrow-repeat me-1"></i>Tự động cập nhật mỗi 5 giây
+      </span>
+    </div>
+    <div class="table-responsive-admin">
+      <table class="table admin-table mb-0" id="classes-table">
+        <thead>
+          <tr>
+            <th>Lớp (ID)</th>
+            <th>Giáo viên</th>
+            <th>Môn / Tổ</th>
+            <th>Khối</th>
+            <th>Thời gian</th>
+            <th>Địa điểm</th>
+            <th class="text-center">Sĩ số</th>
+            {% for col in extra_columns %}
+            <th>{{ col }}</th>
+            {% endfor %}
+            <th class="text-center" style="width:80px;">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cls in published_classes %}
+          <tr>
+            <td>
+              <code style="font-size:.78rem; background:#F1F5F9; padding:2px 6px; border-radius:4px;">#{{ cls.id }}</code>
+            </td>
+            <td class="fw-semibold" style="white-space:nowrap;">{{ cls.teacher_name }}</td>
+            <td>
+              <span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">
+                {{ cls.subject_group }}
+              </span>
+            </td>
+            <td>
+              <span class="badge bg-light text-dark border" style="font-size:.72rem;">Khối {{ cls.grade }}</span>
+            </td>
+            <td style="white-space:nowrap; font-size:.78rem;">
+              {{ day_name(cls.day_of_week) if day_name is callable else cls.day_of_week }},
+              {{ session_label(cls.session_type, cls.start_session, cls.duration) if session_label is callable else cls.session_type }},
+              tiết {{ cls.start_session }}–{{ cls.start_session + cls.duration - 1 }}
+            </td>
+            <td style="font-size:.8rem;">{{ cls.location or '—' }}</td>
+            <td class="text-center">
+              {% set cnt = enrollment_counts.get(cls.id, 0) %}
+              {% set mx  = cls.max_capacity or 0 %}
+              <span class="count-badge {% if cnt >= 45 %}count-badge-red{% elif cnt >= 30 %}count-badge-yellow{% else %}count-badge-green{% endif %}"
+                    data-class-id="{{ cls.id }}" id="count-{{ cls.id }}">
+                {{ cnt }}{% if mx %}/{{ mx }}{% endif %}
+              </span>
+            </td>
+            {% for col in extra_columns %}
+            <td style="font-size:.78rem;">{{ (cls.extra_data or {}).get(col, '—') }}</td>
+            {% endfor %}
+            <td class="text-center">
+              <button class="btn btn-sm btn-outline-primary fw-semibold" style="font-size:.72rem; border-radius:6px;"
+                      onclick="viewStudents({{ cls.id }})">
+                <i class="bi bi-people me-1"></i>Xem HS
+              </button>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="{{ 8 + (extra_columns | length) }}" class="text-center text-muted py-5">
+              <i class="bi bi-calendar-x" style="font-size:2rem; display:block; margin-bottom:8px;"></i>
+              Chưa có lớp nào được publish
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: Xem học sinh đã đăng ký
+══════════════════════════════════════════ -->
+<div class="modal fade" id="modalStudents" tabindex="-1" aria-labelledby="modalStudentsLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#065f46,#10B981); border:none;">
+        <h5 class="modal-title fw-bold text-white" id="modalStudentsLabel">
+          <i class="bi bi-people-fill me-2"></i>Danh sách học sinh đăng ký
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="students-modal-body" class="p-3">
+          <div class="text-center py-4 text-muted">
+            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+            Đang tải...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: Thêm lớp thủ công
+══════════════════════════════════════════ -->
+<div class="modal fade" id="modalAddClass" tabindex="-1" aria-labelledby="modalAddClassLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#065f46,#10B981); border:none;">
+        <h5 class="modal-title fw-bold text-white" id="modalAddClassLabel">
+          <i class="bi bi-plus-circle me-2"></i>Thêm lớp thủ công
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('admin_enrollment_add') }}" id="add-class-form">
+        <div class="modal-body p-4">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold" style="font-size:.85rem;">Giáo viên <span class="text-danger">*</span></label>
+              <select name="teacher_id" class="form-select custom-input" required>
+                <option value="">-- Chọn giáo viên --</option>
+                {% for t in all_teachers %}
+                <option value="{{ t.id }}">{{ t.full_name }} ({{ t.subject_group }})</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold" style="font-size:.85rem;">Khối <span class="text-danger">*</span></label>
+              <select name="grade" class="form-select custom-input" required>
+                <option value="">-- Chọn khối --</option>
+                <option value="10">Khối 10</option>
+                <option value="11">Khối 11</option>
+                <option value="12">Khối 12</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold" style="font-size:.85rem;">Thứ <span class="text-danger">*</span></label>
+              <select name="day_of_week" class="form-select custom-input" required>
+                <option value="">-- Chọn --</option>
+                <option value="2">Thứ 2</option>
+                <option value="3">Thứ 3</option>
+                <option value="4">Thứ 4</option>
+                <option value="5">Thứ 5</option>
+                <option value="6">Thứ 6</option>
+                <option value="7">Thứ 7</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold" style="font-size:.85rem;">Buổi <span class="text-danger">*</span></label>
+              <select name="session_type" class="form-select custom-input" required>
+                <option value="">-- Chọn --</option>
+                <option value="morning">Sáng</option>
+                <option value="afternoon">Chiều</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold" style="font-size:.85rem;">Tiết BĐ <span class="text-danger">*</span></label>
+              <input type="number" name="start_session" class="form-control custom-input" min="1" max="10" required>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold" style="font-size:.85rem;">Số tiết <span class="text-danger">*</span></label>
+              <input type="number" name="duration" class="form-control custom-input" min="1" max="5" value="2" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold" style="font-size:.85rem;">Địa điểm</label>
+              <input type="text" name="location" class="form-control custom-input" placeholder="Phòng A101">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold" style="font-size:.85rem;">Sĩ số tối đa</label>
+              <input type="number" name="max_capacity" class="form-control custom-input" min="1" placeholder="45">
+            </div>
+          </div>
+
+          <!-- Extra data rows -->
+          <div class="mt-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="form-label fw-semibold mb-0" style="font-size:.85rem;">Dữ liệu bổ sung</label>
+              <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:6px; font-size:.75rem;" onclick="addExtraRow()">
+                <i class="bi bi-plus me-1"></i>Thêm dòng
+              </button>
+            </div>
+            <div id="extra-rows"></div>
+          </div>
+        </div>
+        <div class="modal-footer border-top" style="padding:16px 20px;">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal" style="border-radius:8px;">Hủy</button>
+          <button type="submit" class="btn fw-semibold" style="border-radius:8px; background:linear-gradient(135deg,#065f46,#10B981); color:#fff; min-height:40px; padding:8px 22px;">
+            <i class="bi bi-check2 me-1"></i>Thêm lớp
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── Count polling every 5s ── */
+const ALL_CLASS_IDS = {{ published_classes | map(attribute='id') | list | tojson }};
+
+function refreshCounts() {
+  if (!ALL_CLASS_IDS.length) return;
+  fetch('/api/class-counts')
+    .then(r => r.json())
+    .then(data => {
+      ALL_CLASS_IDS.forEach(id => {
+        const el = document.getElementById('count-' + id);
+        if (!el) return;
+        const cnt = data[id] ?? 0;
+        const max = el.dataset.max ? parseInt(el.dataset.max) : null;
+        el.className = 'count-badge ' + (
+          cnt >= 45 ? 'count-badge-red' :
+          cnt >= 30 ? 'count-badge-yellow' :
+                      'count-badge-green'
+        );
+        el.textContent = max ? cnt + '/' + max : String(cnt);
+      });
+    })
+    .catch(() => {});
+}
+
+setInterval(refreshCounts, 5000);
+
+/* Store max capacities for polling update */
+document.querySelectorAll('.count-badge[data-class-id]').forEach(el => {
+  const text = el.textContent.trim();
+  if (text.includes('/')) {
+    el.dataset.max = text.split('/')[1].trim();
+  }
+});
+
+/* ── View students modal ── */
+function viewStudents(classId) {
+  const body = document.getElementById('students-modal-body');
+  body.innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Đang tải...</div>';
+  const modal = new bootstrap.Modal(document.getElementById('modalStudents'));
+  modal.show();
+
+  fetch('/admin/enrollment/' + classId + '/students')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.students || !data.students.length) {
+        body.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-people" style="font-size:2rem; display:block; margin-bottom:8px;"></i>Chưa có học sinh nào đăng ký lớp này.</div>';
+        return;
+      }
+      let html = `
+        <div class="d-flex align-items-center justify-content-between px-3 pt-3 pb-2">
+          <span class="text-muted" style="font-size:.82rem;">Tổng: <strong>${data.students.length}</strong> học sinh</span>
+        </div>
+        <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
+          <table class="table table-sm mb-0" style="font-size:.82rem;">
+            <thead style="position:sticky; top:0; z-index:2;">
+              <tr style="background:#F1F5F9;">
+                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none; width:44px;">STT</th>
+                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Họ tên</th>
+                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">CCCD</th>
+                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Lớp</th>
+                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Khối</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+      data.students.forEach((s, i) => {
+        html += `<tr>
+          <td style="padding:8px 12px; color:#94A3B8;">${i+1}</td>
+          <td style="padding:8px 12px; font-weight:600;">${s.full_name}</td>
+          <td style="padding:8px 12px;"><code style="font-size:.75rem;">${s.cccd}</code></td>
+          <td style="padding:8px 12px;">${s.class_name ?? '—'}</td>
+          <td style="padding:8px 12px;">${s.grade ?? '—'}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+      body.innerHTML = html;
+    })
+    .catch(() => {
+      body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải danh sách học sinh.</div>';
+    });
+}
+
+/* ── Toggle student reg ── */
+function toggleStudentReg() {
+  const btn   = document.getElementById('btn-toggle-enrollment');
+  const badge = document.getElementById('enrollment-status-badge');
+  btn.disabled = true;
+
+  fetch('{{ url_for("admin_enrollment_toggle") }}', {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+  .then(r => r.json())
+  .then(data => {
+    const open = data.open;
+    btn.innerHTML = open
+      ? '<i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng đăng ký</span>'
+      : '<i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở đăng ký</span>';
+    badge.innerHTML = open
+      ? `<span class="badge fs-6 px-3 py-2" style="background:#10B981; border-radius:10px;">
+           <i class="bi bi-circle-fill me-1" style="font-size:.5rem; vertical-align:middle;"></i>
+           Giai đoạn 2 đang mở — HS đăng ký môn học
+         </span>`
+      : `<span class="badge fs-6 px-3 py-2 bg-secondary" style="border-radius:10px;">
+           <i class="bi bi-lock-fill me-1" style="font-size:.75rem;"></i>
+           Giai đoạn 2 đã đóng — HS chỉ xem
+         </span>`;
+  })
+  .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+  .finally(() => { btn.disabled = false; });
+}
+
+/* ── Extra data rows in add-class modal ── */
+let extraRowCount = 0;
+function addExtraRow() {
+  extraRowCount++;
+  const container = document.getElementById('extra-rows');
+  const row = document.createElement('div');
+  row.className = 'input-group mb-2';
+  row.id = 'extra-row-' + extraRowCount;
+  row.innerHTML = `
+    <input type="text"  name="extra_key[]"   class="form-control form-control-sm" placeholder="Tên cột (VD: Phòng học)" style="border-radius:8px 0 0 8px;">
+    <input type="text"  name="extra_value[]" class="form-control form-control-sm" placeholder="Giá trị">
+    <button type="button" class="btn btn-outline-danger btn-sm" style="border-radius:0 8px 8px 0;"
+            onclick="document.getElementById('extra-row-${extraRowCount}').remove()">
+      <i class="bi bi-x"></i>
+    </button>
+  `;
+  container.appendChild(row);
+}
+
+/* ── Upload label update ── */
+function updateUploadLabel(input) {
+  const label = document.getElementById('uploadLabel');
+  if (input.files && input.files[0]) {
+    label.textContent = input.files[0].name;
+    label.style.color = '#065f46';
+  }
+}
+
+/* ── Drag-over zone ── */
+const zone = document.getElementById('uploadZone');
+if (zone) {
+  zone.addEventListener('dragover',  () => zone.classList.add('drag-over'));
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop',      () => zone.classList.remove('drag-over'));
+}
+</script>
+{% endblock %}

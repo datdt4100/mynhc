@@ -32,6 +32,8 @@
   }
   .stat-label { font-size: .73rem; color: #94A3B8; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
   .stat-value { font-size: 1.7rem; font-weight: 800; color: #0c4a6e; line-height: 1.1; }
+  .stat-sub   { font-size: .72rem; color: #64748B; margin-top: 3px; }
+  .stat-sub .act { color: #16A34A; font-weight: 700; }
 
   /* ── Big nav boxes ── */
   .nav-box {
@@ -237,6 +239,7 @@
         <div>
           <div class="stat-label">Giáo viên</div>
           <div class="stat-value">{{ stats.teachers }}</div>
+          <div class="stat-sub"><span class="act">{{ stats.teacher_active }}</span> / {{ stats.teachers }} kích hoạt</div>
         </div>
       </div>
     </div>
@@ -248,6 +251,7 @@
         <div>
           <div class="stat-label">Học sinh</div>
           <div class="stat-value">{{ stats.students }}</div>
+          <div class="stat-sub"><span class="act">{{ stats.student_active }}</span> / {{ stats.students }} kích hoạt</div>
         </div>
       </div>
     </div>

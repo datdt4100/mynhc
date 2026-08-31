@@ -1002,6 +1002,16 @@ def admin_index():
         student_count = conn.execute(select(func.count()).select_from(students)).scalar()
         class_count = conn.execute(select(func.count()).select_from(classes)).scalar()
         enrollment_count = conn.execute(select(func.count()).select_from(enrollments)).scalar()
+        teacher_active = conn.execute(
+            select(func.count()).select_from(teachers).where(
+                and_(teachers.c.is_first_login == 0, teachers.c.password_hash.isnot(None))
+            )
+        ).scalar()
+        student_active = conn.execute(
+            select(func.count()).select_from(students).where(
+                and_(students.c.is_first_login == 0, students.c.password_hash.isnot(None))
+            )
+        ).scalar()
 
         teacher_list = conn.execute(
             select(teachers).order_by(teachers.c.full_name)
@@ -1019,6 +1029,8 @@ def admin_index():
             "students": student_count,
             "classes": class_count,
             "enrollments": enrollment_count,
+            "teacher_active": teacher_active,
+            "student_active": student_active,
         },
         teacher_list=teacher_list,
         student_list=student_list,

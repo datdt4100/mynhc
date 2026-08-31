@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: classreg
+    name: mynhc
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -10,11 +10,11 @@ services:
         generateValue: true
       - key: DATABASE_URL
         fromDatabase:
-          name: classreg-db
+          name: mynhc-db
           property: connectionString
 
 databases:
-  - name: classreg-db
-    databaseName: classreg
-    user: classreg_user
+  - name: mynhc-db
+    databaseName: mynhc
+    user: mynhc_user
     plan: free

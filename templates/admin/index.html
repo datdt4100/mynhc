@@ -325,8 +325,6 @@
               <td>
                 {% if t.is_first_login %}
                   <span class="badge bg-secondary">Chưa kích hoạt</span>
-                {% elif t.must_change_password %}
-                  <span class="badge bg-warning text-dark">Cần đổi MK</span>
                 {% else %}
                   <span class="badge bg-success">Đã kích hoạt</span>
                 {% endif %}
@@ -428,8 +426,6 @@
               <td>
                 {% if s.is_first_login %}
                   <span class="badge bg-secondary">Chưa kích hoạt</span>
-                {% elif s.must_change_password %}
-                  <span class="badge bg-warning text-dark">Cần đổi MK</span>
                 {% else %}
                   <span class="badge bg-success">Đã kích hoạt</span>
                 {% endif %}

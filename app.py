@@ -123,8 +123,17 @@ def init_db():
             except Exception:
                 conn.rollback()
 
+        # Migrate: update old default admin password
+        try:
+            conn.execute(text(
+                "UPDATE settings SET value = 'Admin@123' WHERE key = 'admin_password' AND value = 'admin123'"
+            ))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
         # Seed default settings
-        for key, value in [("admin_password", "admin123"),
+        for key, value in [("admin_password", "Admin@123"),
                            ("teacher_reg_open", "0"),
                            ("student_reg_open", "0")]:
             try:
@@ -856,7 +865,7 @@ def admin_login_page():
 @app.route("/admin/login", methods=["POST"])
 def admin_login():
     password = request.form.get("password", "")
-    admin_pw = get_setting("admin_password", "admin123")
+    admin_pw = get_setting("admin_password", "Admin@123")
     if password == admin_pw:
         session["is_admin"] = True
         return redirect(url_for("admin_index"))

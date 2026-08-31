@@ -141,6 +141,22 @@
   .section-toolbar .divider {
     width: 1px; height: 22px; background: #E2E8F0; margin: 0 4px;
   }
+
+  /* ── Icon-only action buttons ── */
+  .adm-icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 7px;
+    border: 1.5px solid; background: transparent;
+    font-size: .85rem; cursor: pointer;
+    transition: background .15s, color .15s;
+    flex-shrink: 0;
+  }
+  .adm-icon-btn.btn-outline-info    { color: #0891B2; border-color: #0891B2; }
+  .adm-icon-btn.btn-outline-info:hover    { background: #0891B2; color: #fff; }
+  .adm-icon-btn.btn-outline-warning { color: #D97706; border-color: #D97706; }
+  .adm-icon-btn.btn-outline-warning:hover { background: #D97706; color: #fff; }
+  .adm-icon-btn.btn-outline-danger  { color: #DC2626; border-color: #DC2626; }
+  .adm-icon-btn.btn-outline-danger:hover  { background: #DC2626; color: #fff; }
 </style>
 {% endblock %}
 
@@ -304,7 +320,7 @@
               <th>Tổ bộ môn</th>
               <th>Email</th>
               <th>Trạng thái TK</th>
-              <th style="width:140px;">Thao tác</th>
+              <th style="width:110px;">Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -330,23 +346,27 @@
                 {% endif %}
               </td>
               <td>
-                <div class="d-flex gap-1 flex-wrap">
-                  <button type="button" class="btn btn-sm btn-outline-info fw-semibold" style="font-size:.72rem; border-radius:6px;"
+                <div class="d-flex gap-1 align-items-center">
+                  {% if not t.is_first_login %}
+                  <button type="button" class="adm-icon-btn btn-outline-info"
                           onclick="resetPassword({{ t.id }}, '{{ t.full_name|e }}', 'teacher')"
-                          {% if t.is_first_login %}disabled title="Tài khoản chưa kích hoạt"{% endif %}>
-                    <i class="bi bi-key"></i> Khôi phục MK
+                          title="Khôi phục mật khẩu">
+                    <i class="bi bi-key"></i>
                   </button>
                   <form method="POST" action="{{ url_for('admin_teachers_reset', teacher_id=t.id) }}" class="mb-0">
-                    <button type="button" class="btn btn-sm btn-outline-warning fw-semibold" style="font-size:.72rem; border-radius:6px;"
-                            onclick="showConfirmSubmit(this,{title:'Reset tài khoản?',msg:'Reset tài khoản giáo viên <strong>{{ t.full_name }}</strong>? Tài khoản sẽ về trạng thái chưa kích hoạt.',confirmText:'Reset',confirmClass:'btn-warning'})">
-                      <i class="bi bi-arrow-counterclockwise"></i> Reset
+                    <button type="button" class="adm-icon-btn btn-outline-warning"
+                            onclick="showConfirmSubmit(this,{title:'Reset tài khoản?',msg:'Reset tài khoản giáo viên <strong>{{ t.full_name }}</strong>? Tài khoản sẽ về trạng thái chưa kích hoạt.',confirmText:'Reset',confirmClass:'btn-warning'})"
+                            title="Reset tài khoản">
+                      <i class="bi bi-arrow-counterclockwise"></i>
                     </button>
                   </form>
+                  {% endif %}
                   <form method="POST" action="{{ url_for('admin_teachers_delete', teacher_id=t.id) }}" class="mb-0">
                     <input type="hidden" name="_method" value="DELETE">
-                    <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="font-size:.72rem; border-radius:6px;"
-                            onclick="showConfirmSubmit(this,{title:'Xóa giáo viên?',msg:'Xóa giáo viên <strong>{{ t.full_name }}</strong>? Hành động này không thể hoàn tác.',confirmText:'Xóa',confirmClass:'btn-danger'})">
-                      <i class="bi bi-trash"></i> Xóa
+                    <button type="button" class="adm-icon-btn btn-outline-danger"
+                            onclick="showConfirmSubmit(this,{title:'Xóa giáo viên?',msg:'Xóa giáo viên <strong>{{ t.full_name }}</strong>? Hành động này không thể hoàn tác.',confirmText:'Xóa',confirmClass:'btn-danger'})"
+                            title="Xóa giáo viên">
+                      <i class="bi bi-trash"></i>
                     </button>
                   </form>
                 </div>
@@ -411,8 +431,9 @@
               <th>CCCD</th>
               <th>Lớp</th>
               <th>Khối</th>
+              <th>Email</th>
               <th>Trạng thái TK</th>
-              <th style="width:180px;">Thao tác</th>
+              <th style="width:110px;">Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -423,6 +444,13 @@
               <td><code style="font-size:.78rem;">{{ s.cccd }}</code></td>
               <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">{{ s.class_name }}</span></td>
               <td><span class="badge bg-light text-dark border" style="font-size:.72rem;">{{ s.grade }}</span></td>
+              <td style="font-size:.78rem;">
+                {% if s.email %}
+                  <a href="mailto:{{ s.email }}" class="text-primary text-decoration-none">{{ s.email }}</a>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
               <td>
                 {% if s.is_first_login %}
                   <span class="badge bg-secondary">Chưa kích hoạt</span>
@@ -431,23 +459,27 @@
                 {% endif %}
               </td>
               <td>
-                <div class="d-flex gap-1 flex-wrap">
-                  <button type="button" class="btn btn-sm btn-outline-info fw-semibold" style="font-size:.72rem; border-radius:6px;"
+                <div class="d-flex gap-1 align-items-center">
+                  {% if not s.is_first_login %}
+                  <button type="button" class="adm-icon-btn btn-outline-info"
                           onclick="resetPassword({{ s.id }}, '{{ s.full_name|e }}', 'student')"
-                          {% if s.is_first_login %}disabled title="Tài khoản chưa kích hoạt"{% endif %}>
-                    <i class="bi bi-key"></i> Khôi phục MK
+                          title="Khôi phục mật khẩu">
+                    <i class="bi bi-key"></i>
                   </button>
                   <form method="POST" action="{{ url_for('admin_students_reset', student_id=s.id) }}" class="mb-0">
-                    <button type="button" class="btn btn-sm btn-outline-warning fw-semibold" style="font-size:.72rem; border-radius:6px;"
-                            onclick="showConfirmSubmit(this,{title:'Reset đăng ký môn học?',msg:'Xóa toàn bộ đăng ký môn học của <strong>{{ s.full_name }}</strong>?',confirmText:'Reset',confirmClass:'btn-warning'})">
-                      <i class="bi bi-arrow-counterclockwise"></i> Reset
+                    <button type="button" class="adm-icon-btn btn-outline-warning"
+                            onclick="showConfirmSubmit(this,{title:'Reset đăng ký môn học?',msg:'Xóa toàn bộ đăng ký môn học của <strong>{{ s.full_name }}</strong>?',confirmText:'Reset',confirmClass:'btn-warning'})"
+                            title="Reset đăng ký môn học">
+                      <i class="bi bi-arrow-counterclockwise"></i>
                     </button>
                   </form>
+                  {% endif %}
                   <form method="POST" action="{{ url_for('admin_students_delete', student_id=s.id) }}" class="mb-0">
                     <input type="hidden" name="_method" value="DELETE">
-                    <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="font-size:.72rem; border-radius:6px;"
-                            onclick="showConfirmSubmit(this,{title:'Xóa học sinh?',msg:'Xóa học sinh <strong>{{ s.full_name }}</strong>? Hành động này không thể hoàn tác.',confirmText:'Xóa',confirmClass:'btn-danger'})">
-                      <i class="bi bi-trash"></i> Xóa
+                    <button type="button" class="adm-icon-btn btn-outline-danger"
+                            onclick="showConfirmSubmit(this,{title:'Xóa học sinh?',msg:'Xóa học sinh <strong>{{ s.full_name }}</strong>? Hành động này không thể hoàn tác.',confirmText:'Xóa',confirmClass:'btn-danger'})"
+                            title="Xóa học sinh">
+                      <i class="bi bi-trash"></i>
                     </button>
                   </form>
                 </div>
@@ -455,7 +487,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="7" class="text-center text-muted py-5">
+              <td colspan="8" class="text-center text-muted py-5">
                 <i class="bi bi-people" style="font-size:2rem; display:block; margin-bottom:8px;"></i>
                 Chưa có học sinh nào
               </td>

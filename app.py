@@ -58,6 +58,7 @@ students = Table(
     Column("cccd", Text, unique=True, nullable=False),
     Column("class_name", Text, nullable=False),
     Column("grade", Integer, nullable=False),         # 10 / 11 / 12
+    Column("email", Text, nullable=True),
     Column("password_hash", Text, nullable=True),
     Column("is_first_login", Integer, default=1),
     Column("must_change_password", Integer, default=0),
@@ -101,10 +102,11 @@ settings_table = Table(
 def init_db():
     metadata.create_all(engine)
     with engine.connect() as conn:
-        # Migrate: add must_change_password column if not exists (for existing DBs)
+        # Migrate: add columns if not exists (for existing DBs)
         for stmt in [
             "ALTER TABLE teachers ADD COLUMN must_change_password INTEGER DEFAULT 0",
             "ALTER TABLE students ADD COLUMN must_change_password INTEGER DEFAULT 0",
+            "ALTER TABLE students ADD COLUMN email TEXT",
         ]:
             try:
                 conn.execute(text(stmt))

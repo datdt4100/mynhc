@@ -144,6 +144,107 @@ def init_db():
             except Exception:
                 conn.rollback()
 
+        # Seed sample data on fresh databases
+        try:
+            _seed_sample_data(conn)
+        except Exception:
+            conn.rollback()
+
+
+def _seed_sample_data(conn):
+    count = conn.execute(text("SELECT COUNT(*) FROM teachers")).scalar()
+    if count and count > 0:
+        return
+
+    HASH_A = ("scrypt:32768:8:1$zuZMrDLImUA1908J$0e2304952a47da5e9cd0e6dbd6bff34ad931c32268b701eea265f9217710fda94349e12b374b950c0ecdce9b0e218644005748243eb97127dda1414bbbd0cb17")
+    HASH_B = ("scrypt:32768:8:1$giVkCeMZteCUbYcn$dc3df2b2d7583f65eaa348b7ede6f82511ff52f262fb759024ccfa5f98ec33898926a65db03039df42faf73d034463b97b30f00e13bdbf0898f62d6abc4e530c")
+    HASH_C = ("scrypt:32768:8:1$PIxoXbtxyA8eFs4W$e29a01ff956f6ba958858c770e1297b00315561b413a670eec8fe5ac33b72b251065ca9e3b6a4c632ca1f6dd00a45b1b3173c358bdfd4235634f20088073d44d")
+
+    teacher_rows = [
+        (1, "Nguyen Thi Lan",      "079200000001", "Nữ",  "Toán", "lan@school.edu.vn",          HASH_A, 0, 0),
+        (2, "Nguyễn Thị Lan",      "079301000001", "Nữ",  "Toán", "nhc@nhc.com",                HASH_A, 0, 0),
+        (3, "Trần Văn Minh",       "079301000002", "Nam", "Văn",  "minh@nhc.edu.vn",            HASH_A, 0, 0),
+        (4, "Lê Thị Hoa",          "079301000003", "Nữ",  "Anh",  "dtd@gmail.com",              HASH_A, 0, 0),
+        (5, "Phạm Quốc Hùng",      "079301000004", "Nam", "Lý",   "hung.phamquoc@nhc.edu.vn",   HASH_B, 0, 0),
+        (6, "Đỗ Thị Mai",          "079301000005", "Nữ",  "Hóa",  "mai.dothi@nhc.edu.vn",       HASH_B, 0, 0),
+        (7, "Nguyễn Văn Bình",     "079100000007", "Nam", "Sử",   None,                         None,   1, 0),
+        (8, "Trần Thị Kim Anh",    "079100000008", "Nữ",  "Địa",  None,                         None,   1, 0),
+    ]
+    for r in teacher_rows:
+        conn.execute(text(
+            "INSERT INTO teachers (id,full_name,cccd,gender,subject_group,email,password_hash,is_first_login,must_change_password) "
+            "VALUES (:id,:fn,:cccd,:g,:sg,:em,:ph,:ifl,:mcp)"
+        ), {"id": r[0], "fn": r[1], "cccd": r[2], "g": r[3], "sg": r[4], "em": r[5], "ph": r[6], "ifl": r[7], "mcp": r[8]})
+
+    student_rows = [
+        (1,  "Tran Van Binh",          "079200000002", "10C01", 10, None,                           None,   1, 0),
+        (2,  "Nguyễn Văn An",          "079302000001", "10C01", 10, "an.nguyenvan@nhc.edu.vn",      HASH_A, 0, 0),
+        (3,  "Trần Thị Bích",          "079302000002", "10C01", 10, "bich.tranthi@nhc.edu.vn",      HASH_A, 0, 0),
+        (4,  "Lê Hoàng Cường",         "079302000003", "10C02", 10, None,                           None,   1, 0),
+        (5,  "Phạm Ngọc Diệu",         "079302000004", "10C02", 10, "dieu.phamngoc@nhc.edu.vn",     HASH_A, 0, 0),
+        (6,  "Võ Minh Đức",            "079302000005", "10C03", 10, None,                           None,   1, 0),
+        (7,  "Nguyễn Hữu Tài",         "079311000001", "11A01", 11, "tai.nguyenhuu@nhc.edu.vn",     HASH_C, 0, 0),
+        (8,  "Trần Thị Minh Châu",     "079311000002", "11A01", 11, "chau.tranthiminh@nhc.edu.vn",  HASH_C, 0, 0),
+        (9,  "Lê Văn Khoa",            "079311000003", "11A02", 11, None,                           None,   1, 0),
+        (10, "Đặng Thị Thu Hà",        "079311000004", "11A02", 11, None,                           None,   1, 0),
+        (11, "Phan Thị Ngọc Lan",      "079312000001", "12A01", 12, "lan.phanthingoc@nhc.edu.vn",   HASH_C, 0, 0),
+        (12, "Bùi Văn Thắng",          "079312000002", "12A01", 12, "thang.buivan@nhc.edu.vn",      HASH_C, 0, 0),
+        (13, "Vũ Thị Tuyết Nhi",       "079312000003", "12A02", 12, None,                           None,   1, 0),
+        (14, "Hoàng Minh Long",         "079312000004", "12A02", 12, None,                           None,   1, 0),
+    ]
+    for r in student_rows:
+        conn.execute(text(
+            "INSERT INTO students (id,full_name,cccd,class_name,grade,email,password_hash,is_first_login,must_change_password) "
+            "VALUES (:id,:fn,:cccd,:cn,:gr,:em,:ph,:ifl,:mcp)"
+        ), {"id": r[0], "fn": r[1], "cccd": r[2], "cn": r[3], "gr": r[4], "em": r[5], "ph": r[6], "ifl": r[7], "mcp": r[8]})
+
+    class_rows = [
+        (1,  1, 10, 2, 2, "morning",   1, "Toán", "A.101",   25),
+        (3,  1, 11, 2, 3, "afternoon", 2, "Toán", "B.101",   30),
+        (4,  4, 10, 3, 2, "morning",   2, "Anh",  "B.156",   40),
+        (5,  4, 10, 2, 3, "afternoon", 3, "Anh",  "B.201",   30),
+        (6,  4, 10, 1, 5, "morning",   2, "Anh",  "B.202",   30),
+        (7,  2, 10, 1, 4, "morning",   2, "Toán", "D.234",   25),
+        (8,  2, 10, 3, 5, "morning",   1, "Toán", "A.102",   25),
+        (9,  2, 10, 3, 3, "afternoon", 1, "Toán", "C.123",   22),
+        (10, 2, 10, 1, 6, "afternoon", 2, "Toán", "A.103",   25),
+        (11, 2, 11, 2, 4, "morning",   1, "Toán", "B.102",   30),
+        (12, 3, 11, 2, 2, "morning",   1, "Văn",  "A.201",   30),
+        (13, 3, 12, 2, 4, "morning",   3, "Văn",  "A.301",   30),
+        (14, 4, 11, 2, 3, "afternoon", 2, "Anh",  "B.203",   30),
+        (15, 4, 12, 2, 5, "morning",   2, "Anh",  "B.301",   30),
+        (16, 5, 10, 2, 3, "morning",   3, "Lý",   "PTN.Lý",  25),
+        (17, 5, 11, 2, 5, "afternoon", 1, "Lý",   "PTN.Lý",  25),
+        (18, 6, 11, 2, 6, "morning",   1, "Hóa",  "PTN.Hóa", 25),
+        (19, 6, 12, 2, 2, "afternoon", 2, "Hóa",  "PTN.Hóa", 25),
+        (20, 1, 12, 2, 3, "morning",   1, "Toán", "B.103",   30),
+    ]
+    for r in class_rows:
+        conn.execute(text(
+            "INSERT INTO classes (id,teacher_id,grade,duration,day_of_week,session_type,start_session,subject,location,max_capacity,is_published) "
+            "VALUES (:id,:tid,:gr,:dur,:dow,:st,:ss,:subj,:loc,:cap,1)"
+        ), {"id": r[0], "tid": r[1], "gr": r[2], "dur": r[3], "dow": r[4], "st": r[5], "ss": r[6], "subj": r[7], "loc": r[8], "cap": r[9]})
+
+    enrollment_rows = [
+        (2,  2, 1),  (3,  2, 5),  (4,  3, 9),  (5,  3, 6),  (6,  5, 8),
+        (7,  7, 12), (8,  7, 17), (9,  8, 11), (10, 8, 18),
+        (11, 11, 13), (12, 11, 15), (13, 12, 20), (14, 12, 19),
+    ]
+    for r in enrollment_rows:
+        conn.execute(text(
+            "INSERT INTO enrollments (id,student_id,class_id) VALUES (:id,:sid,:cid)"
+        ), {"id": r[0], "sid": r[1], "cid": r[2]})
+
+    # Reset PostgreSQL sequences after explicit-ID inserts
+    if not DATABASE_URL.startswith("sqlite"):
+        for tbl in ("teachers", "students", "classes", "enrollments"):
+            conn.execute(text(
+                f"SELECT setval(pg_get_serial_sequence('{tbl}', 'id'), MAX(id)) FROM {tbl}"
+            ))
+
+    conn.commit()
+
+
 with app.app_context():
     init_db()
 

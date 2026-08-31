@@ -31,10 +31,15 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 1.35rem; flex-shrink: 0;
   }
-  .stat-label { font-size: .73rem; color: #94A3B8; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+  .stat-label { font-size: .73rem; color: #94A3B8; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .stat-value { font-size: 1.7rem; font-weight: 800; color: #0c4a6e; line-height: 1.1; }
-  .stat-sub   { font-size: .72rem; color: #64748B; margin-top: 3px; }
+  .stat-sub   { font-size: .72rem; color: #64748B; margin-top: 3px; white-space: nowrap; min-height: 1em; }
   .stat-sub .act { color: #16A34A; font-weight: 700; }
+  @media (max-width: 575px) {
+    .stat-card  { padding: 14px 12px; gap: 10px; }
+    .stat-icon  { width: 38px; height: 38px; border-radius: 10px; font-size: 1.1rem; }
+    .stat-value { font-size: 1.4rem; }
+  }
 
   /* ── Big nav boxes ── */
   .nav-box {
@@ -264,6 +269,7 @@
         <div>
           <div class="stat-label">Lớp đã đăng ký</div>
           <div class="stat-value">{{ stats.classes }}</div>
+          <div class="stat-sub" style="visibility:hidden;">–</div>
         </div>
       </div>
     </div>
@@ -275,6 +281,7 @@
         <div>
           <div class="stat-label">Lượt đăng ký</div>
           <div class="stat-value">{{ stats.enrollments }}</div>
+          <div class="stat-sub" style="visibility:hidden;">–</div>
         </div>
       </div>
     </div>

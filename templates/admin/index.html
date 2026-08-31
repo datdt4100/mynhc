@@ -188,6 +188,43 @@
     <h1 style="font-size:1.15rem; font-weight:800; color:#0c4a6e; margin:0;">
       <i class="bi bi-grid-1x2-fill me-2" style="color:#0EA5E9;"></i>Quản trị mynhc
     </h1>
+    <button class="btn btn-sm ms-auto d-flex align-items-center gap-1"
+            style="background:#EFF6FF; color:#0369A1; border:1.5px solid #BAE6FD; font-size:.78rem; font-weight:600; border-radius:8px; white-space:nowrap;"
+            onclick="document.getElementById('seedModal').style.display='flex'">
+      <i class="bi bi-database-fill-add"></i>
+      <span class="d-none d-sm-inline">Tạo dữ liệu mẫu</span>
+    </button>
+  </div>
+
+  <!-- Seed modal -->
+  <div id="seedModal" style="display:none; position:fixed; inset:0; z-index:1055; background:rgba(0,0,0,.45); align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:16px; max-width:380px; width:90%; padding:28px 24px; box-shadow:0 20px 60px rgba(0,0,0,.25);">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <span style="background:#EFF6FF; border-radius:10px; width:38px; height:38px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <i class="bi bi-database-fill-add" style="color:#0EA5E9; font-size:1.1rem;"></i>
+        </span>
+        <strong style="color:#0c4a6e;">Tạo dữ liệu mẫu</strong>
+      </div>
+      <p style="font-size:.85rem; color:#475569; margin-bottom:8px;">Thao tác này sẽ tạo:</p>
+      <ul style="font-size:.82rem; color:#334155; margin-bottom:16px; padding-left:18px;">
+        <li>8 giáo viên mẫu (6 đã kích hoạt)</li>
+        <li>14 học sinh mẫu (7 đã kích hoạt)</li>
+        <li>19 lớp học (tất cả đã duyệt)</li>
+        <li>13 đăng ký học phần mẫu</li>
+      </ul>
+      <p style="font-size:.78rem; color:#F59E0B; font-weight:600; margin-bottom:18px;">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        Chỉ thực hiện khi database chưa có dữ liệu.
+      </p>
+      <div class="d-flex gap-2 justify-content-end">
+        <button class="btn btn-sm" style="border:1.5px solid #E2E8F0; color:#64748B; border-radius:8px;"
+                onclick="document.getElementById('seedModal').style.display='none'">Hủy</button>
+        <button id="seedConfirmBtn" class="btn btn-sm" style="background:#0EA5E9; color:#fff; border-radius:8px; font-weight:600;"
+                onclick="runSeed()">
+          <i class="bi bi-play-fill me-1"></i>Xác nhận tạo
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- ── Stat cards ── -->
@@ -737,6 +774,28 @@ function copyTempPw() {
     icon.className = 'bi bi-check2';
     setTimeout(() => { icon.className = 'bi bi-copy'; }, 1500);
   });
+}
+
+async function runSeed() {
+  const btn = document.getElementById('seedConfirmBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang tạo...';
+  try {
+    const res = await fetch('/admin/seed-data', { method: 'POST' });
+    const data = await res.json();
+    document.getElementById('seedModal').style.display = 'none';
+    if (data.ok) {
+      showAlert(data.message || 'Tạo dữ liệu mẫu thành công!', 'success');
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      showAlert(data.error || 'Có lỗi xảy ra.', 'error');
+    }
+  } catch {
+    showAlert('Lỗi kết nối máy chủ.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-play-fill me-1"></i>Xác nhận tạo';
+  }
 }
 </script>
 {% endblock %}

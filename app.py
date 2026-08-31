@@ -980,6 +980,20 @@ def admin_logout():
     return redirect(url_for("admin_login_page"))
 
 
+@app.route("/admin/seed-data", methods=["POST"])
+@admin_required
+def admin_seed_data():
+    try:
+        with engine.connect() as conn:
+            count = conn.execute(text("SELECT COUNT(*) FROM teachers")).scalar()
+            if count and count > 0:
+                return jsonify(ok=False, error=f"Database đã có {count} giáo viên. Chỉ tạo dữ liệu mẫu khi database còn trống.")
+            _seed_sample_data(conn)
+        return jsonify(ok=True, message="Đã tạo dữ liệu mẫu thành công: 8 giáo viên, 14 học sinh, 19 lớp học, 13 đăng ký.")
+    except Exception as e:
+        return jsonify(ok=False, error=str(e)), 500
+
+
 @app.route("/admin")
 @admin_required
 def admin_index():

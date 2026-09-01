@@ -214,25 +214,25 @@ def _seed_sample_data(conn):
         ), {"id": r[0], "fn": r[1], "cccd": r[2], "cn": r[3], "gr": r[4], "em": r[5], "ph": r[6], "ifl": r[7], "mcp": r[8]})
 
     class_rows = [
-        (1,  1, 10, 2, 2, "morning",   1, "Toán", "Phòng 1 - Khu A- Tầng 1",   25),
-        (3,  1, 11, 2, 3, "afternoon", 2, "Toán", "Phòng 16 - Khu B - Tầng 1", 30),
-        (4,  4, 10, 3, 2, "morning",   2, "Anh",  "Phòng 17 - Khu B - Tầng 1", 40),
-        (5,  4, 10, 2, 3, "afternoon", 3, "Anh",  "Phòng 19 - Khu B - Tầng 2", 30),
-        (6,  4, 10, 1, 5, "morning",   2, "Anh",  "Phòng 20 - Khu B - Tầng 2", 30),
-        (7,  2, 10, 1, 4, "morning",   2, "Toán", "Phòng 32 - Khu D - Tầng 1", 25),
-        (8,  2, 10, 3, 5, "morning",   1, "Toán", "Phòng 2 - Khu A- Tầng 1",   25),
-        (9,  2, 10, 3, 3, "afternoon", 1, "Toán", "Phòng 25 - Khu C - Tầng 1", 22),
-        (10, 2, 10, 1, 6, "afternoon", 2, "Toán", "Phòng 3 - Khu A- Tầng 1",   25),
-        (11, 2, 11, 2, 4, "morning",   1, "Toán", "Phòng 18 - Khu B - Tầng 1", 30),
-        (12, 3, 11, 2, 2, "morning",   1, "Văn",  "Phòng 4 - Khu A- Tầng 1",   30),
-        (13, 3, 12, 2, 4, "morning",   3, "Văn",  "Phòng 5 - Khu A- Tầng 1",   30),
-        (14, 4, 11, 2, 3, "afternoon", 2, "Anh",  "Phòng 21 - Khu B - Tầng 2", 30),
-        (15, 4, 12, 2, 5, "morning",   2, "Anh",  "Phòng 22 - Khu B - Tầng 3", 30),
-        (16, 5, 10, 2, 3, "morning",   3, "Lý",   "Phòng 26 - Khu C - Tầng 1", 25),
-        (17, 5, 11, 2, 5, "afternoon", 1, "Lý",   "Phòng 27 - Khu C - Tầng 1", 25),
-        (18, 6, 11, 2, 6, "morning",   1, "Hóa",  "Phòng 28 - Khu C - Tầng 3", 25),
-        (19, 6, 12, 2, 2, "afternoon", 2, "Hóa",  "Phòng 29 - Khu C - Tầng 3", 25),
-        (20, 1, 12, 2, 3, "morning",   1, "Toán", "Phòng 6 - Khu A- Tầng 2",   30),
+        (1,  1, 10, 2, 2, "morning",   1, "Toán", "Phòng 1 - Khu A- Tầng 1",   50),
+        (3,  1, 11, 2, 3, "afternoon", 2, "Toán", "Phòng 16 - Khu B - Tầng 1", 50),
+        (4,  4, 10, 3, 2, "morning",   2, "Anh",  "Phòng 17 - Khu B - Tầng 1", 50),
+        (5,  4, 10, 2, 3, "afternoon", 3, "Anh",  "Phòng 19 - Khu B - Tầng 2", 50),
+        (6,  4, 10, 1, 5, "morning",   2, "Anh",  "Phòng 20 - Khu B - Tầng 2", 50),
+        (7,  2, 10, 1, 4, "morning",   2, "Toán", "Phòng 32 - Khu D - Tầng 1", 50),
+        (8,  2, 10, 3, 5, "morning",   1, "Toán", "Phòng 2 - Khu A- Tầng 1",   50),
+        (9,  2, 10, 3, 3, "afternoon", 1, "Toán", "Phòng 25 - Khu C - Tầng 1", 50),
+        (10, 2, 10, 1, 6, "afternoon", 2, "Toán", "Phòng 3 - Khu A- Tầng 1",   50),
+        (11, 2, 11, 2, 4, "morning",   1, "Toán", "Phòng 18 - Khu B - Tầng 1", 50),
+        (12, 3, 11, 2, 2, "morning",   1, "Văn",  "Phòng 4 - Khu A- Tầng 1",   50),
+        (13, 3, 12, 2, 4, "morning",   3, "Văn",  "Phòng 5 - Khu A- Tầng 1",   50),
+        (14, 4, 11, 2, 3, "afternoon", 2, "Anh",  "Phòng 21 - Khu B - Tầng 2", 50),
+        (15, 4, 12, 2, 5, "morning",   2, "Anh",  "Phòng 22 - Khu B - Tầng 3", 50),
+        (16, 5, 10, 2, 3, "morning",   3, "Lý",   "Phòng 26 - Khu C - Tầng 1", 50),
+        (17, 5, 11, 2, 5, "afternoon", 1, "Lý",   "Phòng 27 - Khu C - Tầng 1", 50),
+        (18, 6, 11, 2, 6, "morning",   1, "Hóa",  "Phòng 28 - Khu C - Tầng 3", 50),
+        (19, 6, 12, 2, 2, "afternoon", 2, "Hóa",  "Phòng 29 - Khu C - Tầng 3", 50),
+        (20, 1, 12, 2, 3, "morning",   1, "Toán", "Phòng 6 - Khu A- Tầng 2",   50),
     ]
     for r in class_rows:
         conn.execute(text(
@@ -1746,9 +1746,9 @@ def admin_classes_import_rooms():
                 continue
             location = str(row[headers.index("Địa điểm")] or "").strip() or None
             try:
-                max_capacity = int(row[headers.index("Sĩ số")] or 0) or None
+                max_capacity = int(row[headers.index("Sĩ số")] or 0) or 50
             except (ValueError, TypeError):
-                max_capacity = None
+                max_capacity = 50
             conn.execute(
                 update(classes).where(classes.c.id == class_id).values(
                     location=location, max_capacity=max_capacity
@@ -1882,9 +1882,9 @@ def admin_enrollment_upload():
                 continue
             location = str(row[headers.index("Địa điểm")] or "").strip()
             try:
-                max_capacity = int(row[headers.index("Sĩ số")] or 0)
+                max_capacity = int(row[headers.index("Sĩ số")] or 0) or 50
             except (ValueError, TypeError):
-                max_capacity = None
+                max_capacity = 50
 
             extra = {}
             for col in extra_cols:
@@ -1922,7 +1922,7 @@ def admin_enrollment_add():
         duration = int(data["duration"])
         subject = (data.get("subject") or "").strip() or None
         location = (data.get("location") or "").strip() or None
-        max_capacity = int(data["max_capacity"]) if data.get("max_capacity") else None
+        max_capacity = int(data["max_capacity"]) if data.get("max_capacity") else 50
         extra_data_json = data.get("extra_data_json") or None
     except (KeyError, ValueError, TypeError) as e:
         return jsonify(ok=False, error=f"Dữ liệu không hợp lệ: {e}")

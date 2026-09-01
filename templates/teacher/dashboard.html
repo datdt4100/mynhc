@@ -350,7 +350,9 @@
                         </div>
                       </div>
                       <div class="cal-bottom">
-                        <span class="cal-count count-badge{% if cls.max_capacity and cnt >= cls.max_capacity %} warn-red{% elif cnt >= 30 %} warn-yellow{% endif %}" data-class-id="{{ cls.id }}">{% if cnt >= 30 and not (cls.max_capacity and cnt >= cls.max_capacity) %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.6rem;"></i>{% endif %}{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
+                        <span class="cal-count count-badge{% if cls.max_capacity and cnt >= cls.max_capacity %} warn-red{% elif cnt >= 30 %} warn-yellow{% endif %}"
+                              data-class-id="{{ cls.id }}"
+                              {% if cls.max_capacity and cnt >= cls.max_capacity %}title="Lớp đã đầy"{% elif cnt >= 30 %}title="Lớp đông, có thể khó tiếp thu"{% endif %}>{% if cnt >= 30 and not (cls.max_capacity and cnt >= cls.max_capacity) %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.6rem;"></i>{% endif %}{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
                         <span class="cal-status-dot"></span>
                       </div>
                     </div>
@@ -398,7 +400,9 @@
                         </div>
                       </div>
                       <div class="cal-bottom">
-                        <span class="cal-count count-badge{% if cls.max_capacity and cnt >= cls.max_capacity %} warn-red{% elif cnt >= 30 %} warn-yellow{% endif %}" data-class-id="{{ cls.id }}">{% if cnt >= 30 and not (cls.max_capacity and cnt >= cls.max_capacity) %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.6rem;"></i>{% endif %}{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
+                        <span class="cal-count count-badge{% if cls.max_capacity and cnt >= cls.max_capacity %} warn-red{% elif cnt >= 30 %} warn-yellow{% endif %}"
+                              data-class-id="{{ cls.id }}"
+                              {% if cls.max_capacity and cnt >= cls.max_capacity %}title="Lớp đã đầy"{% elif cnt >= 30 %}title="Lớp đông, có thể khó tiếp thu"{% endif %}>{% if cnt >= 30 and not (cls.max_capacity and cnt >= cls.max_capacity) %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.6rem;"></i>{% endif %}{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
                         <span class="cal-status-dot"></span>
                       </div>
                     </div>
@@ -853,6 +857,7 @@ function updateCounts() {
           const cap  = info.max_capacity;
           const full = cap && cnt >= cap;
           badge.className = 'cal-count count-badge' + (full ? ' warn-red' : cnt >= 30 ? ' warn-yellow' : '');
+          badge.title = full ? 'Lớp đã đầy' : cnt >= 30 ? 'Lớp đông, có thể khó tiếp thu' : '';
           const icon = (cnt >= 30 && !full) ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.6rem;"></i>' : '';
           badge.innerHTML = icon + cnt + ' HS' + (cap ? '/' + cap : '');
         }

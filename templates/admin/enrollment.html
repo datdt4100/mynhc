@@ -166,7 +166,8 @@
               {% set mx  = cls.max_capacity or 0 %}
               {% set full = mx and cnt >= mx %}
               <span class="count-badge {% if full %}count-badge-red{% elif cnt >= 30 %}count-badge-yellow{% else %}count-badge-green{% endif %}"
-                    data-class-id="{{ cls.id }}" id="count-{{ cls.id }}" data-max="{{ mx or '' }}">
+                    data-class-id="{{ cls.id }}" id="count-{{ cls.id }}" data-max="{{ mx or '' }}"
+                    {% if full %}title="Lớp đã đầy"{% elif cnt >= 30 %}title="Lớp đông, có thể khó tiếp thu"{% endif %}>
                 {% if cnt >= 30 and not full %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>{% endif %}
                 {{ cnt }}{% if mx %}/{{ mx }}{% endif %}
               </span>
@@ -339,6 +340,7 @@ function refreshCounts() {
           cnt >= 30   ? 'count-badge-yellow' :
                         'count-badge-green'
         );
+        el.title = full ? 'Lớp đã đầy' : cnt >= 30 ? 'Lớp đông, có thể khó tiếp thu' : '';
         el.innerHTML = (cnt >= 30 && !full
           ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>' : '') +
           (max ? cnt + '/' + max : String(cnt));

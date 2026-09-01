@@ -304,8 +304,7 @@
       {% set count = enrollment_counts.get(cls.id, 0) %}
       {% set enrolled = cls.id in my_class_ids %}
       {% set is_full = cls.max_capacity is not none and count >= cls.max_capacity %}
-      {% set threshold = ((cls.max_capacity * 2) // 3) if cls.max_capacity else none %}
-      {% set near_full = threshold is not none and count >= threshold and not is_full and not enrolled %}
+      {% set near_full = count >= 30 and not is_full and not enrolled %}
 
       {# Card accent color #}
       {% if enrolled %}
@@ -414,17 +413,17 @@
 
           </div>{# end flex row #}
 
-          {# ── Warning boxes ────────────────────────────────── #}
+          {# ── Warning line ─────────────────────────────────── #}
           {% if near_full %}
-          <div class="alert alert-warning py-2 px-3 mt-3 mb-0 small d-flex align-items-start gap-2 warning-box-{{ cls.id }}"
-               style="border-radius:var(--r-sm);">
-            <span style="font-size:1rem;line-height:1.4;">&#9888;</span>
-            <span>Số lượng học sinh lớp này hiện đã vượt quá {{ threshold }} học sinh, bạn cần cân nhắc có nên tiếp tục lựa chọn lớp này không vì lớp đông học sinh, khó tiếp thu.</span>
+          <div class="warning-box-{{ cls.id }} mt-2 d-flex align-items-start gap-1"
+               style="font-size:.73rem; color:#92400E; line-height:1.4;">
+            <i class="bi bi-exclamation-triangle-fill flex-shrink-0" style="margin-top:1px;"></i>
+            <span>Số lượng học sinh lớp này hiện đã vượt quá 30 học sinh, bạn cần cân nhắc có nên tiếp tục lựa chọn lớp này không vì lớp đông học sinh, khó tiếp thu.</span>
           </div>
           {% elif is_full %}
-          <div class="alert alert-danger py-2 px-3 mt-3 mb-0 small d-flex align-items-start gap-2 warning-box-{{ cls.id }}"
-               style="border-radius:var(--r-sm);">
-            <span style="font-size:1rem;line-height:1.4;">&#128683;</span>
+          <div class="warning-box-{{ cls.id }} mt-2 d-flex align-items-start gap-1"
+               style="font-size:.73rem; color:#991B1B; line-height:1.4;">
+            <i class="bi bi-slash-circle-fill flex-shrink-0" style="margin-top:1px;"></i>
             <span>Số lượng học sinh lớp này hiện đã đủ, vui lòng chọn lớp khác.</span>
           </div>
           {% else %}
@@ -710,9 +709,8 @@ async function refreshStudentSchedule() {
         }
       }
 
-      var isFull    = cfg.maxCapacity !== null && count >= cfg.maxCapacity;
-      var threshold = cfg.maxCapacity !== null ? Math.floor(cfg.maxCapacity * 2 / 3) : null;
-      var nearFull  = threshold !== null && count >= threshold && !isFull && !cfg.enrolled;
+      var isFull   = cfg.maxCapacity !== null && count >= cfg.maxCapacity;
+      var nearFull = count >= 30 && !isFull && !cfg.enrolled;
 
       /* Badge color + text (count/sĩ số) */
       var badgeEl = document.querySelector('.count-badge-' + id);
@@ -759,23 +757,23 @@ async function refreshStudentSchedule() {
         }
       }
 
-      /* Warning box */
+      /* Warning line */
       var warn = document.querySelector('.warning-box-' + id);
       if (warn) {
         if (nearFull) {
-          warn.className = 'alert alert-warning py-2 px-3 mt-3 mb-0 small d-flex align-items-start gap-2 warning-box-' + id;
-          warn.style.borderRadius = 'var(--r-sm)';
-          warn.innerHTML = '<span style="font-size:1rem;line-height:1.4;">&#9888;</span>'
-            + '<span>Số lượng học sinh lớp này hiện đã vượt quá ' + threshold + ' học sinh, bạn cần cân nhắc '
+          warn.className = 'warning-box-' + id + ' mt-2 d-flex align-items-start gap-1';
+          warn.style.cssText = 'font-size:.73rem;color:#92400E;line-height:1.4;';
+          warn.innerHTML = '<i class="bi bi-exclamation-triangle-fill flex-shrink-0" style="margin-top:1px;"></i>'
+            + '<span>Số lượng học sinh lớp này hiện đã vượt quá 30 học sinh, bạn cần cân nhắc '
             + 'có nên tiếp tục lựa chọn lớp này không vì lớp đông học sinh, khó tiếp thu.</span>';
         } else if (isFull) {
-          warn.className = 'alert alert-danger py-2 px-3 mt-3 mb-0 small d-flex align-items-start gap-2 warning-box-' + id;
-          warn.style.borderRadius = 'var(--r-sm)';
-          warn.innerHTML = '<span style="font-size:1rem;line-height:1.4;">&#128683;</span>'
+          warn.className = 'warning-box-' + id + ' mt-2 d-flex align-items-start gap-1';
+          warn.style.cssText = 'font-size:.73rem;color:#991B1B;line-height:1.4;';
+          warn.innerHTML = '<i class="bi bi-slash-circle-fill flex-shrink-0" style="margin-top:1px;"></i>'
             + '<span>Số lượng học sinh lớp này hiện đã đủ, vui lòng chọn lớp khác.</span>';
         } else {
           warn.className = 'warning-box-' + id;
-          warn.style.borderRadius = '';
+          warn.style.cssText = '';
           warn.innerHTML = '';
         }
       }

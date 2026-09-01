@@ -1126,6 +1126,47 @@ def api_available_rooms():
     return jsonify(available)
 
 
+@app.route("/api/room-schedule")
+def api_room_schedule():
+    if not (session.get("is_admin") or session.get("user_type") == "teacher"):
+        return jsonify({}), 401
+    with engine.connect() as conn:
+        all_rooms = sorted(
+            [r.name for r in conn.execute(select(rooms)).fetchall()],
+            key=_room_sort_key,
+        )
+        rows = conn.execute(
+            select(
+                classes.c.location,
+                classes.c.day_of_week,
+                classes.c.session_type,
+                classes.c.start_session,
+                classes.c.duration,
+                classes.c.grade,
+                classes.c.subject,
+                teachers.c.full_name.label("teacher_name"),
+            )
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .where(classes.c.location.isnot(None))
+        ).fetchall()
+    bookings = [
+        {
+            "room": r.location,
+            "day": r.day_of_week,
+            "session": r.session_type,
+            "start": r.start_session,
+            "duration": r.duration,
+            "label": (
+                f"Khối {r.grade}"
+                + (f" - {r.subject}" if r.subject else "")
+                + f" ({r.teacher_name})"
+            ),
+        }
+        for r in rows
+    ]
+    return jsonify({"rooms": all_rooms, "bookings": bookings})
+
+
 @app.route("/admin")
 @admin_required
 def admin_index():

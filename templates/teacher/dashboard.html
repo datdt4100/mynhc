@@ -440,9 +440,56 @@
           Trống
         </div>
         {% endif %}
+        <button type="button" class="ms-auto btn btn-sm"
+                style="background:#EFF6FF; color:#0369A1; border:1px solid #BAE6FD; border-radius:20px; font-size:.75rem; padding:4px 12px;"
+                onclick="openRoomSchedule()">
+          <i class="bi bi-grid me-1"></i>Xem lịch phòng
+        </button>
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- Room schedule modal -->
+<div class="modal fade" id="roomSchedModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title"><i class="bi bi-grid me-2"></i>Lịch sử dụng phòng</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="px-3 pt-2 pb-0">
+          <ul class="nav nav-tabs" id="roomSchedTabs">
+            <li class="nav-item" id="rsTab2"><button class="nav-link" onclick="showRoomDay(2)">Thứ Hai</button></li>
+            <li class="nav-item" id="rsTab3"><button class="nav-link" onclick="showRoomDay(3)">Thứ Ba</button></li>
+            <li class="nav-item" id="rsTab4"><button class="nav-link" onclick="showRoomDay(4)">Thứ Tư</button></li>
+            <li class="nav-item" id="rsTab5"><button class="nav-link" onclick="showRoomDay(5)">Thứ Năm</button></li>
+            <li class="nav-item" id="rsTab6"><button class="nav-link" onclick="showRoomDay(6)">Thứ Sáu</button></li>
+            <li class="nav-item" id="rsTab7"><button class="nav-link" onclick="showRoomDay(7)">Thứ Bảy</button></li>
+          </ul>
+        </div>
+        <div id="rsLoading" class="text-center py-4 text-muted"><i class="bi bi-arrow-clockwise"></i> Đang tải...</div>
+        <div style="overflow:auto; max-height:60vh; display:none;" id="rsTableWrap">
+          <table class="table table-bordered mb-0" id="rsTable" style="min-width:700px; font-size:.78rem;">
+            <thead id="rsHead" style="position:sticky; top:0; z-index:1;"></thead>
+            <tbody id="rsBody"></tbody>
+          </table>
+        </div>
+        <div class="px-3 py-2 d-flex gap-3 align-items-center flex-wrap" style="border-top:1px solid #E2E8F0; font-size:.74rem; color:#475569;">
+          <div class="d-flex align-items-center gap-1">
+            <div style="width:14px;height:14px;background:#DCFCE7;border:1px solid #86EFAC;border-radius:3px;"></div> Trống
+          </div>
+          <div class="d-flex align-items-center gap-1">
+            <div style="width:14px;height:14px;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:3px;"></div> Đã đặt (rê chuột để xem chi tiết)
+          </div>
+          <div id="rsHighlightLegend" class="d-flex align-items-center gap-1" style="display:none !important;">
+            <div style="width:14px;height:14px;background:#DBEAFE;border:1px solid #93C5FD;border-radius:3px;"></div> Khung giờ đang chọn
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -501,7 +548,12 @@
 
         <!-- Room selection (shown after tiết + duration are set) -->
         <div id="roomWrap" class="mt-3" style="display:none;">
-          <label class="form-label fw-semibold" style="font-size:.85rem;">Phòng học <span class="text-danger">*</span></label>
+          <div class="d-flex align-items-center justify-content-between mb-1">
+            <label class="form-label fw-semibold mb-0" style="font-size:.85rem;">Phòng học <span class="text-danger">*</span></label>
+            <button type="button" class="btn btn-link p-0" style="font-size:.75rem; color:#0369A1;" onclick="openRoomScheduleFromModal()">
+              <i class="bi bi-grid me-1"></i>Xem lịch phòng
+            </button>
+          </div>
           <select id="regRoom" class="form-select custom-input">
             <option value="">-- Chọn phòng --</option>
           </select>
@@ -630,6 +682,7 @@ function submitReg() {
   .then(r => r.json())
   .then(async data => {
     if (data.ok) {
+      _invalidateRoomSched();
       bootstrap.Modal.getInstance(document.getElementById('regModal')).hide();
       await refreshCalendar();
     } else {
@@ -650,12 +703,126 @@ function deleteClass(classId, event) {
     const res  = await fetch('/teacher/classes/' + classId, {method: 'DELETE'}).catch(() => null);
     const data = res ? await res.json().catch(() => null) : null;
     if (data && data.ok) {
+      _invalidateRoomSched();
       await refreshCalendar();
     } else {
       showAlert((data && data.error) || 'Không thể xóa lớp đã có học sinh đăng ký.', 'error');
     }
   }, {confirmText: 'Xóa lớp', confirmClass: 'btn-danger'});
 }
+
+// ── Room schedule modal ──
+let _rsData = null;
+let _rsDay = 2;
+let _rsCtx = null; // {session, start, duration} for highlight
+
+async function openRoomSchedule(day) {
+  _rsCtx = null;
+  document.getElementById('rsHighlightLegend').style.display = 'none';
+  _showRoomSchedModal(day || 2);
+}
+
+function openRoomScheduleFromModal() {
+  const day  = parseInt(document.getElementById('regDay').value) || 2;
+  const ses  = document.getElementById('regSession').value;
+  const ss   = parseInt(document.getElementById('regStart').value);
+  const dur  = parseInt(document.getElementById('regDuration').value);
+  _rsCtx = ses && ss && dur ? {session: ses, start: ss, duration: dur} : null;
+  if (_rsCtx) document.getElementById('rsHighlightLegend').style.display = '';
+  _showRoomSchedModal(day);
+}
+
+async function _showRoomSchedModal(day) {
+  const modal = new bootstrap.Modal(document.getElementById('roomSchedModal'));
+  modal.show();
+  document.getElementById('rsLoading').style.display = '';
+  document.getElementById('rsTableWrap').style.display = 'none';
+
+  if (!_rsData) {
+    try {
+      const res = await fetch('/api/room-schedule');
+      _rsData = await res.json();
+    } catch(e) {
+      document.getElementById('rsLoading').textContent = 'Lỗi tải dữ liệu.';
+      return;
+    }
+  }
+
+  document.getElementById('rsLoading').style.display = 'none';
+  document.getElementById('rsTableWrap').style.display = '';
+  showRoomDay(day);
+}
+
+function showRoomDay(day) {
+  _rsDay = day;
+  document.querySelectorAll('#roomSchedTabs .nav-link').forEach(btn => {
+    btn.classList.toggle('active', btn.closest('li').id === 'rsTab' + day);
+  });
+
+  if (!_rsData) return;
+  const {rooms, bookings} = _rsData;
+
+  // Build booking map: room → session → Set{tiết}
+  const bmap = {};
+  const binfo = {};
+  bookings.forEach(b => {
+    if (b.day !== day) return;
+    if (!bmap[b.room]) { bmap[b.room] = {}; binfo[b.room] = {}; }
+    if (!bmap[b.room][b.session]) { bmap[b.room][b.session] = new Set(); binfo[b.room][b.session] = {}; }
+    for (let t = b.start; t < b.start + b.duration; t++) {
+      bmap[b.room][b.session].add(t);
+      binfo[b.room][b.session][t] = b.label;
+    }
+  });
+
+  // Highlight set: which (session, tiết) cells are "currently selected"
+  const hlSet = new Set();
+  if (_rsCtx) {
+    for (let t = _rsCtx.start; t < _rsCtx.start + _rsCtx.duration; t++) {
+      hlSet.add(_rsCtx.session + ':' + t);
+    }
+  }
+
+  // Header
+  document.getElementById('rsHead').innerHTML = `
+    <tr>
+      <th rowspan="2" style="vertical-align:middle; min-width:130px; background:#F8FAFC; font-size:.75rem; padding:6px 8px;">Phòng</th>
+      <th colspan="4" class="text-center" style="background:#FFF7ED; color:#C2410C; font-weight:700; font-size:.74rem; padding:4px;">Buổi Sáng</th>
+      <th colspan="4" class="text-center" style="background:#EFF6FF; color:#1D4ED8; font-weight:700; font-size:.74rem; padding:4px;">Buổi Chiều</th>
+    </tr>
+    <tr>
+      ${['morning','morning','morning','morning','afternoon','afternoon','afternoon','afternoon']
+        .map((ses, i) => {
+          const t = (i % 4) + 1;
+          const bg = ses === 'morning' ? '#FFF7ED' : '#EFF6FF';
+          const hl = hlSet.has(ses + ':' + t) ? 'border-bottom: 3px solid #3B82F6;' : '';
+          return `<th class="text-center" style="background:${bg}; font-size:.72rem; padding:4px; ${hl}">T${t}</th>`;
+        }).join('')}
+    </tr>`;
+
+  // Rows
+  document.getElementById('rsBody').innerHTML = rooms.map(room => {
+    let cells = '';
+    ['morning','afternoon'].forEach(ses => {
+      for (let t = 1; t <= 4; t++) {
+        const isBooked = bmap[room] && bmap[room][ses] && bmap[room][ses].has(t);
+        const isHl     = hlSet.has(ses + ':' + t);
+        const info     = isBooked ? (binfo[room][ses][t] || '') : '';
+        if (isBooked) {
+          cells += `<td title="${info}" style="background:#FEE2E2; text-align:center; padding:3px; cursor:default; vertical-align:middle; ${isHl ? 'outline:2px solid #3B82F6; outline-offset:-2px;' : ''}">
+            <span style="font-size:.65rem; color:#991B1B; font-weight:700;">Bận</span>
+          </td>`;
+        } else {
+          cells += `<td style="background:${isHl ? '#DBEAFE' : '#DCFCE7'}; text-align:center; padding:3px; vertical-align:middle; ${isHl ? 'outline:2px solid #3B82F6; outline-offset:-2px;' : ''}"></td>`;
+        }
+      }
+    });
+    return `<tr><td style="font-size:.74rem; font-weight:600; white-space:nowrap; padding:4px 8px; background:#FAFAFA;">${room}</td>${cells}</tr>`;
+  }).join('');
+}
+
+// Invalidate cache after register/delete
+function _invalidateRoomSched() { _rsData = null; }
 
 // Poll enrollment counts + room info every 5s
 function updateCounts() {

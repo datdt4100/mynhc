@@ -857,11 +857,20 @@ async function uploadRooms(input) {
   } catch { showAlert('Lỗi kết nối.', 'error'); }
 }
 
-async function clearRooms() {
-  if (!confirm('Xoá toàn bộ danh sách phòng học?')) return;
-  const res  = await fetch('/admin/rooms/clear', { method: 'POST' });
-  const data = await res.json();
-  if (data.ok) { showAlert('Đã xoá phòng học.', 'success'); setTimeout(() => location.reload(), 800); }
+function clearRooms() {
+  showConfirm(
+    'Xoá danh sách phòng học?',
+    'Toàn bộ phòng học sẽ bị xoá vĩnh viễn. Thao tác không thể hoàn tác.',
+    async function() {
+      try {
+        const res  = await fetch('/admin/rooms/clear', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) { showAlert('Đã xoá phòng học.', 'success'); setTimeout(() => location.reload(), 800); }
+        else showAlert(data.error || 'Lỗi khi xoá.', 'error');
+      } catch { showAlert('Lỗi kết nối.', 'error'); }
+    },
+    { confirmText: 'Xoá tất cả', confirmClass: 'btn-danger' }
+  );
 }
 </script>
 {% endblock %}

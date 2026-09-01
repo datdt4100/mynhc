@@ -729,7 +729,23 @@ function openRoomScheduleFromModal() {
   const dur  = parseInt(document.getElementById('regDuration').value);
   _rsCtx = ses && ss && dur ? {session: ses, start: ss, duration: dur} : null;
   if (_rsCtx) document.getElementById('rsHighlightLegend').style.display = '';
-  _showRoomSchedModal(day);
+
+  // Hide reg modal first so room sched modal renders on top
+  const regModal = bootstrap.Modal.getInstance(document.getElementById('regModal'));
+  if (regModal) {
+    document.getElementById('regModal').addEventListener('hidden.bs.modal', function reopenSched() {
+      document.getElementById('regModal').removeEventListener('hidden.bs.modal', reopenSched);
+      _showRoomSchedModal(day);
+      // Reopen reg modal when room sched closes
+      document.getElementById('roomSchedModal').addEventListener('hidden.bs.modal', function reopenReg() {
+        document.getElementById('roomSchedModal').removeEventListener('hidden.bs.modal', reopenReg);
+        new bootstrap.Modal(document.getElementById('regModal')).show();
+      }, {once: true});
+    }, {once: true});
+    regModal.hide();
+  } else {
+    _showRoomSchedModal(day);
+  }
 }
 
 async function _showRoomSchedModal(day) {

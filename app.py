@@ -214,25 +214,25 @@ def _seed_sample_data(conn):
         ), {"id": r[0], "fn": r[1], "cccd": r[2], "cn": r[3], "gr": r[4], "em": r[5], "ph": r[6], "ifl": r[7], "mcp": r[8]})
 
     class_rows = [
-        (1,  1, 10, 2, 2, "morning",   1, "Toán", "A.101",   25),
-        (3,  1, 11, 2, 3, "afternoon", 2, "Toán", "B.101",   30),
-        (4,  4, 10, 3, 2, "morning",   2, "Anh",  "B.156",   40),
-        (5,  4, 10, 2, 3, "afternoon", 3, "Anh",  "B.201",   30),
-        (6,  4, 10, 1, 5, "morning",   2, "Anh",  "B.202",   30),
-        (7,  2, 10, 1, 4, "morning",   2, "Toán", "D.234",   25),
-        (8,  2, 10, 3, 5, "morning",   1, "Toán", "A.102",   25),
-        (9,  2, 10, 3, 3, "afternoon", 1, "Toán", "C.123",   22),
-        (10, 2, 10, 1, 6, "afternoon", 2, "Toán", "A.103",   25),
-        (11, 2, 11, 2, 4, "morning",   1, "Toán", "B.102",   30),
-        (12, 3, 11, 2, 2, "morning",   1, "Văn",  "A.201",   30),
-        (13, 3, 12, 2, 4, "morning",   3, "Văn",  "A.301",   30),
-        (14, 4, 11, 2, 3, "afternoon", 2, "Anh",  "B.203",   30),
-        (15, 4, 12, 2, 5, "morning",   2, "Anh",  "B.301",   30),
-        (16, 5, 10, 2, 3, "morning",   3, "Lý",   "PTN.Lý",  25),
-        (17, 5, 11, 2, 5, "afternoon", 1, "Lý",   "PTN.Lý",  25),
-        (18, 6, 11, 2, 6, "morning",   1, "Hóa",  "PTN.Hóa", 25),
-        (19, 6, 12, 2, 2, "afternoon", 2, "Hóa",  "PTN.Hóa", 25),
-        (20, 1, 12, 2, 3, "morning",   1, "Toán", "B.103",   30),
+        (1,  1, 10, 2, 2, "morning",   1, "Toán", "Phòng 1 - Khu A- Tầng 1",   25),
+        (3,  1, 11, 2, 3, "afternoon", 2, "Toán", "Phòng 16 - Khu B - Tầng 1", 30),
+        (4,  4, 10, 3, 2, "morning",   2, "Anh",  "Phòng 17 - Khu B - Tầng 1", 40),
+        (5,  4, 10, 2, 3, "afternoon", 3, "Anh",  "Phòng 19 - Khu B - Tầng 2", 30),
+        (6,  4, 10, 1, 5, "morning",   2, "Anh",  "Phòng 20 - Khu B - Tầng 2", 30),
+        (7,  2, 10, 1, 4, "morning",   2, "Toán", "Phòng 32 - Khu D - Tầng 1", 25),
+        (8,  2, 10, 3, 5, "morning",   1, "Toán", "Phòng 2 - Khu A- Tầng 1",   25),
+        (9,  2, 10, 3, 3, "afternoon", 1, "Toán", "Phòng 25 - Khu C - Tầng 1", 22),
+        (10, 2, 10, 1, 6, "afternoon", 2, "Toán", "Phòng 3 - Khu A- Tầng 1",   25),
+        (11, 2, 11, 2, 4, "morning",   1, "Toán", "Phòng 18 - Khu B - Tầng 1", 30),
+        (12, 3, 11, 2, 2, "morning",   1, "Văn",  "Phòng 4 - Khu A- Tầng 1",   30),
+        (13, 3, 12, 2, 4, "morning",   3, "Văn",  "Phòng 5 - Khu A- Tầng 1",   30),
+        (14, 4, 11, 2, 3, "afternoon", 2, "Anh",  "Phòng 21 - Khu B - Tầng 2", 30),
+        (15, 4, 12, 2, 5, "morning",   2, "Anh",  "Phòng 22 - Khu B - Tầng 3", 30),
+        (16, 5, 10, 2, 3, "morning",   3, "Lý",   "Phòng 26 - Khu C - Tầng 1", 25),
+        (17, 5, 11, 2, 5, "afternoon", 1, "Lý",   "Phòng 27 - Khu C - Tầng 1", 25),
+        (18, 6, 11, 2, 6, "morning",   1, "Hóa",  "Phòng 28 - Khu C - Tầng 3", 25),
+        (19, 6, 12, 2, 2, "afternoon", 2, "Hóa",  "Phòng 29 - Khu C - Tầng 3", 25),
+        (20, 1, 12, 2, 3, "morning",   1, "Toán", "Phòng 6 - Khu A- Tầng 2",   30),
     ]
     for r in class_rows:
         conn.execute(text(
@@ -303,7 +303,10 @@ with app.app_context():
 # ---------------------------------------------------------------------------
 
 def _room_sort_key(name: str):
-    khu = re.search(r'Khu\s+([A-Za-z])', name)
+    if re.search(r'[Hh]ội\s*[Tt]rường', name):
+        num = re.search(r'(\d+)', name)
+        return ('0', int(num.group(1)) if num else 0)
+    khu = re.search(r'[Kk]hu\s+([A-Za-z])', name)
     num = re.search(r'(\d+)', name)
     return (khu.group(1).upper() if khu else 'Z', int(num.group(1)) if num else 9999)
 

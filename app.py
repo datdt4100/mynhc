@@ -250,6 +250,41 @@ def _seed_sample_data(conn):
             "INSERT INTO enrollments (id,student_id,class_id) VALUES (:id,:sid,:cid)"
         ), {"id": r[0], "sid": r[1], "cid": r[2]})
 
+    # Seed rooms
+    room_names = [
+        "Phòng 1 - Khu A- Tầng 1",   "Phòng 2 - Khu A- Tầng 1",
+        "Phòng 3 - Khu A- Tầng 1",   "Phòng 4 - Khu A- Tầng 1",
+        "Phòng 5 - Khu A- Tầng 1",   "Phòng 6 - Khu A- Tầng 2",
+        "Phòng 7 - Khu A- Tầng 2",   "Phòng 8 - Khu A- Tầng 2",
+        "Phòng 9 - Khu A- Tầng 2",   "Phòng 10 - Khu A- Tầng 2",
+        "Phòng 11 - Khu A- Tầng 3",  "Phòng 12 - Khu A- Tầng 3",
+        "Phòng 13 - Khu A- Tầng 3",  "Phòng 14 - Khu A- Tầng 3",
+        "Phòng 15 - Khu A- Tầng 3",  "Phòng 44 - Khu A - Tầng Trệt",
+        "Hội Trường 1 - Khu A - Tầng Trệt",
+        "Phòng 16 - Khu B - Tầng 1", "Phòng 17 - Khu B - Tầng 1",
+        "Phòng 18 - Khu B - Tầng 1", "Phòng 19 - Khu B - Tầng 2",
+        "Phòng 20 - Khu B - Tầng 2", "Phòng 21 - Khu B - Tầng 2",
+        "Phòng 22 - Khu B - Tầng 3", "Phòng 23 - Khu B - Tầng 3",
+        "Phòng 24 - Khu B - Tầng 3",
+        "Phòng 25 - Khu C - Tầng 1", "Phòng 26 - Khu C - Tầng 1",
+        "Phòng 27 - Khu C - Tầng 1", "Phòng 28 - Khu C - Tầng 3",
+        "Phòng 29 - Khu C - Tầng 3", "Phòng 30 - Khu C - Tầng 3",
+        "Phòng 31 - Khu C - Tầng 3",
+        "Phòng 32 - Khu D - Tầng 1", "Phòng 33 - Khu D - Tầng 1",
+        "Phòng 34 - Khu D - Tầng 1", "Phòng 35 - Khu D - Tầng 1",
+        "Phòng 36 - Khu D - Tầng 2", "Phòng 37 - Khu D - Tầng 2",
+        "Phòng 38 - Khu D - Tầng 2", "Phòng 39 - Khu D - Tầng 2",
+        "Phòng 40 - Khu D - Tầng 3", "Phòng 41 - Khu D - Tầng 3",
+        "Phòng 42 - Khu D - Tầng 3", "Phòng 43 - Khu D - Tầng 3",
+        "Hội Trường 2 - Khu E - Tầng 2",
+    ]
+    for name in room_names:
+        try:
+            conn.execute(text("INSERT INTO rooms (name) VALUES (:n)"), {"n": name})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
     # Reset PostgreSQL sequences after explicit-ID inserts
     if not DATABASE_URL.startswith("sqlite"):
         for tbl in ("teachers", "students", "classes", "enrollments"):
@@ -266,6 +301,11 @@ with app.app_context():
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _room_sort_key(name: str):
+    khu = re.search(r'Khu\s+([A-Za-z])', name)
+    num = re.search(r'(\d+)', name)
+    return (khu.group(1).upper() if khu else 'Z', int(num.group(1)) if num else 9999)
 
 # Allowed special chars (excludes ' " ` ; \ which are DB-dangerous)
 _PW_ALLOWED_SPECIALS = r"!@#$%^&*()\-_+=\[\]{}|<>,.?/~"
@@ -1068,7 +1108,7 @@ def api_available_rooms():
         return jsonify([]), 400
     end = ss + dur - 1
     with engine.connect() as conn:
-        all_rooms = [r.name for r in conn.execute(select(rooms).order_by(rooms.c.name)).fetchall()]
+        all_rooms = sorted([r.name for r in conn.execute(select(rooms)).fetchall()], key=_room_sort_key)
         # rooms already booked for overlapping slots
         booked = conn.execute(
             select(classes.c.location).where(
@@ -1111,7 +1151,7 @@ def admin_index():
         student_list = conn.execute(
             select(students).order_by(students.c.grade, students.c.class_name, students.c.full_name)
         ).fetchall()
-        room_list  = conn.execute(select(rooms).order_by(rooms.c.name)).fetchall()
+        room_list  = sorted(conn.execute(select(rooms)).fetchall(), key=lambda r: _room_sort_key(r.name))
         room_count = len(room_list)
 
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"

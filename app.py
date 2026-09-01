@@ -1044,11 +1044,18 @@ def admin_logout():
 def admin_seed_data():
     try:
         with engine.connect() as conn:
-            count = conn.execute(text("SELECT COUNT(*) FROM teachers")).scalar()
-            if count and count > 0:
-                return jsonify(ok=False, error=f"Database đã có {count} giáo viên. Chỉ tạo dữ liệu mẫu khi database còn trống.")
+            # Clear all data first so reseed always works
+            for tbl in ("enrollments", "classes", "students", "teachers", "rooms"):
+                conn.execute(text(f"DELETE FROM {tbl}"))
+            # Reset PG sequences to 0 before re-seeding explicit IDs
+            if not DATABASE_URL.startswith("sqlite"):
+                for tbl in ("teachers", "students", "classes", "enrollments"):
+                    conn.execute(text(
+                        f"SELECT setval(pg_get_serial_sequence('{tbl}', 'id'), 1, false)"
+                    ))
+            conn.commit()
             _seed_sample_data(conn)
-        return jsonify(ok=True, message="Đã tạo dữ liệu mẫu thành công: 8 giáo viên, 14 học sinh, 19 lớp học, 13 đăng ký.")
+        return jsonify(ok=True, message="Đã tạo dữ liệu mẫu thành công: 8 giáo viên, 14 học sinh, 19 lớp học, 13 đăng ký, 46 phòng.")
     except Exception as e:
         return jsonify(ok=False, error=str(e)), 500
 

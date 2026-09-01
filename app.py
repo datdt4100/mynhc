@@ -98,6 +98,12 @@ enrollments = Table(
     Column("enrolled_at", Text, default="CURRENT_TIMESTAMP"),
 )
 
+rooms = Table(
+    "rooms", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", Text, unique=True, nullable=False),
+)
+
 settings_table = Table(
     "settings", metadata,
     Column("key", Text, primary_key=True),
@@ -127,6 +133,15 @@ def init_db():
         try:
             conn.execute(text(
                 "UPDATE settings SET value = 'Admin@123' WHERE key = 'admin_password' AND value = 'admin123'"
+            ))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+        # Migrate: create rooms table if not exists (for existing DBs)
+        try:
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS rooms (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)"
             ))
             conn.commit()
         except Exception:
@@ -654,6 +669,7 @@ def teacher_register_class():
         return jsonify(ok=False, error="Tiết kết thúc vượt quá tiết 4.")
 
     subject = session.get("subject_group") or (data.get("subject") or "").strip() or None
+    location = (data.get("location") or "").strip() or None
 
     with engine.connect() as conn:
         result = conn.execute(
@@ -665,8 +681,8 @@ def teacher_register_class():
                 session_type=session_type,
                 start_session=start_session,
                 subject=subject,
-                location=None,
-                max_capacity=None,
+                location=location,
+                max_capacity=50,
                 extra_data=None,
                 is_published=1,
                 created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -994,6 +1010,82 @@ def admin_seed_data():
         return jsonify(ok=False, error=str(e)), 500
 
 
+@app.route("/admin/rooms/upload", methods=["POST"])
+@admin_required
+def admin_rooms_upload():
+    f = request.files.get("file")
+    if not f:
+        return jsonify(ok=False, error="Không có file.")
+    try:
+        import openpyxl as _openpyxl
+        wb = _openpyxl.load_workbook(f, data_only=True)
+        ws = wb.active
+        headers = [str(c.value or "").strip() for c in next(ws.iter_rows(min_row=1, max_row=1))]
+        name_col = None
+        for i, h in enumerate(headers):
+            if "PHÒNG" in h.upper() or "TÊN" in h.upper():
+                name_col = i
+                break
+        if name_col is None:
+            return jsonify(ok=False, error="Không tìm thấy cột tên phòng.")
+        added = skipped = 0
+        with engine.connect() as conn:
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                name = str(row[name_col] or "").strip()
+                if not name:
+                    continue
+                try:
+                    conn.execute(insert(rooms).values(name=name))
+                    conn.commit()
+                    added += 1
+                except Exception:
+                    conn.rollback()
+                    skipped += 1
+        return jsonify(ok=True, added=added, skipped=skipped)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/admin/rooms/clear", methods=["POST"])
+@admin_required
+def admin_rooms_clear():
+    with engine.connect() as conn:
+        conn.execute(text("DELETE FROM rooms"))
+        conn.commit()
+    return jsonify(ok=True)
+
+
+@app.route("/api/available-rooms")
+def api_available_rooms():
+    if not (session.get("is_admin") or session.get("user_type") == "teacher"):
+        return jsonify([]), 401
+    try:
+        dow   = int(request.args["day_of_week"])
+        st    = request.args["session_type"]
+        ss    = int(request.args["start_session"])
+        dur   = int(request.args["duration"])
+    except (KeyError, ValueError):
+        return jsonify([]), 400
+    end = ss + dur - 1
+    with engine.connect() as conn:
+        all_rooms = [r.name for r in conn.execute(select(rooms).order_by(rooms.c.name)).fetchall()]
+        # rooms already booked for overlapping slots
+        booked = conn.execute(
+            select(classes.c.location).where(
+                and_(
+                    classes.c.day_of_week == dow,
+                    classes.c.session_type == st,
+                    classes.c.location.isnot(None),
+                    classes.c.start_session <= end,
+                    (classes.c.start_session + classes.c.duration - 1) >= ss,
+                )
+            )
+        ).fetchall()
+        booked_set = {r.location for r in booked if r.location}
+    available = [r for r in all_rooms if r not in booked_set]
+    return jsonify(available)
+
+
 @app.route("/admin")
 @admin_required
 def admin_index():
@@ -1019,6 +1111,8 @@ def admin_index():
         student_list = conn.execute(
             select(students).order_by(students.c.grade, students.c.class_name, students.c.full_name)
         ).fetchall()
+        room_list  = conn.execute(select(rooms).order_by(rooms.c.name)).fetchall()
+        room_count = len(room_list)
 
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
     student_reg_open = get_setting("student_reg_open", "0") == "1"
@@ -1036,6 +1130,8 @@ def admin_index():
         student_list=student_list,
         teacher_reg_open=teacher_reg_open,
         student_reg_open=student_reg_open,
+        room_list=room_list,
+        room_count=room_count,
     )
 
 # --- Admin: Teacher management ---
@@ -1052,7 +1148,7 @@ def admin_teachers_upload():
     ws = wb.active
     headers = [str(cell.value).strip() if cell.value else "" for cell in ws[1]]
 
-    required = ["Họ và tên", "CCCD", "Giới tính", "Tổ bộ môn"]
+    required = ["Họ và tên", "Mã đăng nhập", "Giới tính", "Tổ bộ môn"]
     for r in required:
         if r not in headers:
             flash(f"Thiếu cột: {r}")
@@ -1065,7 +1161,7 @@ def admin_teachers_upload():
             if not any(row):
                 continue
             full_name = str(row[idx["Họ và tên"]] or "").strip()
-            cccd = str(row[idx["CCCD"]] or "").strip()
+            cccd = str(row[idx["Mã đăng nhập"]] or "").strip()
             gender = str(row[idx["Giới tính"]] or "").strip()
             subject_group = str(row[idx["Tổ bộ môn"]] or "").strip()
             if not full_name or not cccd:
@@ -1107,7 +1203,7 @@ def admin_teachers_template():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Giáo viên"
-    ws.append(["Họ và tên", "CCCD", "Giới tính", "Tổ bộ môn"])
+    ws.append(["Họ và tên", "Mã đăng nhập", "Giới tính", "Tổ bộ môn"])
     ws.append(["Nguyễn Văn A", "012345678901", "Nam", "Toán"])
 
     buf = io.BytesIO()
@@ -1270,7 +1366,7 @@ def admin_students_upload():
     ws = wb.active
     headers = [str(cell.value).strip() if cell.value else "" for cell in ws[1]]
 
-    required = ["Họ và tên", "CCCD", "Lớp", "Khối"]
+    required = ["Họ và tên", "Mã đăng nhập", "Lớp", "Khối"]
     for r in required:
         if r not in headers:
             flash(f"Thiếu cột: {r}")
@@ -1283,7 +1379,7 @@ def admin_students_upload():
             if not any(row):
                 continue
             full_name = str(row[idx["Họ và tên"]] or "").strip()
-            cccd = str(row[idx["CCCD"]] or "").strip()
+            cccd = str(row[idx["Mã đăng nhập"]] or "").strip()
             class_name = str(row[idx["Lớp"]] or "").strip()
             try:
                 grade = int(row[idx["Khối"]] or 0)
@@ -1325,7 +1421,7 @@ def admin_students_template():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Học sinh"
-    ws.append(["Họ và tên", "CCCD", "Lớp", "Khối"])
+    ws.append(["Họ và tên", "Mã đăng nhập", "Lớp", "Khối"])
     ws.append(["Trần Thị B", "098765432109", "10A1", 10])
 
     buf = io.BytesIO()

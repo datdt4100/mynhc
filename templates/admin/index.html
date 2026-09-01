@@ -343,6 +343,36 @@
     </div>
   </div>
 
+  <!-- ── Rooms ── -->
+  <div class="section-card mb-4">
+    <div class="section-card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <span><i class="bi bi-door-open-fill me-2" style="color:#0EA5E9;"></i>Danh sách phòng học (<span id="room-count">{{ room_count }}</span> phòng)</span>
+      <div class="d-flex gap-2 flex-wrap align-items-center">
+        <label class="btn btn-sm" style="background:#EFF6FF; color:#0369A1; border:1.5px solid #BAE6FD; font-size:.78rem; font-weight:600; border-radius:8px; cursor:pointer; margin:0;">
+          <i class="bi bi-upload me-1"></i>Tải lên Excel
+          <input type="file" id="roomFileInput" accept=".xlsx,.xls" style="display:none;" onchange="uploadRooms(this)">
+        </label>
+        <button class="btn btn-sm" style="background:#FFF1F2; color:#BE123C; border:1.5px solid #FECDD3; font-size:.78rem; font-weight:600; border-radius:8px;"
+                onclick="clearRooms()">
+          <i class="bi bi-trash3 me-1"></i>Xoá tất cả
+        </button>
+      </div>
+    </div>
+    <div class="section-card-body">
+      <div id="room-list-wrap">
+        {% if room_list %}
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          {% for r in room_list %}
+          <span style="background:#F0F9FF; border:1px solid #BAE6FD; color:#0369A1; border-radius:6px; padding:3px 10px; font-size:.78rem;">{{ r.name }}</span>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted" style="font-size:.84rem; margin:0;">Chưa có phòng học nào. Tải lên file Excel để thêm.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
   <!-- ════════════════════════════════════════
        TEACHER SECTION
   ════════════════════════════════════════ -->
@@ -371,7 +401,7 @@
       </button>
       <div class="search-box ms-auto">
         <i class="bi bi-search"></i>
-        <input type="search" id="searchTeacher" placeholder="Tìm tên hoặc CCCD…" oninput="filterTable('teacher')">
+        <input type="search" id="searchTeacher" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterTable('teacher')">
       </div>
       <form method="POST" action="{{ url_for('admin_teachers_clear') }}" class="mb-0">
         <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
@@ -387,7 +417,7 @@
             <tr>
               <th style="width:44px;">STT</th>
               <th>Họ tên</th>
-              <th>CCCD</th>
+              <th>Mã đăng nhập</th>
               <th>Giới tính</th>
               <th>Tổ bộ môn</th>
               <th>Email</th>
@@ -490,7 +520,7 @@
       </button>
       <div class="search-box ms-auto">
         <i class="bi bi-search"></i>
-        <input type="search" id="searchStudent" placeholder="Tìm tên hoặc CCCD…" oninput="filterTable('student')">
+        <input type="search" id="searchStudent" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterTable('student')">
       </div>
       <form method="POST" action="{{ url_for('admin_students_clear') }}" class="mb-0">
         <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
@@ -506,7 +536,7 @@
             <tr>
               <th style="width:44px;">STT</th>
               <th>Họ tên</th>
-              <th>CCCD</th>
+              <th>Mã đăng nhập</th>
               <th>Lớp</th>
               <th>Khối</th>
               <th>Email</th>
@@ -603,8 +633,8 @@
             <input type="text" name="full_name" class="form-control custom-input" placeholder="Nguyễn Văn A" required>
           </div>
           <div class="mb-3">
-            <label class="form-label fw-semibold" style="font-size:.85rem;">CCCD <span class="text-danger">*</span></label>
-            <input type="text" name="cccd" class="form-control custom-input" placeholder="012345678901" required maxlength="12">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Mã đăng nhập <span class="text-danger">*</span></label>
+            <input type="text" name="cccd" class="form-control custom-input" placeholder="Nhập mã đăng nhập" required>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Giới tính</label>
@@ -649,8 +679,8 @@
             <input type="text" name="full_name" class="form-control custom-input" placeholder="Trần Thị B" required>
           </div>
           <div class="mb-3">
-            <label class="form-label fw-semibold" style="font-size:.85rem;">CCCD <span class="text-danger">*</span></label>
-            <input type="text" name="cccd" class="form-control custom-input" placeholder="012345678901" required maxlength="12">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Mã đăng nhập <span class="text-danger">*</span></label>
+            <input type="text" name="cccd" class="form-control custom-input" placeholder="Nhập mã đăng nhập" required>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Lớp <span class="text-danger">*</span></label>
@@ -808,6 +838,30 @@ async function runSeed() {
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-play-fill me-1"></i>Xác nhận tạo';
   }
+}
+
+async function uploadRooms(input) {
+  if (!input.files[0]) return;
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  input.value = '';
+  try {
+    const res  = await fetch('/admin/rooms/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) {
+      showAlert(`Đã thêm ${data.added} phòng${data.skipped ? ', bỏ qua ' + data.skipped + ' trùng' : ''}.`, 'success');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showAlert(data.error || 'Lỗi tải file.', 'error');
+    }
+  } catch { showAlert('Lỗi kết nối.', 'error'); }
+}
+
+async function clearRooms() {
+  if (!confirm('Xoá toàn bộ danh sách phòng học?')) return;
+  const res  = await fetch('/admin/rooms/clear', { method: 'POST' });
+  const data = await res.json();
+  if (data.ok) { showAlert('Đã xoá phòng học.', 'success'); setTimeout(() => location.reload(), 800); }
 }
 </script>
 {% endblock %}

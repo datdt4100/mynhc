@@ -145,24 +145,21 @@
             >
           </div>
 
-          <!-- CCCD -->
+          <!-- Mã đăng nhập -->
           <div class="mb-4">
             <label class="form-label fw-semibold" for="cccd" style="font-size:.88rem; color:#475569;">
-              <i class="bi bi-credit-card me-1"></i>Số CCCD
+              <i class="bi bi-credit-card me-1"></i>Mã đăng nhập
             </label>
             <input
               type="text"
               id="cccd"
               name="cccd"
               class="custom-input"
-              placeholder="012345678901"
-              inputmode="numeric"
-              pattern="[0-9]*"
-              maxlength="12"
+              placeholder="Nhập mã đăng nhập"
               required
               autocomplete="off"
             >
-            <div class="field-hint">Nhập đúng 12 chữ số trên căn cước công dân</div>
+            <div class="field-hint">Nhập mã đăng nhập của bạn</div>
           </div>
 
           <button type="submit" class="btn btn-primary-custom w-100 d-flex align-items-center justify-content-center gap-2" id="step1-btn">
@@ -354,11 +351,6 @@
     });
   });
 
-  /* ── Only allow digits in CCCD field ─────────────────── */
-  document.getElementById('cccd').addEventListener('input', function () {
-    this.value = this.value.replace(/\D/g, '').slice(0, 12);
-  });
-
   /* ── STEP 1: submit ──────────────────────────────────── */
   form1.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -370,9 +362,9 @@
     /* Client-side validation */
     let valid = true;
     markInvalid(document.getElementById('full_name'), !full_name);
-    markInvalid(document.getElementById('cccd'), !cccd || cccd.length < 9);
-    if (!full_name || !cccd || cccd.length < 9) {
-      showError(err1Wrap, err1Msg, 'Vui lòng nhập đầy đủ họ tên và số CCCD hợp lệ.');
+    markInvalid(document.getElementById('cccd'), !cccd || cccd.length < 1);
+    if (!full_name || !cccd || cccd.length < 1) {
+      showError(err1Wrap, err1Msg, 'Vui lòng nhập đầy đủ họ tên và mã đăng nhập.');
       return;
     }
 

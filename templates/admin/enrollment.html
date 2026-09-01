@@ -164,8 +164,10 @@
             <td class="text-center">
               {% set cnt = enrollment_counts.get(cls.id, 0) %}
               {% set mx  = cls.max_capacity or 0 %}
-              <span class="count-badge {% if cnt >= 45 %}count-badge-red{% elif cnt >= 30 %}count-badge-yellow{% else %}count-badge-green{% endif %}"
-                    data-class-id="{{ cls.id }}" id="count-{{ cls.id }}">
+              {% set full = mx and cnt >= mx %}
+              <span class="count-badge {% if full %}count-badge-red{% elif cnt >= 30 %}count-badge-yellow{% else %}count-badge-green{% endif %}"
+                    data-class-id="{{ cls.id }}" id="count-{{ cls.id }}" data-max="{{ mx or '' }}">
+                {% if cnt >= 30 and not full %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>{% endif %}
                 {{ cnt }}{% if mx %}/{{ mx }}{% endif %}
               </span>
             </td>
@@ -331,12 +333,15 @@ function refreshCounts() {
         const raw = data[String(id)] ?? data[id] ?? 0;
         const cnt = (raw && typeof raw === 'object') ? (raw.count ?? 0) : Number(raw);
         const max = el.dataset.max ? parseInt(el.dataset.max) : null;
+        const full = max && cnt >= max;
         el.className = 'count-badge ' + (
-          cnt >= 45 ? 'count-badge-red' :
-          cnt >= 30 ? 'count-badge-yellow' :
-                      'count-badge-green'
+          full        ? 'count-badge-red' :
+          cnt >= 30   ? 'count-badge-yellow' :
+                        'count-badge-green'
         );
-        el.textContent = max ? cnt + '/' + max : String(cnt);
+        el.innerHTML = (cnt >= 30 && !full
+          ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>' : '') +
+          (max ? cnt + '/' + max : String(cnt));
       });
     })
     .catch(() => {});
@@ -376,7 +381,7 @@ function viewStudents(classId) {
               <tr style="background:#F1F5F9;">
                 <th style="padding:8px 12px; font-weight:700; color:#475569; border:none; width:44px;">STT</th>
                 <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Họ tên</th>
-                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">CCCD</th>
+                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Mã đăng nhập</th>
                 <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Khối</th>
                 <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Lớp</th>
               </tr>

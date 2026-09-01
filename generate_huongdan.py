@@ -252,9 +252,9 @@ bullet(doc, "Giai đoạn 2: Học sinh đăng ký môn học theo khối; hệ 
 tbl(doc,
     ["Vai trò", "URL truy cập", "Chức năng chính"],
     [
-        ["Quản trị viên", "/admin",           "Quản lý GV, HS; điều phối giai đoạn; phân phòng; xuất Excel"],
-        ["Giáo viên",     "/login → chọn GV", "Đăng ký lịch mở lớp; xem số HS & phòng học theo thời gian thực"],
-        ["Học sinh",      "/login → chọn HS", "Xem thời khoá biểu; đăng ký và huỷ môn học"],
+        ["Quản trị viên", "/admin/login",           "Quản lý GV, HS; điều phối giai đoạn; phân phòng; xuất Excel"],
+        ["Giáo viên",     "Địa chỉ web (tự redirect)", "Đăng ký lịch mở lớp; xem số HS & phòng học theo thời gian thực"],
+        ["Học sinh",      "Địa chỉ web (tự redirect)", "Xem thời khoá biểu; đăng ký và huỷ môn học"],
     ],
     widths=[3.5, 4.0, 9.0]
 )
@@ -267,11 +267,11 @@ note(doc,
 tbl(doc,
     ["Vai trò", "Thông tin đăng nhập", "Mật khẩu mặc định (kiểm thử)"],
     [
-        ["Quản trị viên", "Chọn Quản trị viên + nhập mật khẩu", "Admin@123"],
-        ["Giáo viên",     "Chọn Giáo viên + nhập CCCD",          "Nhc@2627"],
-        ["Học sinh",      "Chọn Học sinh + nhập CCCD",            "Nhc@2627"],
+        ["Quản trị viên", "/admin/login → nhập mật khẩu quản trị",          "Admin@123"],
+        ["Giáo viên",     "/login → nhập Họ tên + CCCD → hệ thống tự nhận", "Nhc@2627"],
+        ["Học sinh",      "/login → nhập Họ tên + CCCD → hệ thống tự nhận", "Nhc@2627"],
     ],
-    widths=[3.5, 7.5, 5.5]
+    widths=[3.5, 8.5, 4.5]
 )
 
 page_break(doc)
@@ -282,11 +282,17 @@ page_break(doc)
 H1(doc, "2. ĐĂNG NHẬP VÀ MẬT KHẨU")
 
 H2(doc, "2.1. Đăng nhập")
-body(doc, "Tất cả người dùng đăng nhập tại cùng một trang /login:")
-step(doc, 1, "Truy cập URL hệ thống (ví dụ: https://mynhc.onrender.com/login).")
-step(doc, 2, "Chọn loại người dùng trong dropdown: Quản trị viên / Giáo viên / Học sinh.")
-step(doc, 3, "Nhập CCCD (GV/HS) hoặc mật khẩu (Admin).")
-step(doc, 4, "Nhấn Đăng nhập. Hệ thống chuyển đến trang tương ứng.")
+body(doc, "Quản trị viên và giáo viên/học sinh đăng nhập tại hai URL khác nhau:")
+
+H3(doc, "Quản trị viên")
+step(doc, 1, "Truy cập https://mynhc.onrender.com/admin/login.")
+step(doc, 2, "Nhập mật khẩu quản trị. Nhấn Đăng nhập.")
+
+H3(doc, "Giáo viên và Học sinh")
+step(doc, 1, "Truy cập địa chỉ web (ví dụ: https://mynhc.onrender.com) — hệ thống tự chuyển đến trang đăng nhập.")
+step(doc, 2, "Nhập Họ và tên (đúng chính tả) và Số CCCD (12 chữ số). Nhấn Tiếp theo.")
+step(doc, 3, "Hệ thống tự nhận dạng tài khoản (giáo viên hay học sinh) và hiển thị lời chào.")
+step(doc, 4, "Nhập mật khẩu. Nhấn Đăng nhập. Hệ thống chuyển đến trang tương ứng.")
 
 note(doc,
     "Nếu tài khoản chưa kích hoạt (lần đầu đăng nhập hoặc vừa được Admin khôi phục MK), "
@@ -319,6 +325,32 @@ page_break(doc)
 # ─────────────────────────────────────────────────────────────────────────────
 H1(doc, "3. HƯỚNG DẪN QUẢN TRỊ VIÊN")
 body(doc, "Sau khi đăng nhập, quản trị viên được chuyển đến trang /admin. Trang chủ hiển thị 4 thẻ thống kê (số GV, HS, lớp đã mở, lượt đăng ký) và trạng thái hai giai đoạn.")
+
+H2(doc, "3.0. Tạo dữ liệu mẫu (dành cho kiểm thử)")
+body(doc, "Khi triển khai hệ thống lần đầu trên môi trường kiểm thử, Admin có thể tạo ngay bộ dữ liệu mẫu mà không cần nhập thủ công:")
+step(doc, 1, "Tại trang /admin, nhấn nút Tạo dữ liệu mẫu ở góc phải tiêu đề \"Quản trị mynhc\".")
+step(doc, 2, "Modal xác nhận hiển thị danh sách dữ liệu sẽ được tạo (8 GV, 14 HS, 19 lớp, 13 đăng ký).")
+step(doc, 3, "Nhấn Xác nhận tạo. Hệ thống tự động tạo dữ liệu và tải lại trang.")
+
+tbl(doc,
+    ["Loại dữ liệu", "Số lượng", "Mật khẩu mặc định"],
+    [
+        ["Giáo viên (đã kích hoạt)",  "6",  "Nhc@2627"],
+        ["Giáo viên (chưa có MK)",    "2",  "(chưa thiết lập)"],
+        ["Học sinh (đã kích hoạt)",   "7",  "Nhc@2627"],
+        ["Học sinh (chưa có MK)",     "7",  "(chưa thiết lập)"],
+        ["Lớp học (đã duyệt)",        "19", "—"],
+        ["Đăng ký mẫu",               "13", "—"],
+    ],
+    widths=[5.5, 3.0, 8.0]
+)
+
+note(doc,
+    "Nút chỉ hoạt động khi database chưa có dữ liệu (bảng giáo viên còn trống). "
+    "Nếu đã có dữ liệu, hệ thống báo lỗi và không thực hiện. "
+    "KHÔNG sử dụng tính năng này trên môi trường vận hành thực tế.",
+    title="Quan trọng", bg="FCE4D6", tc=(0xC0, 0x50, 0x00)
+)
 
 H2(doc, "3.1. Quản lý Giáo viên")
 
@@ -519,7 +551,7 @@ H1(doc, "7. QUY TRÌNH VẬN HÀNH TỔNG QUÁT")
 body(doc, "Dưới đây là trình tự đúng để vận hành một chu kỳ đăng ký đầy đủ:")
 
 steps_flow = [
-    "Admin tạo tài khoản GV và HS (thủ công hoặc nhập Excel).",
+    "Admin tạo tài khoản GV và HS (thủ công, nhập Excel, hoặc dùng nút Tạo dữ liệu mẫu nếu kiểm thử).",
     "Admin vào /admin/class-reg → nhấn Mở đăng ký GV (bắt đầu Giai đoạn 1).",
     "Giáo viên đăng nhập → đăng ký lịch mở lớp trên bảng thời khoá biểu.",
     "Admin nhấn Đóng đăng ký GV (kết thúc Giai đoạn 1).",

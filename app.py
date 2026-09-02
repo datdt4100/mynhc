@@ -6,7 +6,7 @@ import secrets
 import string
 import unicodedata
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
@@ -122,6 +122,9 @@ def init_db():
             "ALTER TABLE teachers ADD COLUMN must_change_password INTEGER DEFAULT 0",
             "ALTER TABLE students ADD COLUMN must_change_password INTEGER DEFAULT 0",
             "ALTER TABLE students ADD COLUMN email TEXT",
+            "ALTER TABLE teachers ADD COLUMN activated_at TEXT",
+            "ALTER TABLE students ADD COLUMN activated_at TEXT",
+            "ALTER TABLE students ADD COLUMN last_seen_at TEXT",
         ]:
             try:
                 conn.execute(text(stmt))
@@ -309,6 +312,11 @@ def _room_sort_key(name: str):
     khu = re.search(r'[Kk]hu\s+([A-Za-z])', name)
     num = re.search(r'(\d+)', name)
     return (khu.group(1).upper() if khu else 'Z', int(num.group(1)) if num else 9999)
+
+_VN_TZ = timezone(timedelta(hours=7))
+
+def now_vn() -> str:
+    return datetime.now(_VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 # Allowed special chars (excludes ' " ` ; \ which are DB-dangerous)
 _PW_ALLOWED_SPECIALS = r"!@#$%^&*()\-_+=\[\]{}|<>,.?/~"
@@ -524,6 +532,7 @@ def login_step2():
                         password_hash=pw_hash,
                         is_first_login=0,
                         must_change_password=0,
+                        activated_at=now_vn(),
                     )
                 )
                 conn.commit()
@@ -568,6 +577,8 @@ def login_step2():
                         password_hash=pw_hash,
                         is_first_login=0,
                         must_change_password=0,
+                        activated_at=now_vn(),
+                        last_seen_at=now_vn(),
                     )
                 )
         else:
@@ -575,6 +586,14 @@ def login_step2():
                 return jsonify(ok=False, error="Tài khoản chưa được thiết lập mật khẩu.")
             if not check_password_hash(student.password_hash, password):
                 return jsonify(ok=False, error="Sai mật khẩu.")
+
+        if not student.is_first_login:
+            with engine.begin() as conn:
+                conn.execute(
+                    update(students).where(students.c.id == student.id).values(
+                        last_seen_at=now_vn()
+                    )
+                )
 
         session.clear()
         session["user_type"] = "student"
@@ -728,7 +747,7 @@ def teacher_register_class():
                 max_capacity=50,
                 extra_data=None,
                 is_published=1,
-                created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                created_at=now_vn(),
             )
         )
         conn.commit()
@@ -949,7 +968,7 @@ def student_enroll():
             insert(enrollments).values(
                 student_id=student_id,
                 class_id=class_id,
-                enrolled_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                enrolled_at=now_vn(),
             )
         )
         conn.commit()
@@ -1941,7 +1960,7 @@ def admin_enrollment_add():
                 max_capacity=max_capacity,
                 extra_data=extra_data_json,
                 is_published=1,
-                created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                created_at=now_vn(),
             )
         )
         conn.commit()
@@ -2050,6 +2069,7 @@ def admin_enrollment_students(class_id):
             "class_name": s.class_name,
             "grade": s.grade,
             "enrolled_at": s.enrolled_at,
+            "last_seen_at": s.last_seen_at if hasattr(s, "last_seen_at") else None,
         }
         for s in enrolled
     ])

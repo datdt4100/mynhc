@@ -386,6 +386,7 @@ function viewStudents(classId) {
                 <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Mã đăng nhập</th>
                 <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Khối</th>
                 <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Lớp</th>
+                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none; white-space:nowrap;">Truy cập gần nhất</th>
               </tr>
             </thead>
             <tbody>
@@ -397,6 +398,7 @@ function viewStudents(classId) {
           <td style="padding:8px 12px;"><code style="font-size:.75rem;">${s.cccd}</code></td>
           <td style="padding:8px 12px;">${s.grade ?? '—'}</td>
           <td style="padding:8px 12px;">${s.class_name ?? '—'}</td>
+          <td style="padding:8px 12px; font-size:.75rem; color:#64748B; white-space:nowrap;">${s.last_seen_at ?? '—'}</td>
         </tr>`;
       });
       html += '</tbody></table></div>';

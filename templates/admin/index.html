@@ -423,6 +423,7 @@
               <th>Tổ bộ môn</th>
               <th>Email</th>
               <th>Trạng thái TK</th>
+              <th style="white-space:nowrap;">Thời gian xác thực</th>
               <th style="width:110px;">Thao tác</th>
             </tr>
           </thead>
@@ -447,6 +448,9 @@
                 {% else %}
                   <span class="badge bg-success">Đã kích hoạt</span>
                 {% endif %}
+              </td>
+              <td style="font-size:.75rem; color:#475569; white-space:nowrap;">
+                {{ t.activated_at or '—' }}
               </td>
               <td>
                 <div class="d-flex gap-1 align-items-center">
@@ -542,6 +546,7 @@
               <th>Khối</th>
               <th>Email</th>
               <th>Trạng thái TK</th>
+              <th style="white-space:nowrap;">Thời gian xác thực</th>
               <th style="width:110px;">Thao tác</th>
             </tr>
           </thead>
@@ -566,6 +571,9 @@
                 {% else %}
                   <span class="badge bg-success">Đã kích hoạt</span>
                 {% endif %}
+              </td>
+              <td style="font-size:.75rem; color:#475569; white-space:nowrap;">
+                {{ s.activated_at or '—' }}
               </td>
               <td>
                 <div class="d-flex gap-1 align-items-center">

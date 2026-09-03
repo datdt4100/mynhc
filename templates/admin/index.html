@@ -468,14 +468,11 @@
                     </button>
                   </form>
                   {% endif %}
-                  <form method="POST" action="{{ url_for('admin_teachers_delete', teacher_id=t.id) }}" class="mb-0">
-                    <input type="hidden" name="_method" value="DELETE">
-                    <button type="button" class="adm-icon-btn btn-outline-danger"
-                            onclick="showConfirmSubmit(this,{title:'Xóa giáo viên?',msg:'Xóa giáo viên <strong>{{ t.full_name }}</strong>? Hành động này không thể hoàn tác.',confirmText:'Xóa',confirmClass:'btn-danger'})"
-                            title="Xóa giáo viên">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
+                  <button type="button" class="adm-icon-btn btn-outline-danger"
+                          onclick="deleteAccount('teacher', {{ t.id }}, '{{ t.full_name|e }}')"
+                          title="Xóa giáo viên">
+                    <i class="bi bi-trash"></i>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -591,14 +588,11 @@
                     </button>
                   </form>
                   {% endif %}
-                  <form method="POST" action="{{ url_for('admin_students_delete', student_id=s.id) }}" class="mb-0">
-                    <input type="hidden" name="_method" value="DELETE">
-                    <button type="button" class="adm-icon-btn btn-outline-danger"
-                            onclick="showConfirmSubmit(this,{title:'Xóa học sinh?',msg:'Xóa học sinh <strong>{{ s.full_name }}</strong>? Hành động này không thể hoàn tác.',confirmText:'Xóa',confirmClass:'btn-danger'})"
-                            title="Xóa học sinh">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
+                  <button type="button" class="adm-icon-btn btn-outline-danger"
+                          onclick="deleteAccount('student', {{ s.id }}, '{{ s.full_name|e }}')"
+                          title="Xóa học sinh">
+                    <i class="bi bi-trash"></i>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -879,6 +873,30 @@ function clearRooms() {
       } catch { showAlert('Lỗi kết nối.', 'error'); }
     },
     { confirmText: 'Xoá tất cả', confirmClass: 'btn-danger' }
+  );
+}
+
+function deleteAccount(type, id, name) {
+  const label = type === 'teacher' ? 'giáo viên' : 'học sinh';
+  const url   = type === 'teacher'
+    ? `/admin/teachers/${id}`
+    : `/admin/students/${id}`;
+  showConfirm(
+    `Xóa ${label}?`,
+    `Xóa ${label} <strong>${name}</strong>? Hành động này không thể hoàn tác.`,
+    async function() {
+      try {
+        const res  = await fetch(url, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.ok) {
+          showAlert(`Đã xóa ${label} ${name}.`, 'success');
+          setTimeout(() => location.reload(), 800);
+        } else {
+          showAlert(data.error || 'Không thể xóa.', 'error');
+        }
+      } catch { showAlert('Lỗi kết nối.', 'error'); }
+    },
+    { confirmText: 'Xóa', confirmClass: 'btn-danger' }
   );
 }
 </script>

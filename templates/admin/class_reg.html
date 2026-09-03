@@ -118,15 +118,9 @@
     </div>
     <!-- toolbar -->
     <div style="padding:10px 16px; background:#FAFBFC; border-bottom:1.5px solid #E2E8F0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-      <a href="{{ url_for('admin_class_reg_export') }}" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;" title="Tải Excel phân phòng">
-        <i class="bi bi-file-earmark-arrow-down"></i><span>Tải Excel phân phòng</span>
+      <a href="{{ url_for('admin_class_reg_export') }}" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;" title="Tải Excel danh sách lớp đã đăng ký">
+        <i class="bi bi-file-earmark-arrow-down"></i><span>Tải Excel</span>
       </a>
-      <form id="frmImportRooms" method="POST" action="{{ url_for('admin_classes_import_rooms') }}" enctype="multipart/form-data" class="m-0">
-        <input type="file" id="fileImportRooms" name="file" accept=".xlsx,.xls" style="display:none;" onchange="document.getElementById('frmImportRooms').submit()">
-      </form>
-      <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;" onclick="document.getElementById('fileImportRooms').click()">
-        <i class="bi bi-file-earmark-arrow-up"></i><span>Upload phân phòng</span>
-      </button>
     </div>
     <div class="table-responsive-admin">
       <table class="table admin-table mb-0" id="teacher-summary-table">

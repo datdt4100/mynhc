@@ -1698,39 +1698,48 @@ def admin_class_reg_export():
             .order_by(classes.c.grade, classes.c.day_of_week,
                       classes.c.session_type, classes.c.start_session)
         ).fetchall()
+        enroll_rows = conn.execute(
+            select(enrollments.c.class_id, func.count().label("cnt"))
+            .group_by(enrollments.c.class_id)
+        ).fetchall()
+    enroll_counts = {r.class_id: r.cnt for r in enroll_rows}
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Phân phòng học"
-    headers = ["id", "Họ và tên GV", "Tổ bộ môn", "Khối", "Thứ",
-               "Buổi", "Tiết BĐ", "Số tiết", "Môn học", "Địa điểm", "Sĩ số"]
+    ws.title = "Đăng ký mở lớp"
+    headers = ["STT", "Họ và tên GV", "Email GV", "Tổ bộ môn", "Khối", "Thứ",
+               "Buổi / Tiết", "Số tiết", "Môn học", "Địa điểm",
+               "Sĩ số", "HS đăng ký", "Thời gian đăng ký"]
     ws.append(headers)
-    # Header style
-    from openpyxl.styles import PatternFill, Font
+    from openpyxl.styles import PatternFill, Font, Alignment
     hdr_fill = PatternFill("solid", fgColor="0369A1")
     hdr_font = Font(color="FFFFFF", bold=True)
     for col_idx, _ in enumerate(headers, 1):
         cell = ws.cell(1, col_idx)
         cell.fill = hdr_fill
         cell.font = hdr_font
-    for c in all_classes:
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    for idx, c in enumerate(all_classes, 1):
         buoi = "Sáng" if c.session_type == "morning" else "Chiều"
+        end_ses = c.start_session + c.duration - 1
+        tiet_label = f"Tiết {c.start_session}" if c.duration == 1 else f"Tiết {c.start_session}-{end_ses}"
         ws.append([
-            c.id,
+            idx,
             c.teacher_name,
+            c.teacher_email or "",
             c.subject_group,
-            c.grade,
+            f"Khối {c.grade}",
             day_name(c.day_of_week),
-            buoi,
-            c.start_session,
+            f"{buoi} – {tiet_label}",
             c.duration,
             c.subject or "",
             c.location or "",
             c.max_capacity or "",
+            enroll_counts.get(c.id, 0),
+            c.created_at or "",
         ])
-    # Column widths
-    for col, width in zip([1,2,3,4,5,6,7,8,9,10,11],
-                          [6,22,14,6,8,7,8,8,18,14,8]):
+    for col, width in zip(range(1, 14),
+                          [5, 22, 26, 14, 7, 8, 16, 7, 16, 20, 7, 10, 20]):
         ws.column_dimensions[get_column_letter(col)].width = width
 
     buf = io.BytesIO()
@@ -1739,7 +1748,7 @@ def admin_class_reg_export():
     return send_file(
         buf,
         as_attachment=True,
-        download_name="phan_phong_hoc.xlsx",
+        download_name="dang_ky_mo_lop.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 

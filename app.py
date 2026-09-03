@@ -58,6 +58,7 @@ teachers = Table(
     Column("password_hash", Text, nullable=True),
     Column("is_first_login", Integer, default=1),
     Column("must_change_password", Integer, default=0),
+    Column("activated_at", Text, nullable=True),
 )
 
 students = Table(
@@ -71,6 +72,8 @@ students = Table(
     Column("password_hash", Text, nullable=True),
     Column("is_first_login", Integer, default=1),
     Column("must_change_password", Integer, default=0),
+    Column("activated_at", Text, nullable=True),
+    Column("last_seen_at", Text, nullable=True),
 )
 
 classes = Table(

@@ -205,7 +205,7 @@
                         <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; width:80px; white-space:nowrap;">Sĩ số</th>
                         <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; white-space:nowrap;" class="text-center">HS đăng ký</th>
                         <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; white-space:nowrap;">Thời gian đăng ký</th>
-                        <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; width:26px;"></th>
+                        <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; width:60px; text-align:center;">Xóa</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -250,6 +250,13 @@
                              title="{% if not cls.location %}Thiếu địa điểm{% endif %}{% if not cls.location and not cls.max_capacity %} · {% endif %}{% if not cls.max_capacity %}Thiếu sĩ số{% endif %}"></i>
                           <i class="bi bi-check-circle-fill save-indicator-{{ cls.id }}"
                              style="color:#22c55e; font-size:.9rem; opacity:0; transition:opacity .3s;"></i>
+                          <button type="button"
+                                  class="btn btn-sm p-0 ms-1"
+                                  style="color:#EF4444; font-size:.85rem; line-height:1; background:none; border:none;"
+                                  title="Xóa lớp này"
+                                  onclick="event.stopPropagation(); deleteClass({{ cls.id }}, {{ teacher.id }})">
+                            <i class="bi bi-trash3"></i>
+                          </button>
                         </td>
                       </tr>
                       {% endfor %}
@@ -337,6 +344,56 @@ function toggleDetail(id) {
       eyeIcon.classList.add('bi-eye-slash');
     }
   }
+}
+
+function deleteClass(classId, teacherId) {
+  showConfirm(
+    'Xóa lớp này?',
+    'Tất cả học sinh đã đăng ký lớp này cũng sẽ bị hủy đăng ký. Thao tác không thể hoàn tác.',
+    async function() {
+      try {
+        const res = await fetch('/admin/classes/' + classId, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.ok) {
+          /* Remove the row from DOM */
+          const row = document.getElementById('cls-row-' + classId);
+          if (row) row.remove();
+
+          /* Update teacher's class count badge */
+          const teacherRow = document.querySelector('.teacher-row[data-id="' + teacherId + '"]');
+          if (teacherRow) {
+            const badge = teacherRow.querySelector('.badge.bg-primary, .badge.bg-light');
+            /* Count remaining rows in detail panel */
+            const detailPanel = document.getElementById('detail-' + teacherId);
+            const remaining = detailPanel ? detailPanel.querySelectorAll('tbody tr[id^="cls-row-"]').length : 0;
+            if (badge) {
+              badge.textContent = remaining;
+              badge.className = 'badge ' + (remaining > 0 ? 'bg-primary' : 'bg-light text-muted');
+              badge.style.fontSize = '.82rem';
+              badge.style.borderRadius = '8px';
+            }
+            /* If no classes left, show empty message */
+            if (remaining === 0 && detailPanel) {
+              const inner = detailPanel.querySelector('.detail-inner');
+              if (inner) inner.innerHTML = '<p class="text-muted mb-0" style="font-size:.82rem;"><i class="bi bi-info-circle me-1"></i>Giáo viên chưa đăng ký lớp nào.</p>';
+            }
+          }
+
+          /* Update global total */
+          const totalSpan = document.querySelector('.text-muted strong');
+          if (totalSpan) {
+            const cur = parseInt(totalSpan.textContent) || 0;
+            if (cur > 0) totalSpan.textContent = cur - 1;
+          }
+        } else {
+          showAlert(data.error || 'Không thể xóa lớp.', 'error');
+        }
+      } catch(e) {
+        showAlert('Lỗi kết nối, vui lòng thử lại.', 'error');
+      }
+    },
+    { confirmText: 'Xóa', confirmClass: 'btn-danger' }
+  );
 }
 
 function toggleTeacherReg() {

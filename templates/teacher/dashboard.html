@@ -642,11 +642,16 @@ async function loadSlotGrid() {
   _maxCombos = null;
 
   try {
-    const res  = await fetch(`/api/slot-impact-grid?grade=${grade}&duration=${dur}`);
+    const [res, rsRes] = await Promise.all([
+      fetch(`/api/slot-impact-grid?grade=${grade}&duration=${dur}`),
+      _rsData ? Promise.resolve(null) : fetch('/api/room-schedule'),
+    ]);
     const data = await res.json();
+    if (rsRes) _rsData = await rsRes.json();
     _gridData  = data.grid;
     _maxCombos = data.max_combos;
-    _renderSlotGrid(_gridData, _maxCombos, dur);
+    const noRooms = _computeNoRooms(_rsData, dur);
+    _renderSlotGrid(_gridData, _maxCombos, dur, noRooms);
     loading.style.display = 'none';
     grid.style.display = '';
 
@@ -674,6 +679,35 @@ async function loadSlotGrid() {
   }
 }
 
+function _computeNoRooms(rsData, dur) {
+  if (!rsData || !rsData.rooms || !rsData.rooms.length) return new Set();
+  const {rooms, bookings} = rsData;
+  const occ = {};
+  bookings.forEach(b => {
+    if (!occ[b.room]) occ[b.room] = {};
+    if (!occ[b.room][b.day]) occ[b.room][b.day] = {};
+    if (!occ[b.room][b.day][b.session]) occ[b.room][b.day][b.session] = new Set();
+    for (let t = b.start; t < b.start + b.duration; t++)
+      occ[b.room][b.day][b.session].add(t);
+  });
+  const noRooms = new Set();
+  [2,3,4,5,6,7].forEach(day => {
+    ['morning','afternoon'].forEach(ses => {
+      for (let start = 1; start <= 4; start++) {
+        if (start + dur - 1 > 4) continue;
+        const hasFree = rooms.some(room => {
+          for (let t = start; t <= start + dur - 1; t++) {
+            if (occ[room]?.[day]?.[ses]?.has(t)) return false;
+          }
+          return true;
+        });
+        if (!hasFree) noRooms.add(`${day}_${ses}_${start}`);
+      }
+    });
+  });
+  return noRooms;
+}
+
 function _slotColor(val, maxCombos) {
   if (val === 0) return ['#FEE2E2', '#FCA5A5'];           // đỏ: 0%
   if (maxCombos <= 0) return ['#DCFCE7', '#86EFAC'];      // không có gì để mất → xanh
@@ -689,7 +723,7 @@ function _slotTitle(val, maxCombos) {
   return `${val}/${maxCombos} combo (${pct}%)`;
 }
 
-function _renderSlotGrid(gridData, maxCombos, dur) {
+function _renderSlotGrid(gridData, maxCombos, dur, noRooms = new Set()) {
   const days = [2,3,4,5,6,7];
   const sessions = [
     {key:'morning',   label:'Buổi Sáng', starts:[1,2,3,4]},
@@ -715,8 +749,16 @@ function _renderSlotGrid(gridData, maxCombos, dur) {
         const key = `${d}_${ses.key}_${start}`;
         const val = gridData[key];
         if (val === -1 || val === undefined) {
-          // Invalid slot
+          // Invalid slot (outside duration bounds)
           html += `<td style="padding:2px;"><div style="height:32px; border-radius:6px; background:#F1F5F9; border:1px solid #E2E8F0; cursor:not-allowed; opacity:.4;"></div></td>`;
+        } else if (noRooms.has(key)) {
+          // Valid slot but all rooms are occupied
+          html += `<td style="padding:2px;" title="Không còn phòng trống cho khung giờ này">
+            <div style="height:32px; border-radius:6px; cursor:not-allowed;
+                        background:repeating-linear-gradient(45deg,#E5E7EB,#E5E7EB 4px,#F3F4F6 4px,#F3F4F6 8px);
+                        border:1px solid #D1D5DB; display:flex; align-items:center; justify-content:center;">
+              <span style="font-size:.6rem; color:#6B7280; font-weight:700; line-height:1.1; text-align:center;">P.<br>bận</span>
+            </div></td>`;
         } else {
           const [bg, border] = _slotColor(val, maxCombos);
           const title = _slotTitle(val, maxCombos);
@@ -1115,7 +1157,9 @@ setInterval(updateCounts, 5000);
           loadSlotGrid();
         }
       } else if (ev.type === 'schedule') {
-        // Admin changed room schedule — refresh available rooms if slot is selected
+        // Admin changed room schedule — invalidate cache and refresh
+        _invalidateRoomSched();
+        loadSlotGrid();
         const day = document.getElementById('regDay')?.value;
         if (day) loadRooms();
       }

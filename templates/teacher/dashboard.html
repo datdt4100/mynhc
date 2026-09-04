@@ -1082,5 +1082,27 @@ function updateCounts() {
     .catch(() => {});
 }
 setInterval(updateCounts, 5000);
+
+// ── Real-time updates via SSE ──
+(function() {
+  const es = new EventSource('/stream/changes');
+  es.onmessage = function(e) {
+    try {
+      const ev = JSON.parse(e.data);
+      if (ev.type === 'class') {
+        // Another teacher registered a class — refresh slot grid if same grade
+        const curGrade = parseInt(document.getElementById('regGrade')?.value);
+        if (curGrade && ev.grade == curGrade) {
+          loadSlotGrid();
+        }
+      } else if (ev.type === 'schedule') {
+        // Admin changed room schedule — refresh available rooms if slot is selected
+        const day = document.getElementById('regDay')?.value;
+        if (day) loadRooms();
+      }
+    } catch (_) {}
+  };
+  es.onerror = function() { es.close(); };
+})();
 </script>
 {% endblock %}

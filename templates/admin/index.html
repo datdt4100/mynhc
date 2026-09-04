@@ -373,17 +373,37 @@
     </div>
   </div>
 
-  <!-- ── Rooms ── -->
+  <!-- ── Lịch phòng (gộp) ── -->
   <div class="section-card mb-4">
-    <div class="section-card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-      <span><i class="bi bi-door-open-fill me-2" style="color:#0EA5E9;"></i>Danh sách phòng học (<span id="room-count">{{ room_count }}</span> phòng)</span>
-      <div class="d-flex gap-2 flex-wrap align-items-center">
+    <div class="section-card-header" style="flex-direction:column; align-items:stretch; gap:10px;">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <span>
+          <i class="bi bi-calendar3 me-2" style="color:#0EA5E9;"></i>
+          Lịch phòng
+          <span style="font-size:.75rem; font-weight:400; color:#64748B; margin-left:6px;">
+            <span id="room-count">{{ room_count }}</span> phòng
+            {% if busy_room_count %} · <span id="busy-rooms-count">{{ busy_room_count }}</span> khung giờ bận{% endif %}
+          </span>
+        </span>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px; font-size:.78rem;"
+                onclick="openScheduleEditor()">
+          <i class="bi bi-pencil-square me-1"></i>Chỉnh sửa
+        </button>
+        <button class="btn btn-sm fw-semibold" style="background:#16A34A; color:#fff; border-radius:8px; font-size:.78rem;"
+                onclick="openAddRoomModal()">
+          <i class="bi bi-plus-circle me-1"></i>Thêm phòng
+        </button>
         <label class="btn btn-sm fw-semibold" style="background:#16A34A; color:#fff; border-radius:8px; font-size:.78rem; cursor:pointer; margin:0;">
           <i class="bi bi-upload me-1"></i>Tải lên
-          <input type="file" id="roomFileInput" accept=".xlsx,.xls" style="display:none;" onchange="uploadRooms(this)">
+          <input type="file" id="busyFileInput" accept=".xlsx,.xls" style="display:none;" onchange="uploadBusyRooms(this)">
         </label>
-        <button class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
-                onclick="clearRooms()">
+        <a href="{{ url_for('admin_rooms_busy_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px; font-size:.78rem;">
+          <i class="bi bi-download me-1"></i>Tải file mẫu
+        </a>
+        <button class="btn btn-sm btn-outline-danger fw-semibold ms-auto" style="border-radius:8px; font-size:.78rem;"
+                onclick="clearAllRooms()">
           <i class="bi bi-trash3 me-1"></i>Xoá tất cả
         </button>
       </div>
@@ -397,35 +417,9 @@
           {% endfor %}
         </div>
         {% else %}
-        <p class="text-muted" style="font-size:.84rem; margin:0;">Chưa có phòng học nào. Tải lên file Excel để thêm.</p>
+        <p class="text-muted" style="font-size:.84rem; margin:0;">Chưa có phòng nào. Thêm thủ công hoặc tải lên file lịch theo mẫu.</p>
         {% endif %}
       </div>
-    </div>
-  </div>
-
-  <!-- ── Phòng bận ngoài ── -->
-  <div class="section-card mb-4">
-    <div class="section-card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-      <span><i class="bi bi-calendar-x me-2" style="color:#DC2626;"></i>Lịch phòng bận <span style="font-size:.75rem; font-weight:400; color:#64748B;">(từ file ngoài)</span></span>
-      <div class="d-flex gap-2 flex-wrap align-items-center">
-        <a href="{{ url_for('admin_rooms_busy_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px; font-size:.78rem;">
-          <i class="bi bi-download me-1"></i>Tải file mẫu
-        </a>
-        <label class="btn btn-sm fw-semibold" style="background:#16A34A; color:#fff; border-radius:8px; font-size:.78rem; cursor:pointer; margin:0;">
-          <i class="bi bi-upload me-1"></i>Tải lên
-          <input type="file" id="busyFileInput" accept=".xlsx,.xls" style="display:none;" onchange="uploadBusyRooms(this)">
-        </label>
-        <button class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
-                onclick="clearBusyRooms()">
-          <i class="bi bi-trash3 me-1"></i>Xoá lịch bận
-        </button>
-      </div>
-    </div>
-    <div class="section-card-body">
-      <p class="text-muted mb-0" style="font-size:.83rem;" id="busy-rooms-status">
-        {{ busy_room_count }} khung giờ bận được ghi nhận.
-        Upload file Excel theo mẫu: cột 1=STT, cột 2=Tên phòng, cột 3=Tiết, cột 4-9=Sáng T2-T7, cột 10-15=Chiều T2-T7. Đánh dấu <strong>x</strong> vào ô bận.
-      </p>
     </div>
   </div>
 
@@ -670,6 +664,77 @@
   </div>
 
 </div><!-- /container -->
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: Lịch phòng (editor)
+══════════════════════════════════════════ -->
+<div class="modal fade" id="modalScheduleEditor" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width:96vw;">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#075985,#0EA5E9); border:none;">
+        <h5 class="modal-title fw-bold text-white">
+          <i class="bi bi-calendar3 me-2"></i>Lịch phòng
+        </h5>
+        <div class="d-flex gap-2 align-items-center">
+          <div class="d-flex align-items-center gap-2 me-2" style="font-size:.73rem; color:rgba(255,255,255,.8);">
+            <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#FEE2E2;border:1px solid #FCA5A5;"></span>Bận
+            <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#F0FDF4;border:1px solid #86EFAC;margin-left:4px;"></span>Rảnh
+          </div>
+          <button type="button" class="btn btn-sm fw-bold" style="background:#fff;color:#0369A1;border-radius:8px;font-size:.8rem;" onclick="saveSchedule()">
+            <i class="bi bi-save me-1"></i>Lưu
+          </button>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+      </div>
+      <div class="modal-body p-0" style="overflow:auto; max-height:calc(90vh - 60px);">
+        <div id="schedEditorError" class="alert alert-danger d-none m-3 mb-0"></div>
+        <div id="schedEditorWrap"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: Thêm phòng học
+══════════════════════════════════════════ -->
+<div class="modal fade" id="modalAddRoom" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#075985,#0EA5E9); border:none;">
+        <h5 class="modal-title fw-bold text-white">
+          <i class="bi bi-door-open me-2"></i>Thêm phòng học
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div id="addRoomError" class="alert alert-danger d-none mb-3"></div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold" style="font-size:.85rem;">Tên phòng <span class="text-danger">*</span></label>
+          <input type="text" id="newRoomName" class="form-control custom-input" placeholder="VD: A101, Hội trường B..." maxlength="50">
+        </div>
+        <div>
+          <div class="fw-semibold mb-2" style="font-size:.85rem; color:#0c4a6e;">
+            Lịch bận <span class="text-muted fw-normal" style="font-size:.78rem;">(bấm vào ô để đánh dấu bận — mặc định rảnh hết)</span>
+          </div>
+          <div id="addRoomGrid"></div>
+        </div>
+      </div>
+      <div class="modal-footer border-top" style="padding:14px 20px;">
+        <div class="me-auto d-flex align-items-center gap-2" style="font-size:.77rem; color:#64748B;">
+          <span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#FEE2E2;border:1.5px solid #FCA5A5;"></span>Bận
+          <span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#F0FDF4;border:1.5px solid #86EFAC;margin-left:6px;"></span>Rảnh
+        </div>
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal" style="border-radius:8px;">Hủy</button>
+        <button type="button" class="btn btn-primary-custom" style="border-radius:8px; min-height:38px; padding:7px 22px;"
+                onclick="submitAddRoom()">
+          <i class="bi bi-check2 me-1"></i>Thêm phòng
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 
 <!-- ══════════════════════════════════════════
@@ -947,16 +1012,16 @@ async function uploadRooms(input) {
   } catch { showAlert('Lỗi kết nối.', 'error'); }
 }
 
-function clearRooms() {
+function clearAllRooms() {
   showConfirm(
-    'Xoá danh sách phòng học?',
-    'Toàn bộ phòng học sẽ bị xoá vĩnh viễn. Thao tác không thể hoàn tác.',
+    'Xoá toàn bộ lịch phòng?',
+    'Toàn bộ phòng học và lịch phòng bận sẽ bị xoá vĩnh viễn. Thao tác không thể hoàn tác.',
     async function() {
       try {
-        const res  = await fetch('/admin/rooms/clear', { method: 'POST' });
-        const data = await res.json();
-        if (data.ok) { showAlert('Đã xoá phòng học.', 'success'); setTimeout(() => location.reload(), 800); }
-        else showAlert(data.error || 'Lỗi khi xoá.', 'error');
+        await fetch('/admin/rooms/clear',      { method: 'POST' });
+        await fetch('/admin/rooms/busy-clear', { method: 'POST' });
+        showAlert('Đã xoá toàn bộ lịch phòng.', 'success');
+        setTimeout(() => location.reload(), 800);
       } catch { showAlert('Lỗi kết nối.', 'error'); }
     },
     { confirmText: 'Xoá tất cả', confirmClass: 'btn-danger' }
@@ -968,37 +1033,337 @@ async function uploadBusyRooms(input) {
   const fd = new FormData();
   fd.append('file', input.files[0]);
   input.value = '';
-  const status = document.getElementById('busy-rooms-status');
-  status.textContent = 'Đang xử lý...';
   try {
     const res  = await fetch('/admin/rooms/busy-upload', { method: 'POST', body: fd });
     const data = await res.json();
     if (data.ok) {
-      showAlert(`Đã ghi nhận ${data.added} khung giờ bận.`, 'success');
-      status.innerHTML = `<strong>${data.added}</strong> khung giờ bận được ghi nhận.`;
+      const synced = data.rooms_synced || 0;
+      showAlert(`Đã ghi nhận ${data.added} khung giờ bận. Đồng bộ ${synced} phòng.`, 'success');
+      setTimeout(() => location.reload(), 1200);
     } else {
       showAlert(data.error || 'Lỗi tải file.', 'error');
-      status.textContent = 'Lỗi khi xử lý file.';
     }
   } catch { showAlert('Lỗi kết nối.', 'error'); }
 }
 
-function clearBusyRooms() {
-  showConfirm(
-    'Xoá lịch phòng bận?',
-    'Toàn bộ lịch phòng bận từ file ngoài sẽ bị xoá.',
-    async function() {
-      try {
-        const res  = await fetch('/admin/rooms/busy-clear', { method: 'POST' });
-        const data = await res.json();
-        if (data.ok) {
-          showAlert('Đã xoá lịch phòng bận.', 'success');
-          document.getElementById('busy-rooms-status').textContent = '0 khung giờ bận được ghi nhận.';
-        } else showAlert(data.error || 'Lỗi khi xoá.', 'error');
-      } catch { showAlert('Lỗi kết nối.', 'error'); }
-    },
-    { confirmText: 'Xoá lịch bận', confirmClass: 'btn-danger' }
-  );
+// ── Thêm phòng thủ công ──
+const _DAYS   = [2,3,4,5,6,7];
+const _DAYNAMES = {2:'T2',3:'T3',4:'T4',5:'T5',6:'T6',7:'T7'};
+const _SESSIONS = [{key:'morning',label:'Buổi Sáng'},{key:'afternoon',label:'Buổi Chiều'}];
+let _busySet = new Set(); // "dow_ses_tiet"
+
+function _busyKey(d, s, t) { return `${d}_${s}_${t}`; }
+
+function _buildAddRoomGrid() {
+  _busySet.clear();
+  let html = `<div style="overflow-x:auto;">
+  <table style="border-collapse:collapse; min-width:420px; width:100%;">
+    <thead>
+      <tr>
+        <th style="padding:4px 8px; font-size:.72rem; color:#64748B; font-weight:600; width:80px;"></th>`;
+  for (const d of _DAYS) html += `<th style="padding:4px 4px; text-align:center; font-size:.75rem; color:#0369A1; font-weight:700;">${_DAYNAMES[d]}</th>`;
+  html += `</tr></thead><tbody>`;
+
+  for (const ses of _SESSIONS) {
+    html += `<tr><td colspan="7" style="padding:6px 8px 2px; font-weight:700; color:#475569; font-size:.72rem;">${ses.label}</td></tr>`;
+    for (let tiet = 1; tiet <= 4; tiet++) {
+      html += `<tr><td style="padding:3px 8px; font-size:.75rem; color:#64748B; font-weight:600; white-space:nowrap;">Tiết ${tiet}</td>`;
+      for (const d of _DAYS) {
+        const key = _busyKey(d, ses.key, tiet);
+        html += `<td style="padding:3px 4px;">
+          <div id="rc_${key}" data-day="${d}" data-ses="${ses.key}" data-tiet="${tiet}"
+               onclick="toggleBusy('${key}')"
+               style="height:28px; border-radius:6px; background:#F0FDF4; border:1.5px solid #86EFAC;
+                      cursor:pointer; transition:background .12s, border-color .12s;">
+          </div></td>`;
+      }
+      html += `</tr>`;
+    }
+  }
+  html += `</tbody></table></div>`;
+  document.getElementById('addRoomGrid').innerHTML = html;
+}
+
+function toggleBusy(key) {
+  const el = document.getElementById('rc_' + key);
+  if (!el) return;
+  if (_busySet.has(key)) {
+    _busySet.delete(key);
+    el.style.background = '#F0FDF4';
+    el.style.borderColor = '#86EFAC';
+  } else {
+    _busySet.add(key);
+    el.style.background = '#FEE2E2';
+    el.style.borderColor = '#FCA5A5';
+  }
+}
+
+function openAddRoomModal() {
+  document.getElementById('newRoomName').value = '';
+  document.getElementById('addRoomError').classList.add('d-none');
+  _buildAddRoomGrid();
+  new bootstrap.Modal(document.getElementById('modalAddRoom')).show();
+}
+
+async function submitAddRoom() {
+  const errEl = document.getElementById('addRoomError');
+  errEl.classList.add('d-none');
+  const name = document.getElementById('newRoomName').value.trim();
+  if (!name) {
+    errEl.textContent = 'Vui lòng nhập tên phòng.';
+    errEl.classList.remove('d-none');
+    return;
+  }
+  const busy = [];
+  for (const key of _busySet) {
+    const [d, ses, t] = key.split('_');
+    busy.push({ day_of_week: parseInt(d), session_type: ses, tiet: parseInt(t) });
+  }
+  try {
+    const res  = await fetch('/admin/rooms/add-manual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ room_name: name, busy })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('modalAddRoom')).hide();
+      showAlert(`Đã thêm phòng ${name}.`, 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      errEl.textContent = data.error || 'Lỗi khi thêm phòng.';
+      errEl.classList.remove('d-none');
+    }
+  } catch {
+    errEl.textContent = 'Lỗi kết nối máy chủ.';
+    errEl.classList.remove('d-none');
+  }
+}
+
+
+// ════════════════════════════════════════
+// Schedule Editor
+// ════════════════════════════════════════
+let _schedRooms = [];
+let _schedBusy  = {};   // {room → Set<"dow_ses_tiet">}
+let _dragActive = false;
+let _dragValue  = null; // true = busy, false = free
+
+const _SD = [2,3,4,5,6,7];
+const _SDN = {2:'T2',3:'T3',4:'T4',5:'T5',6:'T6',7:'T7'};
+const _SS = [{key:'morning',label:'Buổi Sáng'},{key:'afternoon',label:'Buổi Chiều'}];
+
+function _sk(d,s,t){ return `${d}_${s}_${t}`; }
+function _esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _rid(r){ return r.replace(/[^a-zA-Z0-9]/g,'_'); }
+
+async function openScheduleEditor() {
+  document.getElementById('schedEditorError').classList.add('d-none');
+  document.getElementById('schedEditorWrap').innerHTML = '<div class="p-4 text-center text-muted">Đang tải...</div>';
+  new bootstrap.Modal(document.getElementById('modalScheduleEditor')).show();
+  try {
+    const data = await (await fetch('/admin/rooms/schedule')).json();
+    _schedRooms = [...(data.rooms || [])];
+    _schedBusy  = {};
+    for (const [room, keys] of Object.entries(data.busy || {}))
+      _schedBusy[room] = new Set(keys);
+    _renderSched();
+  } catch {
+    document.getElementById('schedEditorWrap').innerHTML = '<div class="p-4 text-danger">Lỗi tải dữ liệu.</div>';
+  }
+}
+
+function _renderSched() {
+  if (!_schedRooms.length) {
+    document.getElementById('schedEditorWrap').innerHTML =
+      '<div class="p-4 text-center text-muted">Chưa có phòng nào.</div>';
+    return;
+  }
+  const TH = 'padding:5px 7px;background:linear-gradient(135deg,#075985,#0EA5E9);color:#fff;font-size:.7rem;font-weight:700;text-align:center;white-space:nowrap;border:1px solid rgba(255,255,255,.2);';
+  const TH0 = TH + 'text-align:left;position:sticky;top:0;z-index:8;';
+  const TH1 = TH + 'position:sticky;top:0;z-index:7;';
+  const W0 = 110, W1 = 40;
+
+  let h = `<table id="schedTable" style="border-collapse:collapse;user-select:none;min-width:700px;width:100%;">
+  <thead><tr>
+    <th rowspan="2" style="${TH0}left:0;min-width:${W0}px;z-index:9;">Phòng</th>
+    <th rowspan="2" style="${TH1}position:sticky;left:${W0}px;min-width:${W1}px;z-index:8;">Tiết</th>`;
+  for (const ses of _SS) h += `<th colspan="6" style="${TH}">${ses.label}</th>`;
+  h += `</tr><tr>`;
+  for (const ses of _SS)
+    for (const d of _SD)
+      h += `<th style="${TH}top:28px;">${_SDN[d]}</th>`;
+  h += `</tr></thead><tbody>`;
+
+  for (const room of _schedRooms) {
+    for (let tiet = 1; tiet <= 4; tiet++) {
+      h += `<tr>`;
+      if (tiet === 1) {
+        h += `<td rowspan="4" class="sched-room-cell" data-room="${_esc(room)}"
+          style="padding:5px 7px;border:1px solid #E2E8F0;vertical-align:middle;text-align:center;
+                 background:#F8FAFC;position:sticky;left:0;z-index:3;min-width:${W0}px;">
+          <div style="display:flex;align-items:center;gap:3px;justify-content:center;flex-wrap:wrap;">
+            <span class="sched-room-name" id="rn_${_rid(room)}"
+                  style="font-size:.75rem;font-weight:700;color:#0c4a6e;">${_esc(room)}</span>
+            <button class="sched-edit-btn" data-room="${_esc(room)}"
+                    style="background:none;border:none;cursor:pointer;color:#0EA5E9;font-size:.7rem;padding:1px 2px;line-height:1;flex-shrink:0;">
+              <i class="bi bi-pencil"></i></button>
+            <button class="sched-del-btn" data-room="${_esc(room)}"
+                    style="background:none;border:none;cursor:pointer;color:#DC2626;font-size:.7rem;padding:1px 2px;line-height:1;flex-shrink:0;">
+              <i class="bi bi-trash"></i></button>
+          </div></td>`;
+      }
+      h += `<td style="padding:3px 4px;border:1px solid #E2E8F0;text-align:center;font-size:.7rem;color:#64748B;font-weight:600;
+                        background:#FAFBFC;position:sticky;left:${W0}px;z-index:2;">${tiet}</td>`;
+      for (const ses of _SS) {
+        for (const dow of _SD) {
+          const key  = _sk(dow, ses.key, tiet);
+          const busy = (_schedBusy[room] || new Set()).has(key);
+          h += `<td style="padding:2px 3px;border:1px solid #E2E8F0;">
+            <div class="sched-cell" data-room="${_esc(room)}" data-key="${key}"
+                 style="height:22px;border-radius:4px;cursor:pointer;transition:background .07s;
+                        background:${busy?'#FEE2E2':'#F0FDF4'};border:1.5px solid ${busy?'#FCA5A5':'#86EFAC'};"></div></td>`;
+        }
+      }
+      h += `</tr>`;
+    }
+    h += `<tr><td colspan="14" style="padding:0;background:#CBD5E1;height:1px;"></td></tr>`;
+  }
+  h += `</tbody></table>`;
+  document.getElementById('schedEditorWrap').innerHTML = h;
+
+  const tbl = document.getElementById('schedTable');
+  tbl.addEventListener('mousedown',  _smDown);
+  tbl.addEventListener('mouseover',  _smOver);
+  tbl.addEventListener('touchstart', _stStart, {passive:false});
+  tbl.addEventListener('touchmove',  _stMove,  {passive:false});
+  tbl.addEventListener('touchend',   () => { _dragActive=false; });
+  document.addEventListener('mouseup', () => { _dragActive=false; });
+
+  // Edit & delete room buttons
+  tbl.querySelectorAll('.sched-edit-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); _editRoomName(btn.dataset.room); });
+  });
+  tbl.querySelectorAll('.sched-del-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const room = btn.dataset.room;
+      showConfirm(`Xoá phòng "${room}"?`,
+        `Phòng <strong>${_esc(room)}</strong> và toàn bộ lịch bận sẽ bị xoá ngay khỏi hệ thống.`,
+        async () => {
+          try {
+            const res  = await fetch('/admin/rooms/delete', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({room_name: room}),
+            });
+            const data = await res.json();
+            if (data.ok) {
+              const idx = _schedRooms.indexOf(room);
+              if (idx !== -1) _schedRooms.splice(idx, 1);
+              delete _schedBusy[room];
+              _renderSched();
+              const cnt = document.getElementById('room-count');
+              if (cnt) cnt.textContent = _schedRooms.length;
+              showAlert(`Đã xoá phòng ${room}.`, 'success');
+            } else {
+              showAlert(data.error || 'Lỗi khi xoá.', 'error');
+            }
+          } catch { showAlert('Lỗi kết nối.', 'error'); }
+        },
+        { confirmText: 'Xoá', confirmClass: 'btn-danger' }
+      );
+    });
+  });
+}
+
+function _smDown(e) {
+  const cell = e.target.closest('.sched-cell');
+  if (!cell) return;
+  e.preventDefault();
+  _dragActive = true;
+  _dragValue  = !(_schedBusy[cell.dataset.room]||new Set()).has(cell.dataset.key);
+  _applyCell(cell);
+}
+function _smOver(e) {
+  if (!_dragActive) return;
+  const cell = e.target.closest('.sched-cell');
+  if (cell) _applyCell(cell);
+}
+function _stStart(e) {
+  const t = e.touches[0];
+  const cell = document.elementFromPoint(t.clientX, t.clientY)?.closest('.sched-cell');
+  if (!cell) return;
+  e.preventDefault();
+  _dragActive = true;
+  _dragValue  = !(_schedBusy[cell.dataset.room]||new Set()).has(cell.dataset.key);
+  _applyCell(cell);
+}
+function _stMove(e) {
+  if (!_dragActive) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  const cell = document.elementFromPoint(t.clientX, t.clientY)?.closest('.sched-cell');
+  if (cell) _applyCell(cell);
+}
+function _applyCell(cell) {
+  const room = cell.dataset.room, key = cell.dataset.key;
+  if (!_schedBusy[room]) _schedBusy[room] = new Set();
+  if (_dragValue) { _schedBusy[room].add(key); cell.style.background='#FEE2E2'; cell.style.borderColor='#FCA5A5'; }
+  else            { _schedBusy[room].delete(key); cell.style.background='#F0FDF4'; cell.style.borderColor='#86EFAC'; }
+}
+
+function _editRoomName(oldName) {
+  const span = document.getElementById('rn_' + _rid(oldName));
+  if (!span) return;
+  const inp = document.createElement('input');
+  inp.value = oldName;
+  inp.style.cssText = 'font-size:.75rem;font-weight:700;color:#0c4a6e;width:85px;border:1.5px solid #0EA5E9;border-radius:5px;padding:2px 4px;outline:none;';
+  span.replaceWith(inp);
+  inp.focus(); inp.select();
+
+  const commit = () => {
+    const nw = inp.value.trim();
+    if (!nw || nw === oldName) { inp.replaceWith(span); return; }
+    const idx = _schedRooms.indexOf(oldName);
+    if (idx !== -1) _schedRooms[idx] = nw;
+    if (_schedBusy[oldName]) { _schedBusy[nw] = _schedBusy[oldName]; delete _schedBusy[oldName]; }
+    span.textContent = nw;
+    span.id = 'rn_' + _rid(nw);
+    inp.replaceWith(span);
+    document.querySelectorAll('.sched-room-cell, .sched-cell, .sched-edit-btn').forEach(el => {
+      if (el.dataset.room === oldName) el.dataset.room = nw;
+    });
+    const editBtn = span.nextElementSibling;
+    if (editBtn) editBtn.dataset.room = nw;
+  };
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { commit(); e.preventDefault(); }
+    if (e.key === 'Escape') inp.replaceWith(span);
+  });
+}
+
+async function saveSchedule() {
+  const errEl = document.getElementById('schedEditorError');
+  errEl.classList.add('d-none');
+  const busy = {};
+  for (const [room, keySet] of Object.entries(_schedBusy))
+    if (keySet.size) busy[room] = [...keySet];
+  try {
+    const res  = await fetch('/admin/rooms/schedule', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({rooms: _schedRooms, busy}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('modalScheduleEditor')).hide();
+      showAlert('Đã lưu lịch phòng.', 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      errEl.textContent = data.error || 'Lỗi khi lưu.'; errEl.classList.remove('d-none');
+    }
+  } catch { errEl.textContent = 'Lỗi kết nối.'; errEl.classList.remove('d-none'); }
 }
 
 function deleteAccount(type, id, name) {

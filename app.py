@@ -2,8 +2,10 @@ import os
 import re
 import json
 import io
+import time
 import secrets
 import string
+import threading
 import unicodedata
 from functools import wraps
 from datetime import datetime, timezone, timedelta
@@ -32,6 +34,19 @@ from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+
+# ── Concurrency & real-time ──
+_reg_lock    = threading.Lock()   # serialise class registration writes
+_change_ts   = [0.0]              # bumped on any schedule/class change
+_change_lock = threading.Lock()
+
+def _bump(event_type="class", grade=None):
+    """Increment change timestamp and payload for SSE clients."""
+    with _change_lock:
+        _change_ts[0] = time.time()
+        _change_ts.append({"type": event_type, "grade": grade, "ts": _change_ts[0]})
+        if len(_change_ts) > 2:          # keep only latest payload
+            _change_ts[1:] = [_change_ts[-1]]
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///classreg.db")
 if DATABASE_URL.startswith("postgres://"):
@@ -601,6 +616,27 @@ def index():
     return redirect(url_for("login_page"))
 
 
+@app.route("/stream/changes")
+def stream_changes():
+    """SSE: push a JSON event whenever the schedule or class list changes."""
+    def gen():
+        last = 0.0
+        while True:
+            ts = _change_ts[0]
+            if ts != last:
+                last = ts
+                payload = _change_ts[1] if len(_change_ts) > 1 else {"type": "ping", "ts": ts}
+                yield f"data: {json.dumps(payload)}\n\n"
+            else:
+                yield ": ping\n\n"
+            time.sleep(2)
+    return Response(
+        gen(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.route("/login")
 def login_page():
     maintenance = get_setting("maintenance_mode", "0") == "1"
@@ -890,9 +926,11 @@ def teacher_register_class():
     if start_session + duration - 1 > 4:
         return jsonify(ok=False, error="Tiết kết thúc vượt quá tiết 4.")
 
-    subject = session.get("subject_group") or (data.get("subject") or "").strip() or None
+    subject  = session.get("subject_group") or (data.get("subject") or "").strip() or None
     location = (data.get("location") or "").strip() or None
+    end_session = start_session + duration - 1
 
+    # Heavy combo check outside the lock (read-only, can run concurrently)
     if subject:
         new_cls = {"subject": subject, "day_of_week": day_of_week,
                    "session_type": session_type, "start_session": start_session,
@@ -903,26 +941,56 @@ def teacher_register_class():
                 error=f"Học sinh khối {grade} chọn lớp này sẽ không thể ghép đủ các môn khác "
                       f"(0 tổ hợp hợp lệ). Vui lòng chọn thứ/tiết khác.")
 
-    with engine.connect() as conn:
-        result = conn.execute(
-            insert(classes).values(
-                teacher_id=teacher_id,
-                grade=grade,
-                duration=duration,
-                day_of_week=day_of_week,
-                session_type=session_type,
-                start_session=start_session,
-                subject=subject,
-                location=location,
-                max_capacity=50,
-                extra_data=None,
-                is_published=1,
-                created_at=now_vn(),
-            )
-        )
-        conn.commit()
-        class_id = result.inserted_primary_key[0]
+    # Acquire write lock — serialise concurrent registrations
+    with _reg_lock:
+        with engine.begin() as conn:
+            # Re-validate room availability inside the lock
+            if location:
+                room_conflict = conn.execute(
+                    select(classes.c.id).where(and_(
+                        classes.c.day_of_week == day_of_week,
+                        classes.c.session_type == session_type,
+                        classes.c.location == location,
+                        classes.c.start_session <= end_session,
+                        (classes.c.start_session + classes.c.duration - 1) >= start_session,
+                    ))
+                ).first()
+                if room_conflict:
+                    return jsonify(ok=False,
+                        error=f"Phòng {location} vừa được đặt bởi giáo viên khác. Vui lòng chọn phòng khác.")
+                # Also check external busy schedule
+                ext_busy = conn.execute(
+                    select(room_external_busy.c.id).where(and_(
+                        room_external_busy.c.room_name == location,
+                        room_external_busy.c.day_of_week == day_of_week,
+                        room_external_busy.c.session_type == session_type,
+                        room_external_busy.c.tiet >= start_session,
+                        room_external_busy.c.tiet <= end_session,
+                    ))
+                ).first()
+                if ext_busy:
+                    return jsonify(ok=False,
+                        error=f"Phòng {location} đang bận theo lịch đã cài đặt. Vui lòng chọn phòng khác.")
 
+            result = conn.execute(
+                insert(classes).values(
+                    teacher_id=teacher_id,
+                    grade=grade,
+                    duration=duration,
+                    day_of_week=day_of_week,
+                    session_type=session_type,
+                    start_session=start_session,
+                    subject=subject,
+                    location=location,
+                    max_capacity=50,
+                    extra_data=None,
+                    is_published=1,
+                    created_at=now_vn(),
+                )
+            )
+            class_id = result.inserted_primary_key[0]
+
+    _bump(event_type="class", grade=grade)
     return jsonify(ok=True, class_id=class_id)
 
 
@@ -1294,6 +1362,21 @@ def admin_rooms_clear():
     return jsonify(ok=True)
 
 
+@app.route("/admin/rooms/delete", methods=["POST"])
+@admin_required
+def admin_rooms_delete_one():
+    room_name = (request.get_json(force=True).get("room_name") or "").strip()
+    if not room_name:
+        return jsonify(ok=False, error="Thiếu tên phòng.")
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM rooms WHERE name = :n"), {"n": room_name})
+        conn.execute(
+            delete(room_external_busy).where(room_external_busy.c.room_name == room_name)
+        )
+    _bump(event_type="schedule")
+    return jsonify(ok=True)
+
+
 # Header columns in the busy-rooms Excel (cols 4-15, 1-indexed):
 # Sáng T2, Sáng T3, Sáng T4, Sáng T5, Sáng T6, Sáng T7,
 # Chiều T2, Chiều T3, Chiều T4, Chiều T5, Chiều T6, Chiều T7
@@ -1339,6 +1422,7 @@ def admin_rooms_busy_upload():
         added = 0
         current_room = None
         rows_data = list(ws.iter_rows(min_row=2, values_only=True))
+        seen_rooms = []
 
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM room_external_busy"))
@@ -1346,6 +1430,8 @@ def admin_rooms_busy_upload():
                 # Column B (index 1) = room name
                 if row[1] and str(row[1]).strip():
                     current_room = str(row[1]).strip()
+                    if current_room not in seen_rooms:
+                        seen_rooms.append(current_room)
                 # Column C (index 2) = tiết
                 tiet_val = row[2]
                 if not current_room or not tiet_val:
@@ -1368,7 +1454,12 @@ def admin_rooms_busy_upload():
                         ))
                         added += 1
 
-        return jsonify(ok=True, added=added)
+            # Sync room names into rooms table
+            for rn in seen_rooms:
+                conn.execute(text("INSERT OR IGNORE INTO rooms (name) VALUES (:n)"), {"n": rn})
+
+        _bump(event_type="schedule")
+        return jsonify(ok=True, added=added, rooms_synced=len(seen_rooms))
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
@@ -1378,6 +1469,79 @@ def admin_rooms_busy_upload():
 def admin_rooms_busy_clear():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM room_external_busy"))
+    return jsonify(ok=True)
+
+
+@app.route("/admin/rooms/schedule")
+@admin_required
+def admin_rooms_schedule():
+    with engine.connect() as conn:
+        all_rooms = [r.name for r in conn.execute(
+            select(rooms).order_by(rooms.c.name)
+        ).fetchall()]
+        busy_rows = conn.execute(select(room_external_busy)).fetchall()
+    busy_map = {}
+    for r in busy_rows:
+        key = f"{r.day_of_week}_{r.session_type}_{r.tiet}"
+        busy_map.setdefault(r.room_name, []).append(key)
+    return jsonify(rooms=all_rooms, busy=busy_map)
+
+
+@app.route("/admin/rooms/schedule", methods=["POST"])
+@admin_required
+def admin_rooms_schedule_save():
+    data = request.get_json(force=True)
+    room_list = [str(r).strip() for r in data.get("rooms", []) if str(r).strip()]
+    busy_map  = data.get("busy", {})
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM rooms"))
+        conn.execute(text("DELETE FROM room_external_busy"))
+        for rn in room_list:
+            conn.execute(text("INSERT INTO rooms (name) VALUES (:n)"), {"n": rn})
+            for key in busy_map.get(rn, []):
+                parts = key.split("_", 2)
+                if len(parts) != 3:
+                    continue
+                try:
+                    dow, ses, tiet = int(parts[0]), parts[1], int(parts[2])
+                except ValueError:
+                    continue
+                if dow not in range(2, 8) or ses not in ("morning", "afternoon") or tiet not in (1, 2, 3, 4):
+                    continue
+                conn.execute(insert(room_external_busy).values(
+                    room_name=rn, day_of_week=dow, session_type=ses, tiet=tiet,
+                ))
+    _bump(event_type="schedule")
+    return jsonify(ok=True)
+
+
+@app.route("/admin/rooms/add-manual", methods=["POST"])
+@admin_required
+def admin_rooms_add_manual():
+    data = request.get_json(force=True)
+    room_name = (data.get("room_name") or "").strip()
+    if not room_name:
+        return jsonify(ok=False, error="Tên phòng không được để trống.")
+    busy = data.get("busy", [])  # [{day_of_week, session_type, tiet}, ...]
+
+    with engine.begin() as conn:
+        conn.execute(text("INSERT OR IGNORE INTO rooms (name) VALUES (:n)"), {"n": room_name})
+        conn.execute(delete(room_external_busy).where(room_external_busy.c.room_name == room_name))
+        for slot in busy:
+            try:
+                dow  = int(slot["day_of_week"])
+                ses  = slot["session_type"]
+                tiet = int(slot["tiet"])
+            except (KeyError, ValueError, TypeError):
+                continue
+            if dow not in range(2, 8) or ses not in ("morning", "afternoon") or tiet not in (1, 2, 3, 4):
+                continue
+            conn.execute(insert(room_external_busy).values(
+                room_name=room_name,
+                day_of_week=dow,
+                session_type=ses,
+                tiet=tiet,
+            ))
     return jsonify(ok=True)
 
 
@@ -2534,4 +2698,4 @@ def admin_enrollment_students(class_id):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5051)
+    app.run(debug=True, port=5051, threaded=True)

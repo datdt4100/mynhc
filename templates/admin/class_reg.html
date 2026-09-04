@@ -247,26 +247,17 @@
                           </span>
                         </td>
                         <td>
-                          {% set ci = conflict_info.get(cls.id, (100, 0, 0)) %}
-                          {% set min_c = ci[0] %}
-                          {% set blocked = ci[1] %}
-                          {% set total = ci[2] %}
-                          {% if total == 0 %}
-                            {# môn không trong tổ hợp nào #}
-                          {% elif blocked == total %}
-                            <span class="conflict-badge conflict-red" title="Học sinh chọn lớp này không hoàn thành được tổ hợp nào">
-                              🔴 {{ blocked }}/{{ total }} TH = 0
+                          {% set combos = conflict_info.get(cls.id, 100) %}
+                          {% if combos == 0 %}
+                            <span class="conflict-badge conflict-red" title="Không còn cách nào để HS chọn đủ tất cả môn">
+                              🔴 0 combo
                             </span>
-                          {% elif blocked > 0 %}
-                            <span class="conflict-badge conflict-yellow" title="{{ blocked }}/{{ total }} tổ hợp bị chặn, min combo = {{ min_c }}">
-                              🟡 {{ blocked }}/{{ total }} TH = 0
-                            </span>
-                          {% elif min_c <= 3 %}
-                            <span class="conflict-badge conflict-yellow" title="Ít tổ hợp khả dụng (min = {{ min_c }})">
-                              🟡 min {{ min_c }} combo
+                          {% elif combos <= 3 %}
+                            <span class="conflict-badge conflict-yellow" title="Chỉ còn {{ combos }} cách ghép lịch hợp lệ">
+                              🟡 {{ combos }} combo
                             </span>
                           {% else %}
-                            <span class="conflict-badge conflict-green">🟢 OK</span>
+                            <span class="conflict-badge conflict-green" title="{{ combos if combos < 100 else '≥100' }} cách ghép lịch hợp lệ">🟢 OK</span>
                           {% endif %}
                         </td>
                         <td style="font-size:.73rem; color:#64748B; white-space:nowrap;">

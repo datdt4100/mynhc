@@ -25,32 +25,6 @@ from openpyxl.utils import get_column_letter
 # ---------------------------------------------------------------------------
 
 # Môn bắt buộc (tất cả học sinh đều phải học, không nằm trong tổ hợp)
-COMPULSORY_SUBJECTS = {'Toán', 'Ngữ Văn', 'Tiếng Anh'}
-
-# 21 tổ hợp môn tự chọn (mỗi HS chọn 1 tổ hợp → học đủ 4 môn trong đó)
-TO_HOP = {
-    'TH01': ['Tin học', 'Hóa học', 'Vật lí', 'Công nghệ'],
-    'TH02': ['Tin học', 'Hóa học', 'Vật lí', 'Sinh học'],
-    'TH03': ['Tin học', 'Hóa học', 'Vật lí', 'Địa lí'],
-    'TH04': ['Tin học', 'Hóa học', 'Vật lí', 'Mĩ thuật'],
-    'TH05': ['Tin học', 'Hóa học', 'Vật lí', 'Âm nhạc'],
-    'TH06': ['Tin học', 'Hóa học', 'Vật lí', 'Giáo dục kinh tế và pháp luật'],
-    'TH07': ['Tin học', 'Vật lí', 'Giáo dục kinh tế và pháp luật', 'Địa lí'],
-    'TH08': ['Tin học', 'Vật lí', 'Giáo dục kinh tế và pháp luật', 'Công nghệ'],
-    'TH09': ['Tin học', 'Vật lí', 'Giáo dục kinh tế và pháp luật', 'Âm nhạc'],
-    'TH10': ['Tin học', 'Vật lí', 'Giáo dục kinh tế và pháp luật', 'Sinh học'],
-    'TH11': ['Tin học', 'Vật lí', 'Giáo dục kinh tế và pháp luật', 'Mĩ thuật'],
-    'TH12': ['Tin học', 'Hóa học', 'Sinh học', 'Giáo dục kinh tế và pháp luật'],
-    'TH13': ['Tin học', 'Hóa học', 'Sinh học', 'Mĩ thuật'],
-    'TH14': ['Tin học', 'Hóa học', 'Sinh học', 'Âm nhạc'],
-    'TH15': ['Tin học', 'Hóa học', 'Sinh học', 'Địa lí'],
-    'TH16': ['Tin học', 'Địa lí', 'Giáo dục kinh tế và pháp luật', 'Sinh học'],
-    'TH17': ['Tin học', 'Địa lí', 'Giáo dục kinh tế và pháp luật', 'Âm nhạc'],
-    'TH18': ['Tin học', 'Địa lí', 'Giáo dục kinh tế và pháp luật', 'Mĩ thuật'],
-    'TH19': ['Hóa học', 'Sinh học', 'Giáo dục kinh tế và pháp luật', 'Vật lí'],
-    'TH20': ['Hóa học', 'Sinh học', 'Giáo dục kinh tế và pháp luật', 'Địa lí'],
-    'TH21': ['Tin học', 'Vật lí', 'Công nghệ', 'Mĩ thuật'],
-}
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -480,10 +454,7 @@ def _time_conflict(student_id, new_class):
 
 
 def _norm_subj(s):
-    """Chuẩn hoá tên môn để khớp với TO_HOP (vd: Vật lý → Vật lí)."""
-    if not s:
-        return s
-    return s.strip().replace('Vật lý', 'Vật lí').replace('Vật Lý', 'Vật lí')
+    return s.strip() if s else s
 
 
 def _slots_overlap_dict(a, b):
@@ -540,77 +511,33 @@ def count_valid_combos(grade, extra_class=None, cap=100):
 
 def count_combos_including(grade, new_class, cap=100):
     """
-    Count valid combos for students who choose new_class, using tổ hợp constraints.
-    - Môn bắt buộc (Toán/Văn/Anh): kiểm tra tất cả 21 tổ hợp, trả về min.
-    - Môn tự chọn: kiểm tra chỉ những tổ hợp có môn đó, trả về min.
-    - Môn không thuộc tổ hợp nào và không bắt buộc: dùng thuật toán cũ.
-    Returns 0 nếu HS chọn lớp này không thể hoàn thành bất kỳ tổ hợp nào.
+    Đếm số cách HS có thể chọn mỗi môn 1 lớp (tất cả môn hiện có) mà không trùng giờ,
+    trong đó bắt buộc chọn new_class. Trả về 0 nếu không có cách nào hợp lệ.
     """
-    subj_norm = _norm_subj(new_class.get("subject", ""))
-    if subj_norm in COMPULSORY_SUBJECTS:
-        relevant_th = list(TO_HOP.values())
-    else:
-        relevant_th = [subs for subs in TO_HOP.values() if subj_norm in subs]
-
     by_subj = _build_by_subj(grade, new_class)
     new_slot = {k: new_class[k] for k in ("day_of_week", "session_type",
                                            "start_session", "duration")}
-
-    if not relevant_th:
-        # Môn không trong TO_HOP và không bắt buộc — dùng thuật toán tự do cũ
-        subjects = sorted(s for s in by_subj if s != subj_norm)
-        if not subjects:
-            return 1
-        count = [0]
-        _backtrack(by_subj, subjects, 0, [new_slot], count, cap)
-        return count[0]
-
-    min_n = cap + 1
-    for th_subs in relevant_th:
-        required = list(COMPULSORY_SUBJECTS) + list(th_subs)
-        others = [s for s in required if s != subj_norm and by_subj.get(s)]
-        count = [0]
-        _backtrack(by_subj, others, 0, [new_slot], count, cap)
-        n = count[0]
-        if n < min_n:
-            min_n = n
-        if min_n == 0:
-            break
-    return min_n if min_n <= cap else cap
+    subj = _norm_subj(new_class.get("subject", ""))
+    others = sorted(s for s in by_subj if s != subj)
+    if not others:
+        return 1
+    count = [0]
+    _backtrack(by_subj, others, 0, [new_slot], count, cap)
+    return count[0]
 
 
 def _class_impact(grade, cls_dict, cap=100):
-    """
-    Tính mức độ ảnh hưởng của một lớp ĐÃ ĐĂNG KÝ (có trong DB).
-    Trả về (min_combos, blocked_th, total_relevant_th).
-    """
-    subj_norm = _norm_subj(cls_dict.get("subject", ""))
-    if subj_norm in COMPULSORY_SUBJECTS:
-        relevant_th = list(TO_HOP.values())
-        total = 21
-    else:
-        relevant_th = [subs for subs in TO_HOP.values() if subj_norm in subs]
-        total = len(relevant_th)
-
-    if not relevant_th:
-        return (cap, 0, 0)
-
-    by_subj = _build_by_subj(grade)  # lớp này đã có trong DB, không cần extra
+    """Số cách hợp lệ khi lớp đã có trong DB (dùng cho badge admin)."""
+    by_subj = _build_by_subj(grade)
     fix_slot = {k: cls_dict[k] for k in ("day_of_week", "session_type",
                                           "start_session", "duration")}
-    min_n = cap + 1
-    blocked = 0
-    for th_subs in relevant_th:
-        required = list(COMPULSORY_SUBJECTS) + list(th_subs)
-        others = [s for s in required if s != subj_norm and by_subj.get(s)]
-        count = [0]
-        _backtrack(by_subj, others, 0, [fix_slot], count, cap)
-        n = count[0]
-        if n < min_n:
-            min_n = n
-        if n == 0:
-            blocked += 1
-    return (min_n if min_n <= cap else cap, blocked, total)
+    subj = _norm_subj(cls_dict.get("subject", ""))
+    others = sorted(s for s in by_subj if s != subj)
+    if not others:
+        return cap
+    count = [0]
+    _backtrack(by_subj, others, 0, [fix_slot], count, cap)
+    return count[0]
 
 
 def teacher_required(f):
@@ -1356,38 +1283,18 @@ def api_slot_impact_grid():
     if not (1 <= dur <= 4):
         return jsonify(error="Số tiết không hợp lệ"), 400
 
-    subject = session.get("subject_group")
-    # Build by_subj once and reuse for all slot checks
+    subject = _norm_subj(session.get("subject_group") or "")
     by_subj = _build_by_subj(grade)
-    subj_norm = _norm_subj(subject or "")
-    if subj_norm in COMPULSORY_SUBJECTS:
-        relevant_th = list(TO_HOP.values())
-    else:
-        relevant_th = [subs for subs in TO_HOP.values() if subj_norm in subs]
 
     def _combos_for_slot(dow, ses, start):
         new_slot = {"day_of_week": dow, "session_type": ses,
                     "start_session": start, "duration": dur}
-        # temporarily add this slot to by_subj for checking
         tmp = {k: list(v) for k, v in by_subj.items()}
-        tmp.setdefault(subj_norm, []).append(new_slot)
-        if not relevant_th:
-            others = sorted(s for s in tmp if s != subj_norm)
-            count = [0]
-            _backtrack(tmp, others, 0, [new_slot], count, 100)
-            return count[0]
-        min_n = 101
-        for th_subs in relevant_th:
-            required = list(COMPULSORY_SUBJECTS) + list(th_subs)
-            others = [s for s in required if s != subj_norm and tmp.get(s)]
-            count = [0]
-            _backtrack(tmp, others, 0, [new_slot], count, 100)
-            n = count[0]
-            if n < min_n:
-                min_n = n
-            if min_n == 0:
-                break
-        return min_n if min_n <= 100 else 100
+        tmp.setdefault(subject, []).append(new_slot)
+        others = sorted(s for s in tmp if s != subject)
+        count = [0]
+        _backtrack(tmp, others, 0, [new_slot], count, 100)
+        return count[0]
 
     grid = {}
     for dow in range(2, 8):
@@ -1976,12 +1883,11 @@ def admin_class_reg():
             ).scalar()
             enrollment_counts[c.id] = cnt
 
-    # Tính conflict badge cho từng lớp (min_combos, blocked_th, total_th)
     conflict_info = {}
     for c in all_classes:
-        cls_dict = {"subject": c.subject, "grade": c.grade,
-                    "day_of_week": c.day_of_week, "session_type": c.session_type,
-                    "start_session": c.start_session, "duration": c.duration}
+        cls_dict = {"subject": c.subject, "day_of_week": c.day_of_week,
+                    "session_type": c.session_type, "start_session": c.start_session,
+                    "duration": c.duration}
         conflict_info[c.id] = _class_impact(c.grade, cls_dict)
 
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"

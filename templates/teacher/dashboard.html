@@ -306,10 +306,12 @@
       <span>Chưa mở đăng ký lớp. Vui lòng chờ quản trị viên mở đăng ký.</span>
     </div>
     {% else %}
-    <div class="alert d-flex align-items-center gap-2 mb-3"
-         style="background:#FFF7ED; border:1px solid #FDBA74; color:#92400E; border-radius:10px;">
-      <i class="bi bi-cursor-fill"></i>
-      <span>Click vào ô trống trong lịch để đăng ký mở lớp mới.</span>
+    <div class="d-flex justify-content-end mb-3">
+      <button type="button" class="btn btn-primary-custom px-4"
+              onclick="openRegModal()"
+              style="border-radius:10px; font-weight:700; font-size:.9rem;">
+        <i class="bi bi-plus-circle me-2"></i>Đăng ký lớp mới
+      </button>
     </div>
     {% endif %}
 
@@ -374,12 +376,7 @@
                     {% endif %}
                   </td>
                 {% else %}
-                  <td class="cal-cell cal-cell--empty {% if teacher_reg_open %}clickable{% endif %}"
-                      {% if teacher_reg_open %}onclick="openRegModal({{ d }}, 'morning', {{ t }})"{% endif %}>
-                    {% if teacher_reg_open %}
-                    <div class="cal-add-hint"><i class="bi bi-plus-lg"></i></div>
-                    {% endif %}
-                  </td>
+                  <td class="cal-cell cal-cell--empty"></td>
                 {% endif %}
               {% endfor %}
             </tr>
@@ -424,12 +421,7 @@
                     {% endif %}
                   </td>
                 {% else %}
-                  <td class="cal-cell cal-cell--empty {% if teacher_reg_open %}clickable{% endif %}"
-                      {% if teacher_reg_open %}onclick="openRegModal({{ d }}, 'afternoon', {{ t }})"{% endif %}>
-                    {% if teacher_reg_open %}
-                    <div class="cal-add-hint"><i class="bi bi-plus-lg"></i></div>
-                    {% endif %}
-                  </td>
+                  <td class="cal-cell cal-cell--empty"></td>
                 {% endif %}
               {% endfor %}
             </tr>
@@ -444,17 +436,10 @@
         <div class="legend-item">
           <div class="legend-dot" style="background:#F0FDF4; border-left:3px solid #22C55E; border-radius:3px;"></div> Đã đăng ký
         </div>
-        {% if teacher_reg_open %}
-        <div class="legend-item">
-          <div class="legend-dot" style="background:#F1F5F9; border:1.5px dashed #94A3B8; border-radius:3px;"></div>
-          Trống (click để đăng ký)
-        </div>
-        {% else %}
         <div class="legend-item">
           <div class="legend-dot" style="background:#F1F5F9; border:1px solid #E2E8F0; border-radius:3px;"></div>
           Trống
         </div>
-        {% endif %}
         <button type="button" class="ms-auto btn btn-sm"
                 style="background:#EFF6FF; color:#0369A1; border:1px solid #BAE6FD; border-radius:20px; font-size:.75rem; padding:4px 12px;"
                 onclick="openRoomSchedule()">
@@ -605,10 +590,10 @@
 const DAY_NAMES = {2:'Thứ Hai',3:'Thứ Ba',4:'Thứ Tư',5:'Thứ Năm',6:'Thứ Sáu',7:'Thứ Bảy'};
 const SES_NAMES = {morning:'Buổi Sáng', afternoon:'Buổi Chiều'};
 
-function openRegModal(day, session, tiét) {
-  document.getElementById('regDay').value     = day;
-  document.getElementById('regSession').value = session;
-  document.getElementById('regStart').value   = tiét;
+function openRegModal() {
+  document.getElementById('regDay').value     = '';
+  document.getElementById('regSession').value = '';
+  document.getElementById('regStart').value   = '';
   document.getElementById('regError').classList.add('d-none');
   document.getElementById('durationWarning').classList.add('d-none');
   document.getElementById('regDuration').value = '1';
@@ -660,13 +645,24 @@ async function loadSlotGrid() {
     loading.style.display = 'none';
     grid.style.display = '';
 
-    // Re-apply selection highlight if slot still valid for new duration
+    // Re-highlight nếu GV đã chọn slot trước đó (khi đổi khối/số tiết)
     const day = parseInt(document.getElementById('regDay').value);
     const ses = document.getElementById('regSession').value;
     const ss  = parseInt(document.getElementById('regStart').value);
     if (day && ses && ss) {
-      _highlightAndBadge(day, ses, ss, _gridData);
-      await loadRooms();
+      const key = `${day}_${ses}_${ss}`;
+      const dur = parseInt(document.getElementById('regDuration').value);
+      if (_gridData[key] !== undefined && _gridData[key] !== -1 && ss + dur - 1 <= 4) {
+        _highlightAndBadge(day, ses, ss, _gridData);
+        await loadRooms();
+      } else {
+        // slot cũ không còn hợp lệ với duration mới → reset
+        document.getElementById('regDay').value = '';
+        document.getElementById('regSession').value = '';
+        document.getElementById('regStart').value = '';
+        document.getElementById('roomWrap').style.display = 'none';
+        document.getElementById('impactBadge').classList.add('d-none');
+      }
     }
   } catch {
     loading.innerHTML = '<span class="text-danger" style="font-size:.8rem;">Không tải được dữ liệu slot.</span>';
@@ -836,6 +832,12 @@ async function loadRooms() {
 function submitReg() {
   const errEl = document.getElementById('regError');
   errEl.classList.add('d-none');
+
+  if (!document.getElementById('regDay').value) {
+    errEl.textContent = 'Vui lòng chọn một slot từ bảng bên trên.';
+    errEl.classList.remove('d-none');
+    return;
+  }
 
   const btn = document.getElementById('regSubmitBtn');
   if (btn.dataset.impactBlock) {

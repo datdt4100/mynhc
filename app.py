@@ -915,14 +915,16 @@ def teacher_register_class():
 
     if grade not in (10, 11, 12):
         return jsonify(ok=False, error="Khối phải là 10, 11 hoặc 12.")
-    if not (1 <= duration <= 4):
-        return jsonify(ok=False, error="Số tiết phải từ 1 đến 4.")
+    if duration not in (2, 4):
+        return jsonify(ok=False, error="Số tiết phải là 2 hoặc 4.")
     if not (2 <= day_of_week <= 7):
         return jsonify(ok=False, error="Thứ phải từ 2 đến 7.")
     if session_type not in ("morning", "afternoon"):
         return jsonify(ok=False, error="Buổi không hợp lệ.")
-    if not (1 <= start_session <= 4):
-        return jsonify(ok=False, error="Tiết bắt đầu phải từ 1 đến 4.")
+    if duration == 2 and start_session not in (1, 3):
+        return jsonify(ok=False, error="2 tiết chỉ được bắt đầu từ tiết 1 (tiết 1–2) hoặc tiết 3 (tiết 3–4).")
+    if duration == 4 and start_session != 1:
+        return jsonify(ok=False, error="4 tiết phải bắt đầu từ tiết 1.")
     if start_session + duration - 1 > 4:
         return jsonify(ok=False, error="Tiết kết thúc vượt quá tiết 4.")
 
@@ -1644,8 +1646,8 @@ def api_slot_impact_grid():
     dur   = request.args.get("duration", type=int)
     if grade not in (10, 11, 12):
         return jsonify(error="Khối không hợp lệ"), 400
-    if not (1 <= dur <= 4):
-        return jsonify(error="Số tiết không hợp lệ"), 400
+    if dur not in (2, 4):
+        return jsonify(error="Số tiết phải là 2 hoặc 4"), 400
 
     subject = _norm_subj(session.get("subject_group") or "")
     by_subj = _build_by_subj(grade)
@@ -1661,13 +1663,14 @@ def api_slot_impact_grid():
         _backtrack(tmp, others, 0, [new_slot], count, 100)
         return count[0]
 
+    valid_starts = [1, 3] if dur == 2 else [1]
     grid = {}
     for dow in range(2, 8):
         for ses in ("morning", "afternoon"):
             for start in range(1, 5):
                 key = f"{dow}_{ses}_{start}"
-                if start + dur - 1 > 4:
-                    grid[key] = -1  # invalid
+                if start not in valid_starts:
+                    grid[key] = -1  # not an allowed starting tiet
                 else:
                     grid[key] = _combos_for_slot(dow, ses, start)
     return jsonify(grid=grid, max_combos=max_combos)

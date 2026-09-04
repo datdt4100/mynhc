@@ -540,9 +540,9 @@
           <div class="d-flex align-items-center justify-content-between mb-1">
             <label class="form-label fw-semibold mb-0" style="font-size:.85rem;">Chọn slot <span class="text-danger">*</span></label>
             <div class="d-flex gap-2" style="font-size:.72rem;">
-              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#86EFAC;"></span> Tốt (≥4 combo)</span>
-              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#FDE68A;"></span> Ít combo</span>
-              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#FCA5A5;"></span> Chặn</span>
+              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#86EFAC;"></span> Tốt (≥20%)</span>
+              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#FDE68A;"></span> Hạn chế (&lt;20%)</span>
+              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#FCA5A5;"></span> Chặn (0%)</span>
             </div>
           </div>
           <div id="slotGridLoading" class="text-center text-muted py-3" style="font-size:.82rem;">
@@ -620,7 +620,8 @@ function checkDuration() {
 
 // ── Slot impact grid ─────────────────────────────────────────────────────────
 const DAY_SHORT = {2:'T2',3:'T3',4:'T4',5:'T5',6:'T6',7:'T7'};
-let _gridData = null; // cache grid results for current grade+duration
+let _gridData    = null;
+let _maxCombos   = null;
 
 async function loadSlotGrid() {
   const grade = parseInt(document.getElementById('regGrade').value);
@@ -636,12 +637,14 @@ async function loadSlotGrid() {
   delete btn.dataset.impactBlock;
   btn.disabled = false;
   _gridData = null;
+  _maxCombos = null;
 
   try {
     const res  = await fetch(`/api/slot-impact-grid?grade=${grade}&duration=${dur}`);
     const data = await res.json();
-    _gridData = data.grid;
-    _renderSlotGrid(_gridData, dur);
+    _gridData  = data.grid;
+    _maxCombos = data.max_combos;
+    _renderSlotGrid(_gridData, _maxCombos, dur);
     loading.style.display = 'none';
     grid.style.display = '';
 
@@ -669,7 +672,22 @@ async function loadSlotGrid() {
   }
 }
 
-function _renderSlotGrid(gridData, dur) {
+function _slotColor(val, maxCombos) {
+  if (val === 0) return ['#FEE2E2', '#FCA5A5'];           // đỏ: 0%
+  if (maxCombos <= 0) return ['#DCFCE7', '#86EFAC'];      // không có gì để mất → xanh
+  const ratio = val / maxCombos;
+  if (ratio >= 0.2) return ['#DCFCE7', '#86EFAC'];        // xanh: ≥20%
+  return ['#FEF9C3', '#FDE68A'];                          // vàng: 0–20%
+}
+
+function _slotTitle(val, maxCombos) {
+  if (val === 0) return 'Chặn — 0/' + (maxCombos || '?') + ' combo';
+  if (maxCombos <= 0) return `${val} combo`;
+  const pct = Math.round(val / maxCombos * 100);
+  return `${val}/${maxCombos} combo (${pct}%)`;
+}
+
+function _renderSlotGrid(gridData, maxCombos, dur) {
   const days = [2,3,4,5,6,7];
   const sessions = [
     {key:'morning',   label:'Buổi Sáng', starts:[1,2,3,4]},
@@ -698,11 +716,8 @@ function _renderSlotGrid(gridData, dur) {
           // Invalid slot
           html += `<td style="padding:2px;"><div style="height:32px; border-radius:6px; background:#F1F5F9; border:1px solid #E2E8F0; cursor:not-allowed; opacity:.4;"></div></td>`;
         } else {
-          const [bg, border, title] = val === 0
-            ? ['#FEE2E2','#FCA5A5', `Chặn — 0 combo`]
-            : val <= 3
-              ? ['#FEF9C3','#FDE68A', `Cảnh báo — ${val} combo`]
-              : ['#DCFCE7','#86EFAC', `Tốt — ${val >= 100 ? '≥100' : val} combo`];
+          const [bg, border] = _slotColor(val, maxCombos);
+          const title = _slotTitle(val, maxCombos);
           html += `<td style="padding:2px;" title="${title}">
             <div class="slot-cell" data-day="${d}" data-ses="${ses.key}" data-start="${start}" data-combos="${val}"
                  style="height:32px; border-radius:6px; background:${bg}; border:2px solid ${border};
@@ -764,23 +779,28 @@ function _highlightAndBadge(day, ses, start, gridData) {
   const endTiet = start + dur - 1;
   const slotLabel = `${dayName} ${sesName} tiết ${start}${dur > 1 ? '–' + endTiet : ''}`;
 
+  const mx = _maxCombos || 0;
+  const ratio = mx > 0 ? combos / mx : (combos > 0 ? 1 : 0);
+  const pct   = mx > 0 ? Math.round(ratio * 100) : null;
+  const pctLabel = pct !== null ? ` (${pct}%)` : '';
+  const comboLabel = mx > 0 ? `${combos}/${mx}` : `${combos}`;
+
   if (combos === 0) {
     badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEE2E2;color:#B91C1C;';
     icon.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
-    textEl.textContent = `${slotLabel} — HS chọn lớp này sẽ không ghép được tổ hợp nào. Hãy chọn slot khác.`;
+    textEl.textContent = `${slotLabel} — Chặn hoàn toàn (0/${mx || '?'} combo). Hãy chọn slot khác.`;
     btn.dataset.impactBlock = '1';
     btn.disabled = true;
-  } else if (combos <= 3) {
+  } else if (ratio < 0.2) {
     badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEF9C3;color:#92400E;';
     icon.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i>';
-    textEl.textContent = `${slotLabel} — Cảnh báo: chỉ còn ${combos} cách ghép tổ hợp. Nên ưu tiên ô xanh.`;
+    textEl.textContent = `${slotLabel} — Hạn chế: ${comboLabel} combo${pctLabel}. Nên ưu tiên ô xanh.`;
     delete btn.dataset.impactBlock;
     btn.disabled = false;
   } else {
     badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#DCFCE7;color:#166534;';
     icon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
-    const label = combos >= 100 ? '≥100' : combos;
-    textEl.textContent = `${slotLabel} — Tốt! ${label} cách ghép tổ hợp. HS có nhiều lựa chọn.`;
+    textEl.textContent = `${slotLabel} — Tốt! ${comboLabel} combo${pctLabel}. HS có nhiều lựa chọn.`;
     delete btn.dataset.impactBlock;
     btn.disabled = false;
   }

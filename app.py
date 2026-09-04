@@ -540,6 +540,19 @@ def _class_impact(grade, cls_dict, cap=100):
     return count[0]
 
 
+def count_combos_max(grade, subject, cap=100):
+    """Số combo tối đa có thể có giữa các môn khác (không tính môn subject).
+    Đây là mức trần — slot nào cho actual == max thì không làm mất combo nào."""
+    by_subj = _build_by_subj(grade)
+    subj = _norm_subj(subject or "")
+    others = sorted(s for s in by_subj if s != subj)
+    if not others:
+        return cap
+    count = [0]
+    _backtrack(by_subj, others, 0, [], count, cap)
+    return count[0]
+
+
 def teacher_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -1285,6 +1298,7 @@ def api_slot_impact_grid():
 
     subject = _norm_subj(session.get("subject_group") or "")
     by_subj = _build_by_subj(grade)
+    max_combos = count_combos_max(grade, subject)
 
     def _combos_for_slot(dow, ses, start):
         new_slot = {"day_of_week": dow, "session_type": ses,
@@ -1305,7 +1319,7 @@ def api_slot_impact_grid():
                     grid[key] = -1  # invalid
                 else:
                     grid[key] = _combos_for_slot(dow, ses, start)
-    return jsonify(grid=grid, cap=100)
+    return jsonify(grid=grid, max_combos=max_combos)
 
 
 @app.route("/api/available-rooms")

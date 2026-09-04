@@ -72,6 +72,16 @@
     border: 1px solid #BAE6FD;
   }
 
+  /* ── Conflict badges ── */
+  .conflict-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    border-radius: 6px; padding: 2px 7px; font-size: .68rem; font-weight: 700;
+    white-space: nowrap;
+  }
+  .conflict-red   { background: #FEE2E2; color: #B91C1C; }
+  .conflict-yellow{ background: #FEF9C3; color: #92400E; }
+  .conflict-green { background: #DCFCE7; color: #166534; }
+
   /* ── Responsive ── */
   .table-responsive-admin { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 </style>
@@ -198,6 +208,7 @@
                         <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; min-width:130px; white-space:nowrap;">Địa điểm</th>
                         <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; width:80px; white-space:nowrap;">Sĩ số</th>
                         <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; white-space:nowrap;" class="text-center">HS đăng ký</th>
+                        <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; white-space:nowrap;">Tổ hợp</th>
                         <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; white-space:nowrap;">Thời gian đăng ký</th>
                         <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; width:60px; text-align:center;">Xóa</th>
                       </tr>
@@ -234,6 +245,29 @@
                                 style="font-size:.78rem; border-radius:8px;">
                             {{ ec }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}
                           </span>
+                        </td>
+                        <td>
+                          {% set ci = conflict_info.get(cls.id, (100, 0, 0)) %}
+                          {% set min_c = ci[0] %}
+                          {% set blocked = ci[1] %}
+                          {% set total = ci[2] %}
+                          {% if total == 0 %}
+                            {# môn không trong tổ hợp nào #}
+                          {% elif blocked == total %}
+                            <span class="conflict-badge conflict-red" title="Học sinh chọn lớp này không hoàn thành được tổ hợp nào">
+                              🔴 {{ blocked }}/{{ total }} TH = 0
+                            </span>
+                          {% elif blocked > 0 %}
+                            <span class="conflict-badge conflict-yellow" title="{{ blocked }}/{{ total }} tổ hợp bị chặn, min combo = {{ min_c }}">
+                              🟡 {{ blocked }}/{{ total }} TH = 0
+                            </span>
+                          {% elif min_c <= 3 %}
+                            <span class="conflict-badge conflict-yellow" title="Ít tổ hợp khả dụng (min = {{ min_c }})">
+                              🟡 min {{ min_c }} combo
+                            </span>
+                          {% else %}
+                            <span class="conflict-badge conflict-green">🟢 OK</span>
+                          {% endif %}
                         </td>
                         <td style="font-size:.73rem; color:#64748B; white-space:nowrap;">
                           {{ cls.created_at or '—' }}

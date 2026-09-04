@@ -21,6 +21,38 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 
 # ---------------------------------------------------------------------------
+# Tổ hợp môn học — cấu hình của trường
+# ---------------------------------------------------------------------------
+
+# Môn bắt buộc (tất cả học sinh đều phải học, không nằm trong tổ hợp)
+COMPULSORY_SUBJECTS = {'Toán', 'Ngữ Văn', 'Tiếng Anh'}
+
+# 21 tổ hợp môn tự chọn (mỗi HS chọn 1 tổ hợp → học đủ 4 môn trong đó)
+TO_HOP = {
+    'TH01': ['Tin học', 'Hóa học', 'Vật lí', 'Công nghệ'],
+    'TH02': ['Tin học', 'Hóa học', 'Vật lí', 'Sinh học'],
+    'TH03': ['Tin học', 'Hóa học', 'Vật lí', 'Địa lí'],
+    'TH04': ['Tin học', 'Hóa học', 'Vật lí', 'Mĩ thuật'],
+    'TH05': ['Tin học', 'Hóa học', 'Vật lí', 'Âm nhạc'],
+    'TH06': ['Tin học', 'Hóa học', 'Vật lí', 'Giáo dục kinh tế và pháp luật'],
+    'TH07': ['Tin học', 'Vật lí', 'Giáo dục kinh tế và pháp luật', 'Địa lí'],
+    'TH08': ['Tin học', 'Vật lí', 'Giáo dục kinh tế và pháp luật', 'Công nghệ'],
+    'TH09': ['Tin học', 'Vật lí', 'Giáo dục kinh tế và pháp luật', 'Âm nhạc'],
+    'TH10': ['Tin học', 'Vật lí', 'Giáo dục kinh tế và pháp luật', 'Sinh học'],
+    'TH11': ['Tin học', 'Vật lí', 'Giáo dục kinh tế và pháp luật', 'Mĩ thuật'],
+    'TH12': ['Tin học', 'Hóa học', 'Sinh học', 'Giáo dục kinh tế và pháp luật'],
+    'TH13': ['Tin học', 'Hóa học', 'Sinh học', 'Mĩ thuật'],
+    'TH14': ['Tin học', 'Hóa học', 'Sinh học', 'Âm nhạc'],
+    'TH15': ['Tin học', 'Hóa học', 'Sinh học', 'Địa lí'],
+    'TH16': ['Tin học', 'Địa lí', 'Giáo dục kinh tế và pháp luật', 'Sinh học'],
+    'TH17': ['Tin học', 'Địa lí', 'Giáo dục kinh tế và pháp luật', 'Âm nhạc'],
+    'TH18': ['Tin học', 'Địa lí', 'Giáo dục kinh tế và pháp luật', 'Mĩ thuật'],
+    'TH19': ['Hóa học', 'Sinh học', 'Giáo dục kinh tế và pháp luật', 'Vật lí'],
+    'TH20': ['Hóa học', 'Sinh học', 'Giáo dục kinh tế và pháp luật', 'Địa lí'],
+    'TH21': ['Tin học', 'Vật lí', 'Công nghệ', 'Mĩ thuật'],
+}
+
+# ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 
@@ -182,14 +214,28 @@ def _seed_sample_data(conn):
     HASH_C = ("scrypt:32768:8:1$PIxoXbtxyA8eFs4W$e29a01ff956f6ba958858c770e1297b00315561b413a670eec8fe5ac33b72b251065ca9e3b6a4c632ca1f6dd00a45b1b3173c358bdfd4235634f20088073d44d")
 
     teacher_rows = [
-        (1, "Nguyen Thi Lan",      "079200000001", "Nữ",  "Toán", "lan@school.edu.vn",          HASH_A, 0, 0),
-        (2, "Nguyễn Thị Lan",      "079301000001", "Nữ",  "Toán", "nhc@nhc.com",                HASH_A, 0, 0),
-        (3, "Trần Văn Minh",       "079301000002", "Nam", "Văn",  "minh@nhc.edu.vn",            HASH_A, 0, 0),
-        (4, "Lê Thị Hoa",          "079301000003", "Nữ",  "Anh",  "dtd@gmail.com",              HASH_A, 0, 0),
-        (5, "Phạm Quốc Hùng",      "079301000004", "Nam", "Lý",   "hung.phamquoc@nhc.edu.vn",   HASH_B, 0, 0),
-        (6, "Đỗ Thị Mai",          "079301000005", "Nữ",  "Hóa",  "mai.dothi@nhc.edu.vn",       HASH_B, 0, 0),
-        (7, "Nguyễn Văn Bình",     "079100000007", "Nam", "Sử",   None,                         None,   1, 0),
-        (8, "Trần Thị Kim Anh",    "079100000008", "Nữ",  "Địa",  None,                         None,   1, 0),
+        # id, full_name, cccd, gender, subject_group, email, pw_hash, is_first_login, must_change_pw
+        (1,  "Nguyễn Thị Kim Oanh",      "079301000001", "Nữ",  "Hóa học",    "ntko1486@gmail.com",              HASH_A, 0, 0),
+        (2,  "Nguyễn Phi Công",           "079301000002", "Nam", "Tiếng Anh",  "mrphicongnguyen@gmail.com",       HASH_A, 0, 0),
+        (3,  "Lê Thị Hà",                 "079301000003", "Nữ",  "Hóa học",    "hahoanhc03@gmail.com",            HASH_A, 0, 0),
+        (4,  "Cao Thị Hà",                "079301000004", "Nữ",  "Tiếng Anh",  "caothiha779@gmail.com",           HASH_A, 0, 0),
+        (5,  "Hoàng Thị Thu Hằng",        "079301000005", "Nữ",  "Tiếng Anh",  "hoanghangnhc@gmail.com",          HASH_A, 0, 0),
+        (6,  "Lê Thanh Nhã",              "079301000006", "Nữ",  "Toán",       "thanhnha4872@gmail.com",          HASH_A, 0, 0),
+        (7,  "Nguyễn Minh Hiếu",          "079301000007", "Nam", "Ngữ Văn",    "nguyenhieu2312@gmail.com",        HASH_A, 0, 0),
+        (8,  "Nguyễn Thị Hoài Dung",      "079301000008", "Nữ",  "Tiếng Anh",  "nguyendungnhc@gmail.com",         HASH_A, 0, 0),
+        (9,  "Lâm Thị Hồng Loan",         "079301000009", "Nữ",  "Tiếng Anh",  "lamthihongloan2903@gmail.com",    HASH_A, 0, 0),
+        (10, "Tạ Thanh Thúy",             "079301000010", "Nữ",  "Tiếng Anh",  "thuythuya04@gmail.com",           HASH_A, 0, 0),
+        (11, "Lê Đông Hải",               "079301000011", "Nam", "Vật lý",     "ledonghai22091984@gmail.com",     HASH_A, 0, 0),
+        (12, "Nguyễn Thị Kim Tuyền",      "079301000012", "Nữ",  "Toán",       "ntktuyen2008@gmail.com",          HASH_A, 0, 0),
+        (13, "Vũ Thị Lý",                 "079301000013", "Nữ",  "Toán",       "vuthily1978@gmail.com",           HASH_A, 0, 0),
+        (14, "Chu Thị Phương",            "079301000014", "Nữ",  "Ngữ Văn",    "phuongchu17@gmail.com",           HASH_A, 0, 0),
+        (15, "Trần Quang Minh",           "079301000015", "Nam", "Hóa học",    "quangminhnhc@gmail.com",          HASH_A, 0, 0),
+        (16, "Nguyễn Thị Mỹ Hạnh",       "079301000016", "Nữ",  "Vật lý",     "bhanhtk20@gmail.com",             HASH_A, 0, 0),
+        (17, "Nguyễn Thanh Tú",           "079301000017", "Nam", "Vật lý",     "nguyenthanhtu66666666@gmail.com", HASH_A, 0, 0),
+        (18, "Lê Thị Trúc Lâm",          "079301000018", "Nữ",  "Vật lý",     "lethitruclam38086@gmail.com",     HASH_A, 0, 0),
+        (19, "Quách Huỳnh Hạnh",          "079301000019", "Nữ",  "Toán",       "huynhhanhquach@gmail.com",        HASH_A, 0, 0),
+        (20, "Hứa Thị Hạ Phương",         "079301000020", "Nữ",  "Toán",       "phuonghua1587@gmail.com",         HASH_A, 0, 0),
+        (21, "Nguyễn Đoàn Thùy Ngân",    "079301000021", "Nữ",  "Ngữ Văn",    "ngannhc2710@gmail.com",           HASH_A, 0, 0),
     ]
     for r in teacher_rows:
         conn.execute(text(
@@ -220,25 +266,45 @@ def _seed_sample_data(conn):
         ), {"id": r[0], "fn": r[1], "cccd": r[2], "cn": r[3], "gr": r[4], "em": r[5], "ph": r[6], "ifl": r[7], "mcp": r[8]})
 
     class_rows = [
-        (1,  1, 10, 2, 2, "morning",   1, "Toán", "Phòng 1 - Khu A- Tầng 1",   50),
-        (3,  1, 11, 2, 3, "afternoon", 2, "Toán", "Phòng 16 - Khu B - Tầng 1", 50),
-        (4,  4, 10, 3, 2, "morning",   2, "Anh",  "Phòng 17 - Khu B - Tầng 1", 50),
-        (5,  4, 10, 2, 3, "afternoon", 3, "Anh",  "Phòng 19 - Khu B - Tầng 2", 50),
-        (6,  4, 10, 1, 5, "morning",   2, "Anh",  "Phòng 20 - Khu B - Tầng 2", 50),
-        (7,  2, 10, 1, 4, "morning",   2, "Toán", "Phòng 32 - Khu D - Tầng 1", 50),
-        (8,  2, 10, 3, 5, "morning",   1, "Toán", "Phòng 2 - Khu A- Tầng 1",   50),
-        (9,  2, 10, 3, 3, "afternoon", 1, "Toán", "Phòng 25 - Khu C - Tầng 1", 50),
-        (10, 2, 10, 1, 6, "afternoon", 2, "Toán", "Phòng 3 - Khu A- Tầng 1",   50),
-        (11, 2, 11, 2, 4, "morning",   1, "Toán", "Phòng 18 - Khu B - Tầng 1", 50),
-        (12, 3, 11, 2, 2, "morning",   1, "Văn",  "Phòng 4 - Khu A- Tầng 1",   50),
-        (13, 3, 12, 2, 4, "morning",   3, "Văn",  "Phòng 5 - Khu A- Tầng 1",   50),
-        (14, 4, 11, 2, 3, "afternoon", 2, "Anh",  "Phòng 21 - Khu B - Tầng 2", 50),
-        (15, 4, 12, 2, 5, "morning",   2, "Anh",  "Phòng 22 - Khu B - Tầng 3", 50),
-        (16, 5, 10, 2, 3, "morning",   3, "Lý",   "Phòng 26 - Khu C - Tầng 1", 50),
-        (17, 5, 11, 2, 5, "afternoon", 1, "Lý",   "Phòng 27 - Khu C - Tầng 1", 50),
-        (18, 6, 11, 2, 6, "morning",   1, "Hóa",  "Phòng 28 - Khu C - Tầng 3", 50),
-        (19, 6, 12, 2, 2, "afternoon", 2, "Hóa",  "Phòng 29 - Khu C - Tầng 3", 50),
-        (20, 1, 12, 2, 3, "morning",   1, "Toán", "Phòng 6 - Khu A- Tầng 2",   50),
+        # id, teacher_id, grade, duration, day_of_week, session_type, start_session, subject, location, max_cap
+        # ── Khối 10 (19 lớp — dữ liệu production) ────────────────────────────
+        (1,  1,  10, 2, 2, "afternoon", 1, "Hóa học",   "Phòng 1 - Khu A- Tầng 1",   50),  # T2 C t1-2
+        (2,  2,  10, 2, 2, "morning",   3, "Tiếng Anh", "Phòng 13 - Khu A- Tầng 3",  50),  # T2 S t3-4
+        (3,  3,  10, 2, 3, "afternoon", 1, "Hóa học",   "Phòng 32 - Khu D - Tầng 1", 50),  # T3 C t1-2
+        (4,  4,  10, 2, 3, "afternoon", 1, "Tiếng Anh", "Phòng 1 - Khu A- Tầng 1",   50),  # T3 C t1-2
+        (5,  5,  10, 1, 3, "afternoon", 3, "Tiếng Anh", "Phòng 33 - Khu D - Tầng 1", 50),  # T3 C t3
+        (6,  6,  10, 2, 3, "afternoon", 3, "Toán",      "Phòng 32 - Khu D - Tầng 1", 50),  # T3 C t3-4
+        (7,  7,  10, 1, 3, "afternoon", 4, "Ngữ Văn",   "Phòng 36 - Khu D - Tầng 2", 50),  # T3 C t4
+        (8,  5,  10, 1, 3, "afternoon", 4, "Tiếng Anh", "Phòng 33 - Khu D - Tầng 1", 50),  # T3 C t4
+        (9,  8,  10, 2, 4, "afternoon", 1, "Tiếng Anh", "Phòng 16 - Khu B - Tầng 1", 50),  # T4 C t1-2
+        (10, 9,  10, 2, 4, "afternoon", 1, "Tiếng Anh", "Phòng 17 - Khu B - Tầng 1", 50),  # T4 C t1-2
+        (11, 10, 10, 2, 5, "afternoon", 1, "Tiếng Anh", "Phòng 34 - Khu D - Tầng 1", 50),  # T5 C t1-2
+        (12, 11, 10, 2, 5, "afternoon", 1, "Vật lý",    "Phòng 36 - Khu D - Tầng 2", 50),  # T5 C t1-2
+        (13, 12, 10, 2, 5, "afternoon", 1, "Toán",      "Phòng 33 - Khu D - Tầng 1", 50),  # T5 C t1-2
+        (14, 13, 10, 2, 5, "afternoon", 1, "Toán",      "Phòng 38 - Khu D - Tầng 2", 50),  # T5 C t1-2
+        (15, 14, 10, 1, 5, "afternoon", 1, "Ngữ Văn",   "Phòng 32 - Khu D - Tầng 1", 50),  # T5 C t1
+        (16, 4,  10, 4, 5, "afternoon", 1, "Tiếng Anh", "Phòng 2 - Khu A- Tầng 1",   50),  # T5 C t1-4
+        (17, 16, 10, 2, 5, "afternoon", 1, "Vật lý",    "Phòng 37 - Khu D - Tầng 2", 50),  # T5 C t1-2
+        (18, 14, 10, 1, 5, "afternoon", 2, "Ngữ Văn",   "Phòng 32 - Khu D - Tầng 1", 50),  # T5 C t2
+        (19, 15, 10, 2, 5, "afternoon", 3, "Hóa học",   "Phòng 3 - Khu A- Tầng 1",   50),  # T5 C t3-4
+
+        # ── Khối 11 (12 lớp — dữ liệu production) ────────────────────────────
+        (20, 17, 11, 2, 3, "afternoon", 1, "Vật lý",    "Phòng 17 - Khu B - Tầng 1", 50),  # T3 C t1-2
+        (21, 18, 11, 1, 3, "afternoon", 1, "Vật lý",    "Phòng 18 - Khu B - Tầng 1", 50),  # T3 C t1
+        (22, 7,  11, 2, 3, "afternoon", 1, "Ngữ Văn",   "Phòng 11 - Khu A- Tầng 3",  50),  # T3 C t1-2
+        (23, 18, 11, 1, 3, "afternoon", 2, "Vật lý",    "Phòng 18 - Khu B - Tầng 1", 50),  # T3 C t2
+        (24, 7,  11, 1, 3, "afternoon", 3, "Ngữ Văn",   "Phòng 20 - Khu B - Tầng 2", 50),  # T3 C t3
+        (25, 19, 11, 2, 4, "afternoon", 1, "Toán",      "Phòng 1 - Khu A- Tầng 1",   50),  # T4 C t1-2
+        (26, 20, 11, 1, 4, "afternoon", 1, "Toán",      "Phòng 21 - Khu B - Tầng 2", 50),  # T4 C t1
+        (27, 20, 11, 1, 4, "afternoon", 2, "Toán",      "Phòng 21 - Khu B - Tầng 2", 50),  # T4 C t2
+        (28, 21, 11, 1, 4, "afternoon", 2, "Ngữ Văn",   "Phòng 18 - Khu B - Tầng 1", 50),  # T4 C t2
+        (29, 10, 11, 2, 4, "afternoon", 3, "Tiếng Anh", "Phòng 17 - Khu B - Tầng 1", 50),  # T4 C t3-4
+        (30, 21, 11, 1, 4, "afternoon", 3, "Ngữ Văn",   "Phòng 18 - Khu B - Tầng 1", 50),  # T4 C t3
+        (31, 21, 11, 1, 4, "afternoon", 4, "Ngữ Văn",   "Phòng 18 - Khu B - Tầng 1", 50),  # T4 C t4
+
+        # ── Khối 12 (2 lớp — dữ liệu production) ─────────────────────────────
+        (32, 7,  12, 2, 5, "afternoon", 3, "Ngữ Văn",   "Phòng 27 - Khu C - Tầng 1", 50),  # T5 C t3-4
+        (33, 7,  12, 1, 6, "afternoon", 1, "Ngữ Văn",   "Phòng 4 - Khu A- Tầng 1",   50),  # T6 C t1
     ]
     for r in class_rows:
         conn.execute(text(
@@ -246,11 +312,7 @@ def _seed_sample_data(conn):
             "VALUES (:id,:tid,:gr,:dur,:dow,:st,:ss,:subj,:loc,:cap,1)"
         ), {"id": r[0], "tid": r[1], "gr": r[2], "dur": r[3], "dow": r[4], "st": r[5], "ss": r[6], "subj": r[7], "loc": r[8], "cap": r[9]})
 
-    enrollment_rows = [
-        (2,  2, 1),  (3,  2, 5),  (4,  3, 9),  (5,  3, 6),  (6,  5, 8),
-        (7,  7, 12), (8,  7, 17), (9,  8, 11), (10, 8, 18),
-        (11, 11, 13), (12, 11, 15), (13, 12, 20), (14, 12, 19),
-    ]
+    enrollment_rows = []  # no pre-seeded enrollments — students choose from production classes
     for r in enrollment_rows:
         conn.execute(text(
             "INSERT INTO enrollments (id,student_id,class_id) VALUES (:id,:sid,:cid)"
@@ -414,6 +476,140 @@ def _time_conflict(student_id, new_class):
         if new_start <= c_end and c_start <= new_end:
             return c
     return None
+
+
+def _norm_subj(s):
+    """Chuẩn hoá tên môn để khớp với TO_HOP (vd: Vật lý → Vật lí)."""
+    if not s:
+        return s
+    return s.strip().replace('Vật lý', 'Vật lí').replace('Vật Lý', 'Vật lí')
+
+
+def _slots_overlap_dict(a, b):
+    if int(a["day_of_week"]) != int(b["day_of_week"]):
+        return False
+    if a["session_type"] != b["session_type"]:
+        return False
+    a_end = int(a["start_session"]) + int(a["duration"]) - 1
+    b_end = int(b["start_session"]) + int(b["duration"]) - 1
+    return int(a["start_session"]) <= b_end and int(b["start_session"]) <= a_end
+
+
+def _build_by_subj(grade, extra_class=None):
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(classes.c.day_of_week, classes.c.session_type,
+                   classes.c.start_session, classes.c.duration, classes.c.subject)
+            .where(classes.c.grade == grade)
+        ).fetchall()
+    by_subj = {}
+    for r in rows:
+        d = {"day_of_week": r.day_of_week, "session_type": r.session_type,
+             "start_session": r.start_session, "duration": r.duration}
+        by_subj.setdefault(_norm_subj(r.subject), []).append(d)
+    if extra_class:
+        d = {k: extra_class[k] for k in ("day_of_week", "session_type", "start_session", "duration")}
+        by_subj.setdefault(_norm_subj(extra_class.get("subject", "")), []).append(d)
+    return by_subj
+
+
+def _backtrack(by_subj, subjects, idx, selected, count, cap):
+    if count[0] >= cap:
+        return
+    if idx == len(subjects):
+        count[0] += 1
+        return
+    for cls in by_subj[subjects[idx]]:
+        if not any(_slots_overlap_dict(cls, s) for s in selected):
+            selected.append(cls)
+            _backtrack(by_subj, subjects, idx + 1, selected, count, cap)
+            selected.pop()
+
+
+def count_valid_combos(grade, extra_class=None, cap=100):
+    """Total valid combinations for grade after adding extra_class."""
+    by_subj = _build_by_subj(grade, extra_class)
+    subjects = sorted(by_subj.keys())
+    if not subjects:
+        return 0
+    count = [0]
+    _backtrack(by_subj, subjects, 0, [], count, cap)
+    return count[0]
+
+
+def count_combos_including(grade, new_class, cap=100):
+    """
+    Count valid combos for students who choose new_class, using tổ hợp constraints.
+    - Môn bắt buộc (Toán/Văn/Anh): kiểm tra tất cả 21 tổ hợp, trả về min.
+    - Môn tự chọn: kiểm tra chỉ những tổ hợp có môn đó, trả về min.
+    - Môn không thuộc tổ hợp nào và không bắt buộc: dùng thuật toán cũ.
+    Returns 0 nếu HS chọn lớp này không thể hoàn thành bất kỳ tổ hợp nào.
+    """
+    subj_norm = _norm_subj(new_class.get("subject", ""))
+    if subj_norm in COMPULSORY_SUBJECTS:
+        relevant_th = list(TO_HOP.values())
+    else:
+        relevant_th = [subs for subs in TO_HOP.values() if subj_norm in subs]
+
+    by_subj = _build_by_subj(grade, new_class)
+    new_slot = {k: new_class[k] for k in ("day_of_week", "session_type",
+                                           "start_session", "duration")}
+
+    if not relevant_th:
+        # Môn không trong TO_HOP và không bắt buộc — dùng thuật toán tự do cũ
+        subjects = sorted(s for s in by_subj if s != subj_norm)
+        if not subjects:
+            return 1
+        count = [0]
+        _backtrack(by_subj, subjects, 0, [new_slot], count, cap)
+        return count[0]
+
+    min_n = cap + 1
+    for th_subs in relevant_th:
+        required = list(COMPULSORY_SUBJECTS) + list(th_subs)
+        others = [s for s in required if s != subj_norm and by_subj.get(s)]
+        count = [0]
+        _backtrack(by_subj, others, 0, [new_slot], count, cap)
+        n = count[0]
+        if n < min_n:
+            min_n = n
+        if min_n == 0:
+            break
+    return min_n if min_n <= cap else cap
+
+
+def _class_impact(grade, cls_dict, cap=100):
+    """
+    Tính mức độ ảnh hưởng của một lớp ĐÃ ĐĂNG KÝ (có trong DB).
+    Trả về (min_combos, blocked_th, total_relevant_th).
+    """
+    subj_norm = _norm_subj(cls_dict.get("subject", ""))
+    if subj_norm in COMPULSORY_SUBJECTS:
+        relevant_th = list(TO_HOP.values())
+        total = 21
+    else:
+        relevant_th = [subs for subs in TO_HOP.values() if subj_norm in subs]
+        total = len(relevant_th)
+
+    if not relevant_th:
+        return (cap, 0, 0)
+
+    by_subj = _build_by_subj(grade)  # lớp này đã có trong DB, không cần extra
+    fix_slot = {k: cls_dict[k] for k in ("day_of_week", "session_type",
+                                          "start_session", "duration")}
+    min_n = cap + 1
+    blocked = 0
+    for th_subs in relevant_th:
+        required = list(COMPULSORY_SUBJECTS) + list(th_subs)
+        others = [s for s in required if s != subj_norm and by_subj.get(s)]
+        count = [0]
+        _backtrack(by_subj, others, 0, [fix_slot], count, cap)
+        n = count[0]
+        if n < min_n:
+            min_n = n
+        if n == 0:
+            blocked += 1
+    return (min_n if min_n <= cap else cap, blocked, total)
 
 
 def teacher_required(f):
@@ -735,6 +931,16 @@ def teacher_register_class():
 
     subject = session.get("subject_group") or (data.get("subject") or "").strip() or None
     location = (data.get("location") or "").strip() or None
+
+    if subject:
+        new_cls = {"subject": subject, "day_of_week": day_of_week,
+                   "session_type": session_type, "start_session": start_session,
+                   "duration": duration}
+        combos_inc = count_combos_including(grade, new_cls)
+        if combos_inc == 0:
+            return jsonify(ok=False,
+                error=f"Học sinh khối {grade} chọn lớp này sẽ không thể ghép đủ các môn khác "
+                      f"(0 tổ hợp hợp lệ). Vui lòng chọn thứ/tiết khác.")
 
     with engine.connect() as conn:
         result = conn.execute(
@@ -1156,6 +1362,31 @@ def api_available_rooms():
         booked_set = {r.location for r in booked if r.location}
     available = [r for r in all_rooms if r not in booked_set]
     return jsonify(available)
+
+
+@app.route("/api/slot-impact")
+@teacher_required
+def api_slot_impact():
+    try:
+        grade = int(request.args["grade"])
+        dow   = int(request.args["day_of_week"])
+        sess  = request.args["session_type"]
+        start = int(request.args["start_session"])
+        dur   = int(request.args["duration"])
+    except (KeyError, ValueError, TypeError):
+        return jsonify(error="Params không hợp lệ"), 400
+    if grade not in (10, 11, 12):
+        return jsonify(error="Khối không hợp lệ"), 400
+    if sess not in ("morning", "afternoon"):
+        return jsonify(error="Buổi không hợp lệ"), 400
+    if not (1 <= start <= 4) or not (1 <= dur <= 4) or start + dur - 1 > 4:
+        return jsonify(error="Tiết không hợp lệ"), 400
+
+    subject = session.get("subject_group")
+    new_cls = {"subject": subject, "day_of_week": dow, "session_type": sess,
+               "start_session": start, "duration": dur}
+    combos = count_combos_including(grade, new_cls)
+    return jsonify(combos=combos, cap=100)
 
 
 @app.route("/api/room-schedule")
@@ -1675,12 +1906,21 @@ def admin_class_reg():
             ).scalar()
             enrollment_counts[c.id] = cnt
 
+    # Tính conflict badge cho từng lớp (min_combos, blocked_th, total_th)
+    conflict_info = {}
+    for c in all_classes:
+        cls_dict = {"subject": c.subject, "grade": c.grade,
+                    "day_of_week": c.day_of_week, "session_type": c.session_type,
+                    "start_session": c.start_session, "duration": c.duration}
+        conflict_info[c.id] = _class_impact(c.grade, cls_dict)
+
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
     return render_template(
         "admin/class_reg.html",
         all_teachers=all_teachers,
         all_classes=all_classes,
         enrollment_counts=enrollment_counts,
+        conflict_info=conflict_info,
         teacher_reg_open=teacher_reg_open,
         day_name=day_name,
         session_label=session_label,

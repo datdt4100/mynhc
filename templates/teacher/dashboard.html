@@ -550,6 +550,12 @@
           Tiết kết thúc vượt quá tiết 4. Vui lòng giảm số tiết.
         </div>
 
+        <!-- Impact badge -->
+        <div id="impactBadge" class="mt-2 d-none" style="font-size:.8rem; border-radius:8px; padding:7px 11px;">
+          <span id="impactIcon"></span>
+          <span id="impactText" class="ms-1"></span>
+        </div>
+
         <!-- Room selection (shown after tiết + duration are set) -->
         <div id="roomWrap" class="mt-3" style="display:none;">
           <div class="d-flex align-items-center justify-content-between mb-1">
@@ -594,11 +600,14 @@ function openRegModal(day, session, tiét) {
   document.getElementById('regRoom').innerHTML = '<option value="">-- Chọn phòng --</option>';
   document.getElementById('roomWrap').style.display = 'none';
   document.getElementById('roomHint').textContent = '';
+  document.getElementById('impactBadge').classList.add('d-none');
   new bootstrap.Modal(document.getElementById('regModal')).show();
   loadRooms();
+  loadSlotImpact();
 }
 
-document.getElementById('regDuration').addEventListener('change', () => { checkDuration(); loadRooms(); });
+document.getElementById('regDuration').addEventListener('change', () => { checkDuration(); loadRooms(); loadSlotImpact(); });
+document.getElementById('regGrade').addEventListener('change', () => { loadSlotImpact(); });
 function checkDuration() {
   const start    = parseInt(document.getElementById('regStart').value);
   const duration = parseInt(document.getElementById('regDuration').value);
@@ -607,6 +616,54 @@ function checkDuration() {
   const over     = start + duration - 1 > 4;
   warn.style.display = over ? '' : 'none';
   btn.disabled = over;
+}
+
+async function loadSlotImpact() {
+  const day   = document.getElementById('regDay').value;
+  const ses   = document.getElementById('regSession').value;
+  const ss    = parseInt(document.getElementById('regStart').value);
+  const dur   = parseInt(document.getElementById('regDuration').value);
+  const grade = parseInt(document.getElementById('regGrade').value);
+  const badge = document.getElementById('impactBadge');
+  const icon  = document.getElementById('impactIcon');
+  const text  = document.getElementById('impactText');
+  const btn   = document.getElementById('regSubmitBtn');
+
+  if (!day || !ses || !ss || ss + dur - 1 > 4) {
+    badge.classList.add('d-none');
+    return;
+  }
+
+  try {
+    const res  = await fetch(`/api/slot-impact?grade=${grade}&day_of_week=${day}&session_type=${ses}&start_session=${ss}&duration=${dur}`);
+    const data = await res.json();
+    const combos = data.combos;
+    const cap    = data.cap || 100;
+    badge.classList.remove('d-none');
+
+    if (combos === 0) {
+      badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEE2E2;color:#B91C1C;';
+      icon.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
+      text.textContent = `HS khối ${grade} chọn lớp này sẽ không ghép được các môn còn lại — không thể đăng ký.`;
+      btn.dataset.impactBlock = '1';
+      btn.disabled = true;
+    } else if (combos <= 3) {
+      badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEF9C3;color:#92400E;';
+      icon.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i>';
+      text.textContent = `Cảnh báo: HS chọn lớp này chỉ có ${combos} cách ghép môn còn lại — nên ưu tiên slot khác.`;
+      delete btn.dataset.impactBlock;
+      btn.disabled = false;
+    } else {
+      badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#DCFCE7;color:#166534;';
+      icon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+      const label = combos >= cap ? `≥${cap}` : combos;
+      text.textContent = `HS chọn lớp này có ${label} cách ghép các môn còn lại — slot tốt.`;
+      delete btn.dataset.impactBlock;
+      btn.disabled = false;
+    }
+  } catch {
+    badge.classList.add('d-none');
+  }
 }
 
 async function refreshCalendar() {
@@ -655,6 +712,13 @@ function submitReg() {
   const errEl = document.getElementById('regError');
   errEl.classList.add('d-none');
 
+  const btn = document.getElementById('regSubmitBtn');
+  if (btn.dataset.impactBlock) {
+    errEl.textContent = 'Slot này khiến học sinh không còn tổ hợp lớp hợp lệ. Vui lòng chọn thứ/tiết khác.';
+    errEl.classList.remove('d-none');
+    return;
+  }
+
   const roomWrap = document.getElementById('roomWrap');
   const room = document.getElementById('regRoom').value;
   if (roomWrap.style.display !== 'none' && !room) {
@@ -675,7 +739,6 @@ function submitReg() {
 
   if (payload.start_session + payload.duration - 1 > 4) return;
 
-  const btn = document.getElementById('regSubmitBtn');
   btn.disabled = true;
 
   fetch('/teacher/classes', {

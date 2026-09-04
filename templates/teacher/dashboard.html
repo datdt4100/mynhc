@@ -540,9 +540,9 @@
           <div class="d-flex align-items-center justify-content-between mb-1">
             <label class="form-label fw-semibold mb-0" style="font-size:.85rem;">Chọn slot <span class="text-danger">*</span></label>
             <div class="d-flex gap-2" style="font-size:.72rem;">
-              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#86EFAC;"></span> Tốt (≥20%)</span>
-              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#FDE68A;"></span> Hạn chế (&lt;20%)</span>
-              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#FCA5A5;"></span> Chặn (0%)</span>
+              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#86EFAC;"></span> Ít trùng giờ với môn khác</span>
+              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#FDE68A;"></span> Trùng nhiều giờ với môn khác</span>
+              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#FCA5A5;"></span> Hoàn toàn trùng giờ với môn khác</span>
             </div>
           </div>
           <div id="slotGridLoading" class="text-center text-muted py-3" style="font-size:.82rem;">
@@ -788,19 +788,19 @@ function _highlightAndBadge(day, ses, start, gridData) {
   if (combos === 0) {
     badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEE2E2;color:#B91C1C;';
     icon.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
-    textEl.textContent = `${slotLabel} — Chặn hoàn toàn (0/${mx || '?'} combo). Hãy chọn slot khác.`;
+    textEl.textContent = `${slotLabel} — Trùng giờ với tất cả các lớp của các môn khác. Hãy chọn slot khác.`;
     btn.dataset.impactBlock = '1';
     btn.disabled = true;
   } else if (ratio < 0.2) {
     badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEF9C3;color:#92400E;';
     icon.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i>';
-    textEl.textContent = `${slotLabel} — Hạn chế: ${comboLabel} combo${pctLabel}. Nên ưu tiên ô xanh.`;
+    textEl.textContent = `${slotLabel} — Trùng giờ với 1 vài lớp của các môn khác. Nên ưu tiên ô xanh.`;
     delete btn.dataset.impactBlock;
     btn.disabled = false;
   } else {
     badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#DCFCE7;color:#166534;';
     icon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
-    textEl.textContent = `${slotLabel} — Tốt! ${comboLabel} combo${pctLabel}. HS có nhiều lựa chọn.`;
+    textEl.textContent = `${slotLabel} — Ít trùng giờ với các môn khác. HS có nhiều lựa chọn.`;
     delete btn.dataset.impactBlock;
     btn.disabled = false;
   }

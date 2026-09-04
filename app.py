@@ -1381,6 +1381,97 @@ def admin_rooms_busy_clear():
     return jsonify(ok=True)
 
 
+@app.route("/admin/rooms/busy-template")
+@admin_required
+def admin_rooms_busy_template():
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    import io as _io
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Lịch phòng bận"
+
+    header_fill  = PatternFill("solid", fgColor="1E40AF")
+    morning_fill = PatternFill("solid", fgColor="DBEAFE")
+    afternoon_fill = PatternFill("solid", fgColor="FEF3C7")
+    bold_white = Font(bold=True, color="FFFFFF")
+    bold_dark  = Font(bold=True)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin = Side(style="thin", color="9CA3AF")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    # Row 1: merged headers
+    ws.merge_cells("A1:A2"); ws["A1"] = "STT"
+    ws.merge_cells("B1:B2"); ws["B1"] = "Phòng"
+    ws.merge_cells("C1:C2"); ws["C1"] = "Tiết"
+    ws.merge_cells("D1:I1"); ws["D1"] = "Buổi Sáng"
+    ws.merge_cells("J1:O1"); ws["J1"] = "Buổi Chiều"
+
+    # Row 2: day headers
+    days = ["T2", "T3", "T4", "T5", "T6", "T7"]
+    for i, d in enumerate(days):
+        ws.cell(row=2, column=4 + i).value  = d  # morning
+        ws.cell(row=2, column=10 + i).value = d  # afternoon
+
+    # Style row 1 + 2 headers
+    for col in range(1, 16):
+        c1 = ws.cell(row=1, column=col)
+        c2 = ws.cell(row=2, column=col)
+        c1.fill = header_fill; c1.font = bold_white; c1.alignment = center; c1.border = border
+        c2.fill = header_fill; c2.font = bold_white; c2.alignment = center; c2.border = border
+
+    # Sample data rows (2 rooms × 4 tiết)
+    sample_rooms = ["A101", "A102"]
+    row = 3
+    for stt, room in enumerate(sample_rooms, start=1):
+        first_row = row
+        for tiet in (1, 2, 3, 4):
+            ws.cell(row=row, column=3).value = tiet
+            # Style morning cols
+            for col in range(4, 10):
+                c = ws.cell(row=row, column=col)
+                c.fill = morning_fill; c.alignment = center; c.border = border
+            # Style afternoon cols
+            for col in range(10, 16):
+                c = ws.cell(row=row, column=col)
+                c.fill = afternoon_fill; c.alignment = center; c.border = border
+            # Example: mark sample busy cell
+            if tiet == 1 and stt == 1:
+                ws.cell(row=row, column=4).value = "x"  # Sáng T2
+            row += 1
+        # Merge STT and Phòng across 4 rows for this room
+        last_row = row - 1
+        ws.merge_cells(f"A{first_row}:A{last_row}")
+        ws.merge_cells(f"B{first_row}:B{last_row}")
+        ws[f"A{first_row}"] = stt
+        ws[f"B{first_row}"] = room
+        for col in (1, 2):
+            c = ws.cell(row=first_row, column=col)
+            c.alignment = center; c.border = border
+
+    # Column widths
+    ws.column_dimensions["A"].width = 6
+    ws.column_dimensions["B"].width = 12
+    ws.column_dimensions["C"].width = 6
+    for col in range(4, 16):
+        ws.column_dimensions[get_column_letter(col)].width = 7
+
+    ws.row_dimensions[1].height = 22
+    ws.row_dimensions[2].height = 18
+
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name="mau_phong_ban.xlsx",
+    )
+
+
 @app.route("/api/slot-impact-grid")
 @teacher_required
 def api_slot_impact_grid():

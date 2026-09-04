@@ -378,11 +378,11 @@
     <div class="section-card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
       <span><i class="bi bi-door-open-fill me-2" style="color:#0EA5E9;"></i>Danh sách phòng học (<span id="room-count">{{ room_count }}</span> phòng)</span>
       <div class="d-flex gap-2 flex-wrap align-items-center">
-        <label class="btn btn-sm" style="background:#EFF6FF; color:#0369A1; border:1.5px solid #BAE6FD; font-size:.78rem; font-weight:600; border-radius:8px; cursor:pointer; margin:0;">
-          <i class="bi bi-upload me-1"></i>Tải lên Excel
+        <label class="btn btn-sm fw-semibold" style="background:#16A34A; color:#fff; border-radius:8px; font-size:.78rem; cursor:pointer; margin:0;">
+          <i class="bi bi-upload me-1"></i>Tải lên
           <input type="file" id="roomFileInput" accept=".xlsx,.xls" style="display:none;" onchange="uploadRooms(this)">
         </label>
-        <button class="btn btn-sm" style="background:#FFF1F2; color:#BE123C; border:1.5px solid #FECDD3; font-size:.78rem; font-weight:600; border-radius:8px;"
+        <button class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
                 onclick="clearRooms()">
           <i class="bi bi-trash3 me-1"></i>Xoá tất cả
         </button>
@@ -408,11 +408,14 @@
     <div class="section-card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
       <span><i class="bi bi-calendar-x me-2" style="color:#DC2626;"></i>Lịch phòng bận <span style="font-size:.75rem; font-weight:400; color:#64748B;">(từ file ngoài)</span></span>
       <div class="d-flex gap-2 flex-wrap align-items-center">
-        <label class="btn btn-sm" style="background:#FFF1F2; color:#BE123C; border:1.5px solid #FECDD3; font-size:.78rem; font-weight:600; border-radius:8px; cursor:pointer; margin:0;">
-          <i class="bi bi-upload me-1"></i>Upload lịch phòng bận
+        <a href="{{ url_for('admin_rooms_busy_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px; font-size:.78rem;">
+          <i class="bi bi-download me-1"></i>Tải file mẫu
+        </a>
+        <label class="btn btn-sm fw-semibold" style="background:#16A34A; color:#fff; border-radius:8px; font-size:.78rem; cursor:pointer; margin:0;">
+          <i class="bi bi-upload me-1"></i>Tải lên
           <input type="file" id="busyFileInput" accept=".xlsx,.xls" style="display:none;" onchange="uploadBusyRooms(this)">
         </label>
-        <button class="btn btn-sm" style="background:#FFF1F2; color:#BE123C; border:1.5px solid #FECDD3; font-size:.78rem; font-weight:600; border-radius:8px;"
+        <button class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
                 onclick="clearBusyRooms()">
           <i class="bi bi-trash3 me-1"></i>Xoá lịch bận
         </button>
@@ -442,7 +445,7 @@
       </form>
       <button type="button" class="btn btn-sm fw-semibold" style="border-radius:8px; font-size:.78rem; background:#16A34A; color:#fff;"
               onclick="document.getElementById('fileTeacher').click()">
-        <i class="bi bi-upload me-1"></i>Upload Excel
+        <i class="bi bi-upload me-1"></i>Tải lên
       </button>
       <a href="{{ url_for('admin_teachers_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px; font-size:.78rem;">
         <i class="bi bi-download me-1"></i>Tải file mẫu
@@ -562,7 +565,7 @@
       </form>
       <button type="button" class="btn btn-sm fw-semibold" style="border-radius:8px; font-size:.78rem; background:#16A34A; color:#fff;"
               onclick="document.getElementById('fileStudent').click()">
-        <i class="bi bi-upload me-1"></i>Upload Excel
+        <i class="bi bi-upload me-1"></i>Tải lên
       </button>
       <a href="{{ url_for('admin_students_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px; font-size:.78rem;">
         <i class="bi bi-download me-1"></i>Tải file mẫu

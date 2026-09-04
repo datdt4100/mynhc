@@ -2416,6 +2416,18 @@ def admin_class_reg_toggle():
     return jsonify(ok=True, open=new_val == "1")
 
 
+@app.route("/admin/classes/clear-all", methods=["POST"])
+@admin_required
+def admin_classes_clear_all():
+    """Xoá toàn bộ lớp học GV đã đăng ký mở (và đăng ký học phần liên quan)."""
+    with engine.begin() as conn:
+        deleted = conn.execute(text("SELECT COUNT(*) FROM classes")).scalar()
+        conn.execute(text("DELETE FROM enrollments"))
+        conn.execute(text("DELETE FROM classes"))
+    _bump(event_type="class")
+    return jsonify(ok=True, deleted=deleted)
+
+
 @app.route("/admin/maintenance/toggle", methods=["POST"])
 @admin_required
 def admin_maintenance_toggle():

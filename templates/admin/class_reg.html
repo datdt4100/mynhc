@@ -131,6 +131,10 @@
       <a href="{{ url_for('admin_class_reg_export') }}" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;" title="Tải Excel danh sách lớp đã đăng ký">
         <i class="bi bi-file-earmark-arrow-down"></i><span>Tải Excel</span>
       </a>
+      <button class="btn btn-sm btn-outline-danger fw-semibold ms-auto" style="border-radius:8px; font-size:.78rem;"
+              onclick="clearAllRegisteredClasses()">
+        <i class="bi bi-trash3 me-1"></i>Xoá tất cả lớp đã đăng ký
+      </button>
     </div>
     <div class="table-responsive-admin">
       <table class="table admin-table mb-0" id="teacher-summary-table">
@@ -412,6 +416,28 @@ function deleteClass(classId, teacherId) {
       }
     },
     { confirmText: 'Xóa', confirmClass: 'btn-danger' }
+  );
+}
+
+function clearAllRegisteredClasses() {
+  showConfirm(
+    'Xoá tất cả lớp đã đăng ký?',
+    'Toàn bộ <strong>lớp học mà giáo viên đã đăng ký mở</strong> sẽ bị xoá vĩnh viễn. '
+    + 'Đăng ký học phần của học sinh (nếu có) cũng sẽ bị xoá theo. '
+    + '<br><br>Thao tác <strong>không thể hoàn tác</strong>.',
+    async function() {
+      try {
+        const res  = await fetch('/admin/classes/clear-all', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          showAlert(`Đã xoá ${data.deleted} lớp học.`, 'success');
+          setTimeout(() => location.reload(), 900);
+        } else {
+          showAlert(data.error || 'Có lỗi xảy ra.', 'error');
+        }
+      } catch { showAlert('Lỗi kết nối máy chủ.', 'error'); }
+    },
+    { confirmText: 'Xoá tất cả lớp', confirmClass: 'btn-danger' }
   );
 }
 

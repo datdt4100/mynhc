@@ -730,11 +730,11 @@ function _renderSlotGrid(gridData, maxCombos, dur, noRooms = new Set()) {
     {key:'afternoon', label:'Buổi Chiều'},
   ];
 
-  let html = `<table style="border-collapse:separate; border-spacing:3px; width:100%; font-size:.73rem;">`;
-  // Header
-  html += `<tr><th style="padding:4px 6px; color:#64748B; font-weight:600; width:70px;"></th>`;
+  let html = `<table style="border-collapse:separate; border-spacing:3px; width:100%; table-layout:fixed; font-size:.73rem;">`;
+  // Header — label col fixed, day cols share rest equally
+  html += `<tr><th style="padding:4px 6px; color:#64748B; font-weight:600; width:56px;"></th>`;
   for (const d of days)
-    html += `<th style="padding:4px 2px; text-align:center; color:#0369A1; font-weight:700;">${DAY_NAMES[d]}</th>`;
+    html += `<th style="padding:4px 2px; text-align:center; color:#0369A1; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${DAY_NAMES[d]}</th>`;
   html += `</tr>`;
 
   for (const ses of sessions) {
@@ -758,27 +758,41 @@ function _renderSlotGrid(gridData, maxCombos, dur, noRooms = new Set()) {
             const k = `${d}_${ses.key}_${slotStart}`;
             const val = gridData[k];
             const rs = group.length;
-            const cellH = rs * 32 + (rs - 1) * 3; // account for border-spacing
+            const cellH = rs * 32 + (rs - 1) * 3; // height including border-spacing gaps
+            // Inner flex-column: rs equal sections separated by dashed lines
+            const tietH = Math.floor(cellH / rs);
+            const buildInner = (color) => {
+              let s = `<div style="display:flex; flex-direction:column; height:100%; border-radius:6px; overflow:hidden;">`;
+              for (let i = 0; i < rs; i++) {
+                if (i > 0) s += `<div style="border-top:1px dashed ${color}; flex-shrink:0;"></div>`;
+                s += `<div style="flex:1;"></div>`;
+              }
+              s += `</div>`;
+              return s;
+            };
             if (val === -1 || val === undefined) {
-              html += `<td rowspan="${rs}" style="padding:2px; vertical-align:middle;">
-                <div style="height:${cellH}px; border-radius:6px; background:#F1F5F9; border:1px solid #E2E8F0; cursor:not-allowed; opacity:.4;"></div></td>`;
+              html += `<td rowspan="${rs}" style="padding:2px; vertical-align:top;">
+                <div style="height:${cellH}px; border-radius:6px; background:#F1F5F9; border:1px solid #E2E8F0; cursor:not-allowed; opacity:.4;">
+                  ${buildInner('rgba(0,0,0,.1)')}
+                </div></td>`;
             } else if (noRooms.has(k)) {
-              html += `<td rowspan="${rs}" style="padding:2px; vertical-align:middle;" title="Không còn phòng trống">
+              html += `<td rowspan="${rs}" style="padding:2px; vertical-align:top;" title="Không còn phòng trống">
                 <div style="height:${cellH}px; border-radius:6px; cursor:not-allowed;
                             background:repeating-linear-gradient(45deg,#E5E7EB,#E5E7EB 4px,#F3F4F6 4px,#F3F4F6 8px);
-                            border:1px solid #D1D5DB; display:flex; align-items:center; justify-content:center;">
-                  <span style="font-size:.6rem; color:#6B7280; font-weight:700;">Trùng</span>
+                            border:1px solid #D1D5DB;">
+                  ${buildInner('rgba(0,0,0,.15)')}
                 </div></td>`;
             } else {
-              const [bg, border] = _slotColor(val, maxCombos);
+              const [bg, bdr] = _slotColor(val, maxCombos);
               const title = _slotTitle(val, maxCombos);
-              html += `<td rowspan="${rs}" style="padding:2px; vertical-align:middle;" title="${title}">
+              html += `<td rowspan="${rs}" style="padding:2px; vertical-align:top;" title="${title}">
                 <div class="slot-cell" data-day="${d}" data-ses="${ses.key}" data-start="${slotStart}" data-combos="${val}"
-                     style="height:${cellH}px; border-radius:6px; background:${bg}; border:2px solid ${border};
+                     style="height:${cellH}px; border-radius:6px; background:${bg}; border:2px solid ${bdr};
                             cursor:pointer; transition:transform .1s, box-shadow .15s;"
                      onclick="selectSlot(${d},'${ses.key}',${slotStart},${val})"
                      onmouseenter="this.style.transform='scale(1.04)';this.style.boxShadow='0 2px 8px rgba(0,0,0,.15)'"
                      onmouseleave="this.style.transform='';this.style.boxShadow=''">
+                  ${buildInner(bdr)}
                 </div></td>`;
             }
           }

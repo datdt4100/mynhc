@@ -288,6 +288,35 @@
     </div>
   </div>
 
+  <!-- ── Maintenance banner ── -->
+  <div id="maintenance-bar" class="d-flex align-items-center justify-content-between gap-3 px-4 py-3 mb-4 rounded-3"
+       style="background:{% if maintenance %}#FEF2F2; border:2px solid #FCA5A5;{% else %}#F8FAFC; border:1.5px solid #E2E8F0;{% endif %}
+              transition:background .3s, border-color .3s;">
+    <div class="d-flex align-items-center gap-3">
+      <div id="maint-icon" style="width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+                font-size:1.3rem;
+                background:{% if maintenance %}#FEE2E2;{% else %}#F1F5F9;{% endif %};">
+        <i class="bi {% if maintenance %}bi-cone-striped text-danger{% else %}bi-cone-striped text-muted{% endif %}" id="maint-icon-i"></i>
+      </div>
+      <div>
+        <div style="font-weight:700;font-size:.95rem;color:{% if maintenance %}#B91C1C{% else %}#475569{% endif %};" id="maint-title">
+          {% if maintenance %}Hệ thống đang bảo trì{% else %}Chế độ bảo trì{% endif %}
+        </div>
+        <div style="font-size:.78rem;color:{% if maintenance %}#DC2626{% else %}#94A3B8{% endif %};" id="maint-sub">
+          {% if maintenance %}Người dùng đang thấy thông báo bảo trì. Bật/tắt để thay đổi.{% else %}Hiện tại hệ thống hoạt động bình thường.{% endif %}
+        </div>
+      </div>
+    </div>
+    <button id="btn-toggle-maintenance"
+            class="reg-toggle {% if maintenance %}open{% else %}closed{% endif %}"
+            style="{% if maintenance %}background:#FEE2E2;border-color:#FCA5A5;color:#B91C1C;{% endif %}"
+            data-on="{{ 'true' if maintenance else 'false' }}"
+            onclick="toggleMaintenance()">
+      <span class="toggle-dot" style="{% if maintenance %}background:#EF4444;{% endif %}"></span>
+      <span id="maint-toggle-label">{% if maintenance %}Đang bảo trì{% else %}Tắt{% endif %}</span>
+    </button>
+  </div>
+
   <!-- ── Nav boxes ── -->
   <div class="row g-3 mb-4">
     <div class="col-md-6">
@@ -766,6 +795,38 @@ function toggleReg(type) {
       btn.classList.toggle('open',   nowOpen);
       btn.classList.toggle('closed', !nowOpen);
       label.textContent = nowOpen ? 'Đang mở' : 'Đã đóng';
+    })
+    .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+    .finally(() => { btn.disabled = false; });
+}
+
+function toggleMaintenance() {
+  const btn   = document.getElementById('btn-toggle-maintenance');
+  const bar   = document.getElementById('maintenance-bar');
+  const label = document.getElementById('maint-toggle-label');
+  const title = document.getElementById('maint-title');
+  const sub   = document.getElementById('maint-sub');
+  const dot   = btn.querySelector('.toggle-dot');
+  btn.disabled = true;
+
+  fetch('{{ url_for("admin_maintenance_toggle") }}', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      const on = data.on;
+      btn.dataset.on = on ? 'true' : 'false';
+      btn.classList.toggle('open',   on);
+      btn.classList.toggle('closed', !on);
+      label.textContent = on ? 'Đang bảo trì' : 'Tắt';
+      title.textContent = on ? 'Hệ thống đang bảo trì' : 'Chế độ bảo trì';
+      title.style.color = on ? '#B91C1C' : '#475569';
+      sub.textContent   = on ? 'Người dùng đang thấy thông báo bảo trì.' : 'Hiện tại hệ thống hoạt động bình thường.';
+      sub.style.color   = on ? '#DC2626' : '#94A3B8';
+      bar.style.background    = on ? '#FEF2F2' : '#F8FAFC';
+      bar.style.borderColor   = on ? '#FCA5A5' : '#E2E8F0';
+      dot.style.background    = on ? '#EF4444' : '';
+      btn.style.background    = on ? '#FEE2E2' : '';
+      btn.style.borderColor   = on ? '#FCA5A5' : '';
+      btn.style.color         = on ? '#B91C1C' : '';
     })
     .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
     .finally(() => { btn.disabled = false; });

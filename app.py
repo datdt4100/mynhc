@@ -188,7 +188,8 @@ def init_db():
         # Seed default settings
         for key, value in [("admin_password", "Admin@123"),
                            ("teacher_reg_open", "0"),
-                           ("student_reg_open", "0")]:
+                           ("student_reg_open", "0"),
+                           ("maintenance_mode", "0")]:
             try:
                 conn.execute(
                     insert(settings_table).values(key=key, value=value)
@@ -649,7 +650,8 @@ def index():
 
 @app.route("/login")
 def login_page():
-    return render_template("login.html")
+    maintenance = get_setting("maintenance_mode", "0") == "1"
+    return render_template("login.html", maintenance=maintenance)
 
 
 @app.route("/login/step1", methods=["POST"])
@@ -886,6 +888,7 @@ def teacher_dashboard():
             schedule[f"{c.day_of_week}_{c.session_type}_{t}"] = {"status": "blocked"}
 
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
+    maintenance = get_setting("maintenance_mode", "0") == "1"
     return render_template(
         "teacher/dashboard.html",
         teacher=teacher_row,
@@ -893,6 +896,7 @@ def teacher_dashboard():
         enrollment_counts=enrollment_counts,
         schedule=schedule,
         teacher_reg_open=teacher_reg_open,
+        maintenance=maintenance,
         day_name=day_name,
         session_label=session_label,
     )
@@ -1516,6 +1520,7 @@ def admin_index():
 
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
     student_reg_open = get_setting("student_reg_open", "0") == "1"
+    maintenance = get_setting("maintenance_mode", "0") == "1"
     return render_template(
         "admin/index.html",
         stats={
@@ -1530,6 +1535,7 @@ def admin_index():
         student_list=student_list,
         teacher_reg_open=teacher_reg_open,
         student_reg_open=student_reg_open,
+        maintenance=maintenance,
         room_list=room_list,
         room_count=room_count,
     )
@@ -2112,6 +2118,15 @@ def admin_class_reg_toggle():
     new_val = "0" if current == "1" else "1"
     set_setting("teacher_reg_open", new_val)
     return jsonify(ok=True, open=new_val == "1")
+
+
+@app.route("/admin/maintenance/toggle", methods=["POST"])
+@admin_required
+def admin_maintenance_toggle():
+    current = get_setting("maintenance_mode", "0")
+    new_val = "0" if current == "1" else "1"
+    set_setting("maintenance_mode", new_val)
+    return jsonify(ok=True, on=new_val == "1")
 
 
 @app.route("/admin/classes/<int:class_id>/publish", methods=["POST"])

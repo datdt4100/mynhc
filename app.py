@@ -1764,6 +1764,7 @@ def api_room_schedule():
             .join(teachers, classes.c.teacher_id == teachers.c.id)
             .where(classes.c.location.isnot(None))
         ).fetchall()
+        ext_busy_rows = conn.execute(select(room_external_busy)).fetchall()
     bookings = [
         {
             "room": r.location,
@@ -1776,9 +1777,21 @@ def api_room_schedule():
                 + (f" - {r.subject}" if r.subject else "")
                 + f" ({r.teacher_name})"
             ),
+            "type": "class",
         }
         for r in rows
     ]
+    # Add external busy slots as single-tiet bookings
+    for r in ext_busy_rows:
+        bookings.append({
+            "room": r.room_name,
+            "day": r.day_of_week,
+            "session": r.session_type,
+            "start": r.tiet,
+            "duration": 1,
+            "label": "Bận (lịch ngoài)",
+            "type": "external",
+        })
     return jsonify({"rooms": all_rooms, "bookings": bookings})
 
 

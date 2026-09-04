@@ -482,7 +482,10 @@
             <div style="width:14px;height:14px;background:#DCFCE7;border:1px solid #86EFAC;border-radius:3px;"></div> Trống
           </div>
           <div class="d-flex align-items-center gap-1">
-            <div style="width:14px;height:14px;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:3px;"></div> Đã đặt (rê chuột để xem chi tiết)
+            <div style="width:14px;height:14px;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:3px;"></div> Lớp đã đặt (rê chuột để xem)
+          </div>
+          <div class="d-flex align-items-center gap-1">
+            <div style="width:14px;height:14px;background:repeating-linear-gradient(45deg,#E5E7EB,#E5E7EB 4px,#F3F4F6 4px,#F3F4F6 8px);border:1px solid #D1D5DB;border-radius:3px;"></div> Bận (lịch ngoài)
           </div>
           <div id="rsHighlightLegend" class="d-flex align-items-center gap-1" style="display:none !important;">
             <div style="width:14px;height:14px;background:#DBEAFE;border:1px solid #93C5FD;border-radius:3px;"></div> Khung giờ đang chọn
@@ -992,15 +995,24 @@ function showRoomDay(day) {
   const {rooms, bookings} = _rsData;
 
   // Build booking map: room → session → Set{tiết}
-  const bmap = {};
-  const binfo = {};
+  const bmap = {};   // any booking
+  const binfo = {};  // label
+  const btype = {};  // "class" | "external"
   bookings.forEach(b => {
     if (b.day !== day) return;
-    if (!bmap[b.room]) { bmap[b.room] = {}; binfo[b.room] = {}; }
-    if (!bmap[b.room][b.session]) { bmap[b.room][b.session] = new Set(); binfo[b.room][b.session] = {}; }
+    if (!bmap[b.room]) { bmap[b.room] = {}; binfo[b.room] = {}; btype[b.room] = {}; }
+    if (!bmap[b.room][b.session]) {
+      bmap[b.room][b.session] = new Set();
+      binfo[b.room][b.session] = {};
+      btype[b.room][b.session] = {};
+    }
     for (let t = b.start; t < b.start + b.duration; t++) {
       bmap[b.room][b.session].add(t);
       binfo[b.room][b.session][t] = b.label;
+      // "class" wins over "external" if both somehow overlap
+      if (b.type === 'class' || !btype[b.room][b.session][t]) {
+        btype[b.room][b.session][t] = b.type || 'class';
+      }
     }
   });
 
@@ -1034,10 +1046,17 @@ function showRoomDay(day) {
     let cells = '';
     ['morning','afternoon'].forEach(ses => {
       for (let t = 1; t <= 4; t++) {
-        const isBooked = bmap[room] && bmap[room][ses] && bmap[room][ses].has(t);
-        const isHl     = hlSet.has(ses + ':' + t);
-        const info     = isBooked ? (binfo[room][ses][t] || '') : '';
-        if (isBooked) {
+        const isBooked   = bmap[room] && bmap[room][ses] && bmap[room][ses].has(t);
+        const isHl       = hlSet.has(ses + ':' + t);
+        const info       = isBooked ? (binfo[room][ses][t] || '') : '';
+        const slotType   = isBooked ? (btype[room]?.[ses]?.[t] || 'class') : null;
+        if (isBooked && slotType === 'external') {
+          // Admin-uploaded busy slot — gray/striped
+          cells += `<td title="${info}" style="background:repeating-linear-gradient(45deg,#E5E7EB,#E5E7EB 4px,#F3F4F6 4px,#F3F4F6 8px); text-align:center; padding:3px; cursor:default; vertical-align:middle; ${isHl ? 'outline:2px solid #3B82F6; outline-offset:-2px;' : ''}">
+            <span style="font-size:.62rem; color:#6B7280; font-weight:700;">Bận</span>
+          </td>`;
+        } else if (isBooked) {
+          // Class registered by a teacher — red
           cells += `<td title="${info}" style="background:#FEE2E2; text-align:center; padding:3px; cursor:default; vertical-align:middle; ${isHl ? 'outline:2px solid #3B82F6; outline-offset:-2px;' : ''}">
             <span style="font-size:.65rem; color:#991B1B; font-weight:700;">Bận</span>
           </td>`;

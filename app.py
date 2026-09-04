@@ -618,6 +618,8 @@ def teacher_required(f):
     def decorated(*args, **kwargs):
         if session.get("user_type") != "teacher":
             return redirect(url_for("login_page"))
+        if get_setting("maintenance_mode", "0") == "1":
+            return redirect(url_for("login_page"))
         return f(*args, **kwargs)
     return decorated
 
@@ -626,6 +628,8 @@ def student_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if session.get("user_type") != "student":
+            return redirect(url_for("login_page"))
+        if get_setting("maintenance_mode", "0") == "1":
             return redirect(url_for("login_page"))
         return f(*args, **kwargs)
     return decorated
@@ -656,6 +660,8 @@ def login_page():
 
 @app.route("/login/step1", methods=["POST"])
 def login_step1():
+    if get_setting("maintenance_mode", "0") == "1":
+        return jsonify(ok=False, error="Hệ thống đang bảo trì. Vui lòng quay lại sau.")
     data = request.get_json(force=True)
     full_name = (data.get("full_name") or "").strip()
     cccd = (data.get("cccd") or "").strip()
@@ -700,6 +706,8 @@ def login_step1():
 
 @app.route("/login/step2", methods=["POST"])
 def login_step2():
+    if get_setting("maintenance_mode", "0") == "1":
+        return jsonify(ok=False, error="Hệ thống đang bảo trì. Vui lòng quay lại sau.")
     data = request.get_json(force=True)
     full_name = (data.get("full_name") or "").strip()
     cccd = (data.get("cccd") or "").strip()

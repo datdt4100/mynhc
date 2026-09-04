@@ -571,10 +571,10 @@ def count_combos_max(grade, subject, cap=100):
     subj = _norm_subj(subject or "")
     others = sorted(s for s in by_subj if s != subj)
     if not others:
-        return cap
+        return 1  # Không có môn khác → tối đa 1 tổ hợp (chính lớp mới)
     count = [0]
     _backtrack(by_subj, others, 0, [], count, cap)
-    return count[0]
+    return count[0] or 1  # Đảm bảo không chia cho 0
 
 
 def teacher_required(f):

@@ -113,6 +113,15 @@ rooms = Table(
     Column("name", Text, unique=True, nullable=False),
 )
 
+room_external_busy = Table(
+    "room_external_busy", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("room_name", Text, nullable=False),
+    Column("day_of_week", Integer, nullable=False),   # 2-7
+    Column("session_type", Text, nullable=False),     # morning / afternoon
+    Column("tiet", Integer, nullable=False),          # 1-4
+)
+
 settings_table = Table(
     "settings", metadata,
     Column("key", Text, primary_key=True),
@@ -1285,6 +1294,93 @@ def admin_rooms_clear():
     return jsonify(ok=True)
 
 
+# Header columns in the busy-rooms Excel (cols 4-15, 1-indexed):
+# Sáng T2, Sáng T3, Sáng T4, Sáng T5, Sáng T6, Sáng T7,
+# Chiều T2, Chiều T3, Chiều T4, Chiều T5, Chiều T6, Chiều T7
+_BUSY_COL_MAP = [
+    ("morning", 2), ("morning", 3), ("morning", 4),
+    ("morning", 5), ("morning", 6), ("morning", 7),
+    ("afternoon", 2), ("afternoon", 3), ("afternoon", 4),
+    ("afternoon", 5), ("afternoon", 6), ("afternoon", 7),
+]
+
+
+@app.route("/admin/rooms/busy-upload", methods=["POST"])
+@admin_required
+def admin_rooms_busy_upload():
+    f = request.files.get("file")
+    if not f:
+        return jsonify(ok=False, error="Không có file"), 400
+    try:
+        import openpyxl, io
+        wb = openpyxl.load_workbook(io.BytesIO(f.read()), data_only=True)
+        ws = wb.active
+
+        # Detect column mapping from header row
+        # Find which columns correspond to the 12 sessions
+        header = [str(c).strip() if c else "" for c in next(ws.iter_rows(min_row=1, max_row=1, values_only=True))]
+        # Map column index → (session_type, day_of_week)
+        # Try to detect from header, fallback to fixed positions
+        col_map = {}  # 0-indexed col → (session_type, day)
+        for ci, h in enumerate(header):
+            h_low = h.lower()
+            ses = "morning" if "sáng" in h_low or "sang" in h_low else \
+                  "afternoon" if "chiều" in h_low or "chieu" in h_low else None
+            for dow, kw in [(2, "2"), (3, "3"), (4, "4"), (5, "5"), (6, "6"), (7, "7")]:
+                if kw in h:
+                    if ses:
+                        col_map[ci] = (ses, dow)
+                    break
+
+        # Fallback: if header detection fails, use fixed col positions (cols 3-14, 0-indexed)
+        if len(col_map) < 12:
+            col_map = {3 + i: v for i, v in enumerate(_BUSY_COL_MAP)}
+
+        added = 0
+        current_room = None
+        rows_data = list(ws.iter_rows(min_row=2, values_only=True))
+
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM room_external_busy"))
+            for row in rows_data:
+                # Column B (index 1) = room name
+                if row[1] and str(row[1]).strip():
+                    current_room = str(row[1]).strip()
+                # Column C (index 2) = tiết
+                tiet_val = row[2]
+                if not current_room or not tiet_val:
+                    continue
+                try:
+                    tiet = int(tiet_val)
+                except (ValueError, TypeError):
+                    continue
+                if tiet not in (1, 2, 3, 4):
+                    continue
+
+                for ci, (ses, dow) in col_map.items():
+                    val = row[ci] if ci < len(row) else None
+                    if val is not None and str(val).strip() not in ("", "None"):
+                        conn.execute(insert(room_external_busy).values(
+                            room_name=current_room,
+                            day_of_week=dow,
+                            session_type=ses,
+                            tiet=tiet,
+                        ))
+                        added += 1
+
+        return jsonify(ok=True, added=added)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/admin/rooms/busy-clear", methods=["POST"])
+@admin_required
+def admin_rooms_busy_clear():
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM room_external_busy"))
+    return jsonify(ok=True)
+
+
 @app.route("/api/slot-impact-grid")
 @teacher_required
 def api_slot_impact_grid():
@@ -1349,7 +1445,19 @@ def api_available_rooms():
             )
         ).fetchall()
         booked_set = {r.location for r in booked if r.location}
-    available = [r for r in all_rooms if r not in booked_set]
+        # rooms marked busy externally (any tiết in the requested range)
+        ext_busy = conn.execute(
+            select(room_external_busy.c.room_name).where(
+                and_(
+                    room_external_busy.c.day_of_week == dow,
+                    room_external_busy.c.session_type == st,
+                    room_external_busy.c.tiet >= ss,
+                    room_external_busy.c.tiet <= end,
+                )
+            )
+        ).fetchall()
+        ext_busy_set = {r.room_name for r in ext_busy}
+    available = [r for r in all_rooms if r not in booked_set and r not in ext_busy_set]
     return jsonify(available)
 
 
@@ -1450,6 +1558,10 @@ def admin_index():
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
     student_reg_open = get_setting("student_reg_open", "0") == "1"
     maintenance = get_setting("maintenance_mode", "0") == "1"
+    with engine.connect() as conn2:
+        busy_room_count = conn2.execute(
+            select(func.count()).select_from(room_external_busy)
+        ).scalar() or 0
     return render_template(
         "admin/index.html",
         stats={
@@ -1467,6 +1579,7 @@ def admin_index():
         maintenance=maintenance,
         room_list=room_list,
         room_count=room_count,
+        busy_room_count=busy_room_count,
     )
 
 # --- Admin: Teacher management ---

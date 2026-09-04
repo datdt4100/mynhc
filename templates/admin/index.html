@@ -403,6 +403,29 @@
     </div>
   </div>
 
+  <!-- ── Phòng bận ngoài ── -->
+  <div class="section-card mb-4">
+    <div class="section-card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <span><i class="bi bi-calendar-x me-2" style="color:#DC2626;"></i>Lịch phòng bận <span style="font-size:.75rem; font-weight:400; color:#64748B;">(từ file ngoài)</span></span>
+      <div class="d-flex gap-2 flex-wrap align-items-center">
+        <label class="btn btn-sm" style="background:#FFF1F2; color:#BE123C; border:1.5px solid #FECDD3; font-size:.78rem; font-weight:600; border-radius:8px; cursor:pointer; margin:0;">
+          <i class="bi bi-upload me-1"></i>Upload lịch phòng bận
+          <input type="file" id="busyFileInput" accept=".xlsx,.xls" style="display:none;" onchange="uploadBusyRooms(this)">
+        </label>
+        <button class="btn btn-sm" style="background:#FFF1F2; color:#BE123C; border:1.5px solid #FECDD3; font-size:.78rem; font-weight:600; border-radius:8px;"
+                onclick="clearBusyRooms()">
+          <i class="bi bi-trash3 me-1"></i>Xoá lịch bận
+        </button>
+      </div>
+    </div>
+    <div class="section-card-body">
+      <p class="text-muted mb-0" style="font-size:.83rem;" id="busy-rooms-status">
+        {{ busy_room_count }} khung giờ bận được ghi nhận.
+        Upload file Excel theo mẫu: cột 1=STT, cột 2=Tên phòng, cột 3=Tiết, cột 4-9=Sáng T2-T7, cột 10-15=Chiều T2-T7. Đánh dấu <strong>x</strong> vào ô bận.
+      </p>
+    </div>
+  </div>
+
   <!-- ════════════════════════════════════════
        TEACHER SECTION
   ════════════════════════════════════════ -->
@@ -934,6 +957,44 @@ function clearRooms() {
       } catch { showAlert('Lỗi kết nối.', 'error'); }
     },
     { confirmText: 'Xoá tất cả', confirmClass: 'btn-danger' }
+  );
+}
+
+async function uploadBusyRooms(input) {
+  if (!input.files[0]) return;
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  input.value = '';
+  const status = document.getElementById('busy-rooms-status');
+  status.textContent = 'Đang xử lý...';
+  try {
+    const res  = await fetch('/admin/rooms/busy-upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) {
+      showAlert(`Đã ghi nhận ${data.added} khung giờ bận.`, 'success');
+      status.innerHTML = `<strong>${data.added}</strong> khung giờ bận được ghi nhận.`;
+    } else {
+      showAlert(data.error || 'Lỗi tải file.', 'error');
+      status.textContent = 'Lỗi khi xử lý file.';
+    }
+  } catch { showAlert('Lỗi kết nối.', 'error'); }
+}
+
+function clearBusyRooms() {
+  showConfirm(
+    'Xoá lịch phòng bận?',
+    'Toàn bộ lịch phòng bận từ file ngoài sẽ bị xoá.',
+    async function() {
+      try {
+        const res  = await fetch('/admin/rooms/busy-clear', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          showAlert('Đã xoá lịch phòng bận.', 'success');
+          document.getElementById('busy-rooms-status').textContent = '0 khung giờ bận được ghi nhận.';
+        } else showAlert(data.error || 'Lỗi khi xoá.', 'error');
+      } catch { showAlert('Lỗi kết nối.', 'error'); }
+    },
+    { confirmText: 'Xoá lịch bận', confirmClass: 'btn-danger' }
   );
 }
 

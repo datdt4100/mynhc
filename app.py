@@ -1456,7 +1456,7 @@ def admin_rooms_busy_upload():
 
             # Sync room names into rooms table
             for rn in seen_rooms:
-                conn.execute(text("INSERT OR IGNORE INTO rooms (name) VALUES (:n)"), {"n": rn})
+                conn.execute(text("INSERT INTO rooms (name) VALUES (:n) ON CONFLICT (name) DO NOTHING"), {"n": rn})
 
         _bump(event_type="schedule")
         return jsonify(ok=True, added=added, rooms_synced=len(seen_rooms))
@@ -1525,7 +1525,7 @@ def admin_rooms_add_manual():
     busy = data.get("busy", [])  # [{day_of_week, session_type, tiet}, ...]
 
     with engine.begin() as conn:
-        conn.execute(text("INSERT OR IGNORE INTO rooms (name) VALUES (:n)"), {"n": room_name})
+        conn.execute(text("INSERT INTO rooms (name) VALUES (:n) ON CONFLICT (name) DO NOTHING"), {"n": room_name})
         conn.execute(delete(room_external_busy).where(room_external_busy.c.room_name == room_name))
         for slot in busy:
             try:

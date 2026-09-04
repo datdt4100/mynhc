@@ -499,7 +499,7 @@
 
 <!-- Register modal -->
 <div class="modal fade" id="regModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Đăng ký mở lớp</h5>
@@ -508,24 +508,18 @@
       <div class="modal-body">
         <div id="regError" class="alert alert-danger d-none mb-3"></div>
 
-        <!-- Slot + teacher info (read-only) -->
-        <div class="p-3 mb-3 rounded" style="background:#F0F9FF; border:1.5px solid #BAE6FD; font-size:.87rem;">
-          <div class="d-flex gap-3 flex-wrap align-items-center">
-            <span><i class="bi bi-calendar3 me-1 text-primary"></i><strong id="dispDay"></strong></span>
-            <span><i class="bi bi-brightness-high me-1 text-primary"></i><strong id="dispSession"></strong></span>
-            <span><i class="bi bi-bookmark me-1 text-primary"></i>Tiết <strong id="dispTiet"></strong></span>
-          </div>
-          <div class="mt-2 pt-2" style="border-top:1px solid #BAE6FD;">
-            <i class="bi bi-book me-1" style="color:#0369A1;"></i>
-            <span style="color:#0369A1; font-weight:600;">Bộ môn giảng dạy: {{ teacher.subject_group }}</span>
-          </div>
+        <!-- Teacher subject info -->
+        <div class="p-2 mb-3 rounded d-flex align-items-center gap-2" style="background:#F0F9FF; border:1.5px solid #BAE6FD; font-size:.85rem;">
+          <i class="bi bi-book" style="color:#0369A1;"></i>
+          <span style="color:#0369A1; font-weight:600;">Bộ môn: {{ teacher.subject_group }}</span>
         </div>
 
         <input type="hidden" id="regDay">
         <input type="hidden" id="regSession">
         <input type="hidden" id="regStart">
 
-        <div class="row g-3">
+        <!-- Grade + Duration -->
+        <div class="row g-3 mb-3">
           <div class="col-6">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Khối <span class="text-danger">*</span></label>
             <select id="regGrade" class="form-select custom-input">
@@ -545,18 +539,32 @@
           </div>
         </div>
 
-        <div id="durationWarning" class="mt-2 text-danger" style="font-size:.8rem; display:none;">
-          <i class="bi bi-exclamation-triangle me-1"></i>
-          Tiết kết thúc vượt quá tiết 4. Vui lòng giảm số tiết.
+        <!-- Slot picker grid -->
+        <div class="mb-2">
+          <div class="d-flex align-items-center justify-content-between mb-1">
+            <label class="form-label fw-semibold mb-0" style="font-size:.85rem;">Chọn slot <span class="text-danger">*</span></label>
+            <div class="d-flex gap-2" style="font-size:.72rem;">
+              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#86EFAC;"></span> Tốt (≥4 combo)</span>
+              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#FDE68A;"></span> Ít combo</span>
+              <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#FCA5A5;"></span> Chặn</span>
+            </div>
+          </div>
+          <div id="slotGridLoading" class="text-center text-muted py-3" style="font-size:.82rem;">
+            <span class="spinner-border spinner-border-sm me-1"></span>Đang tính toán tổ hợp…
+          </div>
+          <div id="slotGrid" style="display:none; overflow-x:auto; -webkit-overflow-scrolling:touch;"></div>
         </div>
 
-        <!-- Impact badge -->
+        <!-- Selected slot display + impact badge -->
+        <div id="durationWarning" class="mt-1 text-danger d-none" style="font-size:.8rem;">
+          <i class="bi bi-exclamation-triangle me-1"></i>Tiết kết thúc vượt quá tiết 4. Vui lòng giảm số tiết.
+        </div>
         <div id="impactBadge" class="mt-2 d-none" style="font-size:.8rem; border-radius:8px; padding:7px 11px;">
           <span id="impactIcon"></span>
           <span id="impactText" class="ms-1"></span>
         </div>
 
-        <!-- Room selection (shown after tiết + duration are set) -->
+        <!-- Room selection -->
         <div id="roomWrap" class="mt-3" style="display:none;">
           <div class="d-flex align-items-center justify-content-between mb-1">
             <label class="form-label fw-semibold mb-0" style="font-size:.85rem;">Phòng học <span class="text-danger">*</span></label>
@@ -590,11 +598,8 @@ function openRegModal(day, session, tiét) {
   document.getElementById('regDay').value     = day;
   document.getElementById('regSession').value = session;
   document.getElementById('regStart').value   = tiét;
-  document.getElementById('dispDay').textContent     = DAY_NAMES[day];
-  document.getElementById('dispSession').textContent = SES_NAMES[session];
-  document.getElementById('dispTiet').textContent    = tiét;
   document.getElementById('regError').classList.add('d-none');
-  document.getElementById('durationWarning').style.display = 'none';
+  document.getElementById('durationWarning').classList.add('d-none');
   document.getElementById('regDuration').value = '1';
   document.getElementById('regGrade').value = '10';
   document.getElementById('regRoom').innerHTML = '<option value="">-- Chọn phòng --</option>';
@@ -602,67 +607,175 @@ function openRegModal(day, session, tiét) {
   document.getElementById('roomHint').textContent = '';
   document.getElementById('impactBadge').classList.add('d-none');
   new bootstrap.Modal(document.getElementById('regModal')).show();
-  loadRooms();
-  loadSlotImpact();
+  loadSlotGrid();
 }
 
-document.getElementById('regDuration').addEventListener('change', () => { checkDuration(); loadRooms(); loadSlotImpact(); });
-document.getElementById('regGrade').addEventListener('change', () => { loadSlotImpact(); });
+document.getElementById('regDuration').addEventListener('change', () => { checkDuration(); loadSlotGrid(); });
+document.getElementById('regGrade').addEventListener('change', () => { loadSlotGrid(); });
 function checkDuration() {
   const start    = parseInt(document.getElementById('regStart').value);
   const duration = parseInt(document.getElementById('regDuration').value);
   const warn     = document.getElementById('durationWarning');
   const btn      = document.getElementById('regSubmitBtn');
   const over     = start + duration - 1 > 4;
-  warn.style.display = over ? '' : 'none';
-  btn.disabled = over;
+  warn.classList.toggle('d-none', !over);
+  if (over) btn.disabled = true;
 }
 
-async function loadSlotImpact() {
-  const day   = document.getElementById('regDay').value;
-  const ses   = document.getElementById('regSession').value;
-  const ss    = parseInt(document.getElementById('regStart').value);
+// ── Slot impact grid ─────────────────────────────────────────────────────────
+const DAY_SHORT = {2:'T2',3:'T3',4:'T4',5:'T5',6:'T6',7:'T7'};
+let _gridData = null; // cache grid results for current grade+duration
+
+async function loadSlotGrid() {
+  const grade = parseInt(document.getElementById('regGrade').value);
+  const dur   = parseInt(document.getElementById('regDuration').value);
+  const loading = document.getElementById('slotGridLoading');
+  const grid    = document.getElementById('slotGrid');
+  const badge   = document.getElementById('impactBadge');
+  const btn     = document.getElementById('regSubmitBtn');
+
+  grid.style.display = 'none';
+  loading.style.display = '';
+  badge.classList.add('d-none');
+  delete btn.dataset.impactBlock;
+  btn.disabled = false;
+  _gridData = null;
+
+  try {
+    const res  = await fetch(`/api/slot-impact-grid?grade=${grade}&duration=${dur}`);
+    const data = await res.json();
+    _gridData = data.grid;
+    _renderSlotGrid(_gridData, dur);
+    loading.style.display = 'none';
+    grid.style.display = '';
+
+    // Re-apply selection highlight if slot still valid for new duration
+    const day = parseInt(document.getElementById('regDay').value);
+    const ses = document.getElementById('regSession').value;
+    const ss  = parseInt(document.getElementById('regStart').value);
+    if (day && ses && ss) {
+      _highlightAndBadge(day, ses, ss, _gridData);
+      await loadRooms();
+    }
+  } catch {
+    loading.innerHTML = '<span class="text-danger" style="font-size:.8rem;">Không tải được dữ liệu slot.</span>';
+  }
+}
+
+function _renderSlotGrid(gridData, dur) {
+  const days = [2,3,4,5,6,7];
+  const sessions = [
+    {key:'morning',   label:'Buổi Sáng', starts:[1,2,3,4]},
+    {key:'afternoon', label:'Buổi Chiều',starts:[1,2,3,4]},
+  ];
+
+  let html = `<table style="border-collapse:separate; border-spacing:3px; width:100%; font-size:.73rem;">`;
+  // Header
+  html += `<tr><th style="padding:4px 6px; color:#64748B; font-weight:600; width:70px;"></th>`;
+  for (const d of days)
+    html += `<th style="padding:4px 2px; text-align:center; color:#0369A1; font-weight:700;">${DAY_SHORT[d]}</th>`;
+  html += `</tr>`;
+
+  for (const ses of sessions) {
+    // Section label row
+    html += `<tr><td colspan="7" style="padding:5px 6px 2px; font-weight:700; color:#475569; font-size:.72rem; letter-spacing:.03em;">
+      ${ses.label}</td></tr>`;
+    for (const start of ses.starts) {
+      const endTiet = start + dur - 1;
+      const tierLabel = dur > 1 ? `t${start}–${endTiet}` : `t${start}`;
+      html += `<tr><td style="padding:3px 6px; color:#64748B; font-weight:600; white-space:nowrap;">${tierLabel}</td>`;
+      for (const d of days) {
+        const key = `${d}_${ses.key}_${start}`;
+        const val = gridData[key];
+        if (val === -1 || val === undefined) {
+          // Invalid slot
+          html += `<td style="padding:2px;"><div style="height:32px; border-radius:6px; background:#F1F5F9; border:1px solid #E2E8F0; cursor:not-allowed; opacity:.4;"></div></td>`;
+        } else {
+          const [bg, border, title] = val === 0
+            ? ['#FEE2E2','#FCA5A5', `Chặn — 0 combo`]
+            : val <= 3
+              ? ['#FEF9C3','#FDE68A', `Cảnh báo — ${val} combo`]
+              : ['#DCFCE7','#86EFAC', `Tốt — ${val >= 100 ? '≥100' : val} combo`];
+          html += `<td style="padding:2px;" title="${title}">
+            <div class="slot-cell" data-day="${d}" data-ses="${ses.key}" data-start="${start}" data-combos="${val}"
+                 style="height:32px; border-radius:6px; background:${bg}; border:2px solid ${border};
+                        cursor:pointer; transition:transform .1s, box-shadow .15s;"
+                 onclick="selectSlot(${d},'${ses.key}',${start},${val})"
+                 onmouseenter="this.style.transform='scale(1.08)';this.style.boxShadow='0 2px 8px rgba(0,0,0,.15)'"
+                 onmouseleave="this.style.transform='';this.style.boxShadow=''">
+            </div></td>`;
+        }
+      }
+      html += `</tr>`;
+    }
+  }
+  html += `</table>`;
+  document.getElementById('slotGrid').innerHTML = html;
+}
+
+async function selectSlot(day, ses, start, combos) {
+  document.getElementById('regDay').value     = day;
+  document.getElementById('regSession').value = ses;
+  document.getElementById('regStart').value   = start;
+  _highlightAndBadge(day, ses, start, _gridData);
+  checkDuration();
+  await loadRooms();
+}
+
+function _highlightAndBadge(day, ses, start, gridData) {
   const dur   = parseInt(document.getElementById('regDuration').value);
   const grade = parseInt(document.getElementById('regGrade').value);
   const badge = document.getElementById('impactBadge');
   const icon  = document.getElementById('impactIcon');
-  const text  = document.getElementById('impactText');
+  const textEl= document.getElementById('impactText');
   const btn   = document.getElementById('regSubmitBtn');
 
-  if (!day || !ses || !ss || ss + dur - 1 > 4) {
+  // Clear previous highlights
+  document.querySelectorAll('.slot-cell').forEach(el => {
+    el.style.outline = '';
+    el.style.transform = '';
+  });
+
+  // Highlight selected cell
+  const sel = document.querySelector(`.slot-cell[data-day="${day}"][data-ses="${ses}"][data-start="${start}"]`);
+  if (sel) sel.style.outline = '3px solid #0369A1';
+
+  // Get combos from grid or param
+  const key = `${day}_${ses}_${start}`;
+  const combos = (gridData && gridData[key] !== undefined) ? gridData[key] : parseInt(
+    sel ? sel.dataset.combos : -1
+  );
+
+  if (combos < 0 || start + dur - 1 > 4) {
     badge.classList.add('d-none');
     return;
   }
 
-  try {
-    const res  = await fetch(`/api/slot-impact?grade=${grade}&day_of_week=${day}&session_type=${ses}&start_session=${ss}&duration=${dur}`);
-    const data = await res.json();
-    const combos = data.combos;
-    const cap    = data.cap || 100;
-    badge.classList.remove('d-none');
+  badge.classList.remove('d-none');
+  const dayName = DAY_NAMES[day];
+  const sesName = SES_NAMES[ses];
+  const endTiet = start + dur - 1;
+  const slotLabel = `${dayName} ${sesName} tiết ${start}${dur > 1 ? '–' + endTiet : ''}`;
 
-    if (combos === 0) {
-      badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEE2E2;color:#B91C1C;';
-      icon.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
-      text.textContent = `HS khối ${grade} chọn lớp này sẽ không ghép được các môn còn lại — không thể đăng ký.`;
-      btn.dataset.impactBlock = '1';
-      btn.disabled = true;
-    } else if (combos <= 3) {
-      badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEF9C3;color:#92400E;';
-      icon.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i>';
-      text.textContent = `Cảnh báo: HS chọn lớp này chỉ có ${combos} cách ghép môn còn lại — nên ưu tiên slot khác.`;
-      delete btn.dataset.impactBlock;
-      btn.disabled = false;
-    } else {
-      badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#DCFCE7;color:#166534;';
-      icon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
-      const label = combos >= cap ? `≥${cap}` : combos;
-      text.textContent = `HS chọn lớp này có ${label} cách ghép các môn còn lại — slot tốt.`;
-      delete btn.dataset.impactBlock;
-      btn.disabled = false;
-    }
-  } catch {
-    badge.classList.add('d-none');
+  if (combos === 0) {
+    badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEE2E2;color:#B91C1C;';
+    icon.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
+    textEl.textContent = `${slotLabel} — HS chọn lớp này sẽ không ghép được tổ hợp nào. Hãy chọn slot khác.`;
+    btn.dataset.impactBlock = '1';
+    btn.disabled = true;
+  } else if (combos <= 3) {
+    badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEF9C3;color:#92400E;';
+    icon.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i>';
+    textEl.textContent = `${slotLabel} — Cảnh báo: chỉ còn ${combos} cách ghép tổ hợp. Nên ưu tiên ô xanh.`;
+    delete btn.dataset.impactBlock;
+    btn.disabled = false;
+  } else {
+    badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#DCFCE7;color:#166534;';
+    icon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+    const label = combos >= 100 ? '≥100' : combos;
+    textEl.textContent = `${slotLabel} — Tốt! ${label} cách ghép tổ hợp. HS có nhiều lựa chọn.`;
+    delete btn.dataset.impactBlock;
+    btn.disabled = false;
   }
 }
 
@@ -694,6 +807,7 @@ async function loadRooms() {
   sel.innerHTML = '<option value="">-- Đang tải... --</option>';
   wrap.style.display = '';
   hint.textContent = '';
+  setTimeout(() => wrap.scrollIntoView({behavior:'smooth', block:'nearest'}), 80);
 
   try {
     const res  = await fetch(`/api/available-rooms?day_of_week=${day}&session_type=${ses}&start_session=${ss}&duration=${dur}`);

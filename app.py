@@ -1333,6 +1333,62 @@ def admin_rooms_clear():
     return jsonify(ok=True)
 
 
+@app.route("/api/slot-impact-grid")
+@teacher_required
+def api_slot_impact_grid():
+    """Return combo counts for ALL valid slots at once (for mini slot-picker grid)."""
+    grade = request.args.get("grade", type=int)
+    dur   = request.args.get("duration", type=int)
+    if grade not in (10, 11, 12):
+        return jsonify(error="Khối không hợp lệ"), 400
+    if not (1 <= dur <= 4):
+        return jsonify(error="Số tiết không hợp lệ"), 400
+
+    subject = session.get("subject_group")
+    # Build by_subj once and reuse for all slot checks
+    by_subj = _build_by_subj(grade)
+    subj_norm = _norm_subj(subject or "")
+    if subj_norm in COMPULSORY_SUBJECTS:
+        relevant_th = list(TO_HOP.values())
+    else:
+        relevant_th = [subs for subs in TO_HOP.values() if subj_norm in subs]
+
+    def _combos_for_slot(dow, ses, start):
+        new_slot = {"day_of_week": dow, "session_type": ses,
+                    "start_session": start, "duration": dur}
+        # temporarily add this slot to by_subj for checking
+        tmp = {k: list(v) for k, v in by_subj.items()}
+        tmp.setdefault(subj_norm, []).append(new_slot)
+        if not relevant_th:
+            others = sorted(s for s in tmp if s != subj_norm)
+            count = [0]
+            _backtrack(tmp, others, 0, [new_slot], count, 100)
+            return count[0]
+        min_n = 101
+        for th_subs in relevant_th:
+            required = list(COMPULSORY_SUBJECTS) + list(th_subs)
+            others = [s for s in required if s != subj_norm and tmp.get(s)]
+            count = [0]
+            _backtrack(tmp, others, 0, [new_slot], count, 100)
+            n = count[0]
+            if n < min_n:
+                min_n = n
+            if min_n == 0:
+                break
+        return min_n if min_n <= 100 else 100
+
+    grid = {}
+    for dow in range(2, 8):
+        for ses in ("morning", "afternoon"):
+            for start in range(1, 5):
+                key = f"{dow}_{ses}_{start}"
+                if start + dur - 1 > 4:
+                    grid[key] = -1  # invalid
+                else:
+                    grid[key] = _combos_for_slot(dow, ses, start)
+    return jsonify(grid=grid, cap=100)
+
+
 @app.route("/api/available-rooms")
 def api_available_rooms():
     if not (session.get("is_admin") or session.get("user_type") == "teacher"):

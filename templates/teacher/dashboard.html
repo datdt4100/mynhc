@@ -667,7 +667,7 @@ async function loadSlotGrid() {
       }
     }
   } catch {
-    loading.innerHTML = '<span class="text-danger" style="font-size:.8rem;">Không tải được dữ liệu slot.</span>';
+    loading.innerHTML = '<span class="text-danger" style="font-size:.8rem;">Không tải được dữ liệu khung giờ.</span>';
   }
 }
 
@@ -787,7 +787,7 @@ function _highlightAndBadge(day, ses, start, gridData) {
   if (combos === 0) {
     badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEE2E2;color:#B91C1C;';
     icon.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
-    textEl.textContent = `${slotLabel} — Trùng giờ với tất cả các lớp của các môn khác. Hãy chọn slot khác.`;
+    textEl.textContent = `${slotLabel} — Trùng giờ với tất cả các lớp của các môn khác. Hãy chọn khung giờ khác.`;
     btn.dataset.impactBlock = '1';
     btn.disabled = true;
   } else if (ratio < 0.2) {
@@ -853,14 +853,14 @@ function submitReg() {
   errEl.classList.add('d-none');
 
   if (!document.getElementById('regDay').value) {
-    errEl.textContent = 'Vui lòng chọn một slot từ bảng bên trên.';
+    errEl.textContent = 'Vui lòng chọn một khung giờ từ bảng bên trên.';
     errEl.classList.remove('d-none');
     return;
   }
 
   const btn = document.getElementById('regSubmitBtn');
   if (btn.dataset.impactBlock) {
-    errEl.textContent = 'Slot này khiến học sinh không còn tổ hợp lớp hợp lệ. Vui lòng chọn thứ/tiết khác.';
+    errEl.textContent = 'Khung giờ này trùng với tất cả lớp các môn khác. Vui lòng chọn khung giờ khác.';
     errEl.classList.remove('d-none');
     return;
   }

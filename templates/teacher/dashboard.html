@@ -734,7 +734,7 @@ function _renderSlotGrid(gridData, maxCombos, dur, noRooms = new Set()) {
   // Header
   html += `<tr><th style="padding:4px 6px; color:#64748B; font-weight:600; width:70px;"></th>`;
   for (const d of days)
-    html += `<th style="padding:4px 2px; text-align:center; color:#0369A1; font-weight:700;">${DAY_SHORT[d]}</th>`;
+    html += `<th style="padding:4px 2px; text-align:center; color:#0369A1; font-weight:700;">${DAY_NAMES[d]}</th>`;
   html += `</tr>`;
 
   for (const ses of sessions) {
@@ -743,7 +743,7 @@ function _renderSlotGrid(gridData, maxCombos, dur, noRooms = new Set()) {
       ${ses.label}</td></tr>`;
     for (const start of ses.starts) {
       const endTiet = start + dur - 1;
-      const tierLabel = dur > 1 ? `t${start}–${endTiet}` : `t${start}`;
+      const tierLabel = dur > 1 ? `Tiết ${start}–${endTiet}` : `Tiết ${start}`;
       html += `<tr><td style="padding:3px 6px; color:#64748B; font-weight:600; white-space:nowrap;">${tierLabel}</td>`;
       for (const d of days) {
         const key = `${d}_${ses.key}_${start}`;

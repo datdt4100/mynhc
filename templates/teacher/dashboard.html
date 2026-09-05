@@ -646,7 +646,7 @@ async function loadSlotGrid() {
     if (rsRes) _rsData = await rsRes.json();
     _gridData  = data.grid;
     _maxCombos = data.max_combos;
-    const noRooms = _computeNoRooms(_rsData, dur);
+    const noRooms = _computeNoRooms(_rsData, dur, grade);
     _renderSlotGrid(_gridData, _maxCombos, dur, noRooms);
     loading.style.display = 'none';
     grid.style.display = '';
@@ -675,9 +675,9 @@ async function loadSlotGrid() {
   }
 }
 
-function _computeNoRooms(rsData, dur) {
+function _computeNoRooms(rsData, dur, grade) {
   if (!rsData || !rsData.rooms || !rsData.rooms.length) return new Set();
-  const {rooms, bookings} = rsData;
+  const {rooms, bookings, grade_slots = []} = rsData;
   const occ = {};
   bookings.forEach(b => {
     if (!occ[b.room]) occ[b.room] = {};
@@ -685,6 +685,18 @@ function _computeNoRooms(rsData, dur) {
     if (!occ[b.room][b.day][b.session]) occ[b.room][b.day][b.session] = new Set();
     for (let t = b.start; t < b.start + b.duration; t++)
       occ[b.room][b.day][b.session].add(t);
+  });
+  // Grade-restricted slots: mark as occupied for teachers of wrong grade
+  const gradeStr = grade ? String(grade) : null;
+  grade_slots.forEach(g => {
+    if (!gradeStr) return;
+    const allowed = g.grades.split(',').map(s => s.trim());
+    if (allowed.includes(gradeStr)) return;  // this grade IS allowed → skip
+    // This grade is NOT allowed → treat as occupied
+    if (!occ[g.room]) occ[g.room] = {};
+    if (!occ[g.room][g.day]) occ[g.room][g.day] = {};
+    if (!occ[g.room][g.day][g.session]) occ[g.room][g.day][g.session] = new Set();
+    occ[g.room][g.day][g.session].add(g.tiet);
   });
   const noRooms = new Set();
   const validStarts = dur === 2 ? [1, 3] : [1];
@@ -1125,10 +1137,24 @@ function showRoomDay(day) {
           </td>`;
         } else {
           const gradeLabel = gradeMap[room]?.[ses]?.[t];
-          const gradeChip = gradeLabel
-            ? `<span style="font-size:.6rem; color:#6D28D9; font-weight:700; background:#EDE9FE; border-radius:3px; padding:1px 3px;">${gradeLabel}</span>`
-            : '';
-          cells += `<td style="background:${isHl ? '#DBEAFE' : '#DCFCE7'}; text-align:center; padding:3px; vertical-align:middle; ${isHl ? 'outline:2px solid #3B82F6; outline-offset:-2px;' : ''}">${gradeChip}</td>`;
+          if (gradeLabel) {
+            const myGrade = document.getElementById('regGrade')?.value;
+            const allowed = gradeLabel.replace(/K/g,'').split('+');
+            const isAllowed = !myGrade || allowed.includes(String(myGrade));
+            if (isAllowed) {
+              // Available for this grade — green with chip
+              const chip = `<span style="font-size:.6rem; color:#6D28D9; font-weight:700; background:#EDE9FE; border-radius:3px; padding:1px 3px;">${gradeLabel}</span>`;
+              cells += `<td style="background:${isHl ? '#DBEAFE' : '#DCFCE7'}; text-align:center; padding:3px; vertical-align:middle; ${isHl ? 'outline:2px solid #3B82F6; outline-offset:-2px;' : ''}">${chip}</td>`;
+            } else {
+              // Wrong grade — show as gray striped with grade label
+              cells += `<td style="background:repeating-linear-gradient(45deg,#E5E7EB,#E5E7EB 4px,#F3F4F6 4px,#F3F4F6 8px); text-align:center; padding:3px; cursor:default; vertical-align:middle; ${isHl ? 'outline:2px solid #3B82F6; outline-offset:-2px;' : ''}">
+                <span style="font-size:.6rem; color:#6D28D9; font-weight:700;">${gradeLabel}</span>
+              </td>`;
+            }
+          } else {
+            // No grade restriction — free for everyone
+            cells += `<td style="background:${isHl ? '#DBEAFE' : '#DCFCE7'}; text-align:center; padding:3px; vertical-align:middle; ${isHl ? 'outline:2px solid #3B82F6; outline-offset:-2px;' : ''}"></td>`;
+          }
         }
       }
     });

@@ -704,19 +704,16 @@ function _computeNoRooms(rsData, dur) {
   return noRooms;
 }
 
-function _slotColor(val, maxCombos) {
-  if (val === 0) return ['#FEE2E2', '#FCA5A5'];           // đỏ: 0%
-  if (maxCombos <= 0) return ['#DCFCE7', '#86EFAC'];      // không có gì để mất → xanh
-  const ratio = val / maxCombos;
-  if (ratio >= 0.2) return ['#DCFCE7', '#86EFAC'];        // xanh: ≥20%
-  return ['#FEF9C3', '#FDE68A'];                          // vàng: 0–20%
+function _slotColor(val) {
+  return val === 0
+    ? ['#FEE2E2', '#FCA5A5']   // đỏ: không còn combo
+    : ['#DCFCE7', '#86EFAC'];  // xanh: còn ít nhất 1 combo
 }
 
 function _slotTitle(val, maxCombos) {
-  if (val === 0) return 'Chặn — 0/' + (maxCombos || '?') + ' combo';
-  if (maxCombos <= 0) return `${val} combo`;
-  const pct = Math.round(val / maxCombos * 100);
-  return `${val}/${maxCombos} combo (${pct}%)`;
+  if (val === 0) return 'Chặn — không còn tổ hợp hợp lệ';
+  if (maxCombos <= 0) return `${val} tổ hợp hợp lệ`;
+  return `${val}/${maxCombos} tổ hợp hợp lệ`;
 }
 
 function _renderSlotGrid(gridData, maxCombos, dur, noRooms = new Set()) {
@@ -781,7 +778,7 @@ function _renderSlotGrid(gridData, maxCombos, dur, noRooms = new Set()) {
                   ${buildInner('rgba(0,0,0,.15)')}
                 </div></td>`;
             } else {
-              const [bg, bdr] = _slotColor(val, maxCombos);
+              const [bg, bdr] = _slotColor(val);
               const title = _slotTitle(val, maxCombos);
               html += `<td rowspan="${rs}" style="padding:2px; vertical-align:top;" title="${title}">
                 <div class="slot-cell" data-day="${d}" data-ses="${ses.key}" data-start="${slotStart}" data-combos="${val}"
@@ -848,28 +845,16 @@ function _highlightAndBadge(day, ses, start, gridData) {
   const endTiet = start + dur - 1;
   const slotLabel = `${dayName} ${sesName} tiết ${start}${dur > 1 ? '–' + endTiet : ''}`;
 
-  const mx = _maxCombos || 0;
-  const ratio = mx > 0 ? combos / mx : (combos > 0 ? 1 : 0);
-  const pct   = mx > 0 ? Math.round(ratio * 100) : null;
-  const pctLabel = pct !== null ? ` (${pct}%)` : '';
-  const comboLabel = mx > 0 ? `${combos}/${mx}` : `${combos}`;
-
   if (combos === 0) {
     badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEE2E2;color:#B91C1C;';
     icon.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
     textEl.textContent = `${slotLabel} — Trùng giờ với tất cả các lớp của các môn khác. Hãy chọn khung giờ khác.`;
     btn.dataset.impactBlock = '1';
     btn.disabled = true;
-  } else if (ratio < 0.2) {
-    badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEF9C3;color:#92400E;';
-    icon.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i>';
-    textEl.textContent = `${slotLabel} — Trùng giờ với 1 vài lớp của các môn khác. Nên ưu tiên ô xanh.`;
-    delete btn.dataset.impactBlock;
-    btn.disabled = false;
   } else {
     badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#DCFCE7;color:#166534;';
     icon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
-    textEl.textContent = `${slotLabel} — Ít trùng giờ với các môn khác. HS có nhiều lựa chọn.`;
+    textEl.textContent = `${slotLabel} — Khung giờ hợp lệ, học sinh có thể sắp xếp lịch.`;
     delete btn.dataset.impactBlock;
     btn.disabled = false;
   }
@@ -1059,7 +1044,7 @@ function showRoomDay(day) {
   });
 
   if (!_rsData) return;
-  const {rooms, bookings} = _rsData;
+  const {rooms, bookings, grade_slots = []} = _rsData;
 
   // Build booking map: room → session → Set{tiết}
   const bmap = {};   // any booking
@@ -1081,6 +1066,17 @@ function showRoomDay(day) {
         btype[b.room][b.session][t] = b.type || 'class';
       }
     }
+  });
+
+  // Build grade map: room → session → tiet → grade label
+  const gradeMap = {};
+  grade_slots.forEach(g => {
+    if (g.day !== day) return;
+    if (!gradeMap[g.room]) gradeMap[g.room] = {};
+    if (!gradeMap[g.room][g.session]) gradeMap[g.room][g.session] = {};
+    const nums = g.grades.split(',').map(s => s.trim());
+    const label = nums.length > 1 ? 'K' + nums.join('+') : 'K' + nums[0];
+    gradeMap[g.room][g.session][g.tiet] = label;
   });
 
   // Highlight set: which (session, tiết) cells are "currently selected"
@@ -1128,7 +1124,11 @@ function showRoomDay(day) {
             <span style="font-size:.65rem; color:#991B1B; font-weight:700;">Bận</span>
           </td>`;
         } else {
-          cells += `<td style="background:${isHl ? '#DBEAFE' : '#DCFCE7'}; text-align:center; padding:3px; vertical-align:middle; ${isHl ? 'outline:2px solid #3B82F6; outline-offset:-2px;' : ''}"></td>`;
+          const gradeLabel = gradeMap[room]?.[ses]?.[t];
+          const gradeChip = gradeLabel
+            ? `<span style="font-size:.6rem; color:#6D28D9; font-weight:700; background:#EDE9FE; border-radius:3px; padding:1px 3px;">${gradeLabel}</span>`
+            : '';
+          cells += `<td style="background:${isHl ? '#DBEAFE' : '#DCFCE7'}; text-align:center; padding:3px; vertical-align:middle; ${isHl ? 'outline:2px solid #3B82F6; outline-offset:-2px;' : ''}">${gradeChip}</td>`;
         }
       }
     });

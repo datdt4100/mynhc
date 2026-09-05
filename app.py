@@ -137,6 +137,16 @@ room_external_busy = Table(
     Column("tiet", Integer, nullable=False),          # 1-4
 )
 
+room_grade_slots = Table(
+    "room_grade_slots", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("room_name", Text, nullable=False),
+    Column("day_of_week", Integer, nullable=False),
+    Column("session_type", Text, nullable=False),
+    Column("tiet", Integer, nullable=False),
+    Column("available_grades", Text, nullable=False),  # "10", "11", "10,11"
+)
+
 settings_table = Table(
     "settings", metadata,
     Column("key", Text, primary_key=True),
@@ -1426,8 +1436,23 @@ def admin_rooms_busy_upload():
         rows_data = list(ws.iter_rows(min_row=2, values_only=True))
         seen_rooms = []
 
+        def _parse_grades(raw):
+            """'10 - 11' / '10-11' → '10,11'; '10' → '10'; 'x'/'X' → None (busy); '' → skip"""
+            s = str(raw).strip().lower()
+            if not s or s == "none":
+                return "skip"          # blank → phòng trống, không giới hạn khối
+            if s in ("x",):
+                return None            # busy
+            # Normalise separators: '10 - 11', '10-11', '10,11'
+            import re
+            nums = re.findall(r'\d+', s)
+            if nums:
+                return ",".join(nums)  # '10,11' or '10' or '11'
+            return None                # unrecognised → treat as busy
+
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM room_external_busy"))
+            conn.execute(text("DELETE FROM room_grade_slots"))
             for row in rows_data:
                 # Column B (index 1) = room name
                 if row[1] and str(row[1]).strip():
@@ -1446,13 +1471,23 @@ def admin_rooms_busy_upload():
                     continue
 
                 for ci, (ses, dow) in col_map.items():
-                    val = row[ci] if ci < len(row) else None
-                    if val is not None and str(val).strip() not in ("", "None"):
+                    raw = row[ci] if ci < len(row) else None
+                    if raw is None:
+                        continue
+                    grades = _parse_grades(raw)
+                    if grades == "skip":
+                        continue           # phòng trống không hạn chế → bỏ qua
+                    elif grades is None:
                         conn.execute(insert(room_external_busy).values(
-                            room_name=current_room,
-                            day_of_week=dow,
-                            session_type=ses,
-                            tiet=tiet,
+                            room_name=current_room, day_of_week=dow,
+                            session_type=ses, tiet=tiet,
+                        ))
+                        added += 1
+                    else:
+                        conn.execute(insert(room_grade_slots).values(
+                            room_name=current_room, day_of_week=dow,
+                            session_type=ses, tiet=tiet,
+                            available_grades=grades,
                         ))
                         added += 1
 
@@ -1471,6 +1506,7 @@ def admin_rooms_busy_upload():
 def admin_rooms_busy_clear():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM room_external_busy"))
+        conn.execute(text("DELETE FROM room_grade_slots"))
     return jsonify(ok=True)
 
 
@@ -1768,6 +1804,7 @@ def api_room_schedule():
             .where(classes.c.location.isnot(None))
         ).fetchall()
         ext_busy_rows = conn.execute(select(room_external_busy)).fetchall()
+        grade_slot_rows = conn.execute(select(room_grade_slots)).fetchall()
     bookings = [
         {
             "room": r.location,
@@ -1784,7 +1821,6 @@ def api_room_schedule():
         }
         for r in rows
     ]
-    # Add external busy slots as single-tiet bookings
     for r in ext_busy_rows:
         bookings.append({
             "room": r.room_name,
@@ -1795,7 +1831,17 @@ def api_room_schedule():
             "label": "Bận (lịch ngoài)",
             "type": "external",
         })
-    return jsonify({"rooms": all_rooms, "bookings": bookings})
+    grade_slots = [
+        {
+            "room": r.room_name,
+            "day": r.day_of_week,
+            "session": r.session_type,
+            "tiet": r.tiet,
+            "grades": r.available_grades,  # "10", "11", "10,11"
+        }
+        for r in grade_slot_rows
+    ]
+    return jsonify({"rooms": all_rooms, "bookings": bookings, "grade_slots": grade_slots})
 
 
 @app.route("/admin")

@@ -2923,12 +2923,28 @@ def admin_class_schedule():
     for c in all_classes:
         key = f"{c.day_of_week}_{c.start_session}"
         if key in grid_json.get(c.session_type, {}):
+            # Format created_at as "dd/mm, HH:MM" for compact display
+            ca_raw = getattr(c, "created_at", None)
+            if ca_raw:
+                try:
+                    dt = datetime.strptime(str(ca_raw)[:16], "%Y-%m-%d %H:%M")
+                    ca_fmt = dt.strftime("%-d/%m, %H:%M")
+                except Exception:
+                    ca_fmt = str(ca_raw)[:16]
+            else:
+                ca_fmt = None
             grid_json[c.session_type][key].append({
                 "id": c.id,
                 "grade": c.grade,
                 "subject": c.subject_group or c.subject or "",
                 "teacher": c.teacher_name,
+                "created_at": ca_fmt,
+                "created_at_raw": str(ca_raw) if ca_raw else "",
             })
+    # Sort each slot's classes by created_at (nulls last)
+    for ses in grid_json:
+        for key in grid_json[ses]:
+            grid_json[ses][key].sort(key=lambda x: x["created_at_raw"] or "9999")
     # Collect all distinct subjects (sorted) for modal columns
     all_subjects = sorted({
         c.subject_group or c.subject or "" for c in all_classes if (c.subject_group or c.subject)

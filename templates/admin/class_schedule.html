@@ -130,36 +130,76 @@
   .detail-btn:hover { background:#E2E8F0; }
   .empty-cell { color:#CBD5E1; font-size:.68rem; text-align:center; padding:8px 0; }
 
-  /* ── Detail modal ── */
-  .detail-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: .78rem;
+  /* ── Detail modal: chronological item list ── */
+  .cls-list { display:flex; flex-direction:column; gap:8px; }
+  .cls-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1.5px solid transparent;
+    position: relative;
   }
-  .detail-table th {
-    padding: 7px 10px;
-    text-align: center;
+  .cls-item-10 { background:#EFF6FF; border-color:#BFDBFE; }
+  .cls-item-11 { background:#FFFBEB; border-color:#FDE68A; }
+  .cls-item-12 { background:#F0FDF4; border-color:#BBF7D0; }
+  .cls-item-no-time { opacity: .85; }
+  .cls-item-rank {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .66rem;
     font-weight: 700;
-    background: #F8FAFC;
-    border: 1px solid #E2E8F0;
-    color: #374151;
+    margin-top: 1px;
+  }
+  .cls-item-10 .cls-item-rank { background:#1D4ED8; color:#fff; }
+  .cls-item-11 .cls-item-rank { background:#D97706; color:#fff; }
+  .cls-item-12 .cls-item-rank { background:#16A34A; color:#fff; }
+  .cls-item-body { flex:1; min-width:0; }
+  .cls-item-teacher {
+    font-size: .82rem;
+    font-weight: 700;
+    color: #1E293B;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .detail-table th:first-child { width: 64px; }
-  .detail-table td {
-    padding: 6px 10px;
-    border: 1px solid #E2E8F0;
-    vertical-align: top;
+  .cls-item-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+    flex-wrap: wrap;
   }
-  .drow-10 td { background:#EFF6FF; }
-  .drow-11 td { background:#FFFBEB; }
-  .drow-12 td { background:#F0FDF4; }
-  .drow-10 td:first-child { color:#1D4ED8; font-weight:700; font-size:.8rem; }
-  .drow-11 td:first-child { color:#92400E; font-weight:700; font-size:.8rem; }
-  .drow-12 td:first-child { color:#166534; font-weight:700; font-size:.8rem; }
-  .t-entry { display:block; font-size:.72rem; color:#374151; padding:1px 0; }
-  .t-entry::before { content:"·"; color:#94A3B8; margin-right:4px; }
-  .no-cls { color:#D1D5DB; font-size:.68rem; }
+  .cls-item-subj {
+    font-size: .7rem;
+    color: #6B7280;
+    font-weight: 500;
+  }
+  .cls-item-grade-pill {
+    font-size: .65rem;
+    font-weight: 700;
+    padding: 0 6px;
+    border-radius: 4px;
+    line-height: 1.7;
+  }
+  .cls-item-10 .cls-item-grade-pill { background:#DBEAFE; color:#1D4ED8; }
+  .cls-item-11 .cls-item-grade-pill { background:#FEF3C7; color:#92400E; }
+  .cls-item-12 .cls-item-grade-pill { background:#DCFCE7; color:#166534; }
+  .cls-item-time {
+    flex-shrink: 0;
+    text-align: right;
+    font-size: .68rem;
+    color: #9CA3AF;
+    white-space: nowrap;
+    margin-top: 2px;
+  }
+  .cls-item-time i { font-size: .6rem; margin-right: 2px; }
 </style>
 {% endblock %}
 
@@ -278,43 +318,37 @@ function openDetail(day, slot, ses) {
   const items = (GRID[ses] || {})[`${day}_${slot}`] || [];
   const label = `${DNAMES[day]} ${SLABEL[ses]} — Tiết ${slot}–${slot+1}`;
   document.getElementById('detailModalTitle').textContent = label;
-  document.getElementById('detailModalSub').textContent = `${items.length} lớp`;
+  document.getElementById('detailModalSub').textContent =
+    items.length ? `${items.length} lớp đã đăng ký · theo thứ tự thời gian` : 'Chưa có lớp';
 
-  const grades  = [...new Set(items.map(c=>c.grade))].sort();
-  const subjs   = [...new Set(items.map(c=>c.subject))].sort();
-  const matrix  = {};
-  for (const c of items) {
-    if (!matrix[c.grade]) matrix[c.grade] = {};
-    if (!matrix[c.grade][c.subject]) matrix[c.grade][c.subject] = [];
-    matrix[c.grade][c.subject].push(c.teacher);
-  }
-
-  if (!subjs.length) {
+  if (!items.length) {
     document.getElementById('detailModalBody').innerHTML =
-      '<p class="text-muted text-center py-4">Không có lớp nào.</p>';
+      '<p class="text-muted text-center py-4">Chưa có lớp nào đăng ký khung giờ này.</p>';
     new bootstrap.Modal(document.getElementById('detailModal')).show();
     return;
   }
 
-  let h = `<table class="detail-table"><thead><tr>
-    <th>Khối</th>`;
-  for (const s of subjs) h += `<th>${s}</th>`;
-  h += `</tr></thead><tbody>`;
-  for (const g of grades) {
-    h += `<tr class="drow-${g}"><td>K${g}</td>`;
-    for (const s of subjs) {
-      const ts = matrix[g]?.[s] || [];
-      h += `<td>${ts.length
-        ? ts.map(t=>`<span class="t-entry">${t}</span>`).join('')
-        : '<div class="no-cls">—</div>'
-      }</td>`;
-    }
-    h += `</tr>`;
-  }
-  h += `</tbody></table>
-    <p style="font-size:.73rem;color:#94A3B8;margin-top:10px;margin-bottom:0;">
-      Tổng ${items.length} lớp · ${grades.length} khối · ${subjs.length} môn
-    </p>`;
+  // Items already sorted by created_at_raw from backend
+  let h = '<div class="cls-list">';
+  items.forEach((c, i) => {
+    const noTime = !c.created_at;
+    h += `<div class="cls-item cls-item-${c.grade}${noTime ? ' cls-item-no-time' : ''}">
+      <div class="cls-item-rank">${i + 1}</div>
+      <div class="cls-item-body">
+        <div class="cls-item-teacher"><i class="bi bi-person-fill me-1" style="font-size:.7rem;opacity:.6;"></i>${c.teacher}</div>
+        <div class="cls-item-meta">
+          <span class="cls-item-grade-pill">K${c.grade}</span>
+          <span class="cls-item-subj">${c.subject}</span>
+        </div>
+      </div>
+      <div class="cls-item-time">
+        ${c.created_at
+          ? `<i class="bi bi-clock"></i>${c.created_at}`
+          : `<span style="color:#D1D5DB;font-size:.63rem;">—</span>`}
+      </div>
+    </div>`;
+  });
+  h += '</div>';
 
   document.getElementById('detailModalBody').innerHTML = h;
   new bootstrap.Modal(document.getElementById('detailModal')).show();

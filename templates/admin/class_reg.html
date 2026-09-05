@@ -352,11 +352,13 @@
           <div class="fw-semibold" style="color:#0c4a6e;font-size:.78rem;margin-bottom:4px;">Khung giờ đã chọn</div>
           <div id="regModalSlotInfo" style="color:#0369A1;font-weight:700;"></div>
         </div>
-        <div class="mb-3" style="position:relative;">
+        <div class="mb-3">
           <label class="form-label fw-semibold" style="font-size:.85rem;">Giáo viên <span class="text-danger">*</span></label>
-          <input type="text" id="teacherSearch" class="form-control form-control-sm" placeholder="Tìm theo tên hoặc tổ bộ môn…" autocomplete="off" oninput="_filterTeachers(this.value)" onfocus="_filterTeachers(this.value)">
-          <div id="teacherDropdown"
-               style="display:none;position:absolute;left:0;right:0;z-index:1060;background:#fff;border:1.5px solid #BAE6FD;border-radius:8px;max-height:180px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12);margin-top:2px;"></div>
+          <input type="text" id="teacherSearch" class="form-control form-control-sm mb-1"
+                 placeholder="Tìm tên hoặc tổ bộ môn…" autocomplete="off"
+                 oninput="_filterTeachers(this.value)">
+          <div id="teacherList"
+               style="border:1.5px solid #BAE6FD;border-radius:8px;max-height:170px;overflow-y:auto;background:#fff;"></div>
           <input type="hidden" id="selectedTeacherId">
           <div id="selectedTeacherInfo" style="font-size:.75rem;color:#0369A1;margin-top:4px;min-height:16px;"></div>
         </div>
@@ -617,10 +619,21 @@ function _renderGridView() {
     return gradeTiet[`${room}_${day}_${slotStart}`] || null;
   }
 
-  let h = `<table style="border-collapse:collapse;width:100%;min-width:900px;font-size:.7rem;">
+  // Fixed dimensions
+  const CW = 82;   // slot cell width px
+  const CH = 50;   // slot cell height px
+  const RW = 116;  // room name col width px
+  const TD = `padding:2px 2px;border:1px solid #E2E8F0;width:${CW}px;`;
+  const IH = `height:${CH}px;border-radius:5px;box-sizing:border-box;overflow:hidden;`;
+
+  let h = `<table style="border-collapse:collapse;table-layout:fixed;font-size:.7rem;width:${RW + CW*12}px;">
+  <colgroup>
+    <col style="width:${RW}px;">`;
+  for (let i = 0; i < 12; i++) h += `<col style="width:${CW}px;">`;
+  h += `</colgroup>
   <thead>
     <tr>
-      <th rowspan="2" style="${_RG_TH}text-align:left;position:sticky;left:0;z-index:5;min-width:110px;">Phòng</th>`;
+      <th rowspan="2" style="${_RG_TH}text-align:left;position:sticky;left:0;z-index:5;width:${RW}px;">Phòng</th>`;
   for (const d of _RG_DAYS)
     h += `<th colspan="2" style="${_RG_TH}">${_RG_DAY_NAMES[d]}</th>`;
   h += `</tr><tr>`;
@@ -631,7 +644,9 @@ function _renderGridView() {
 
   for (const room of rooms) {
     h += `<tr>
-      <td style="padding:3px 8px;border:1px solid #E2E8F0;font-size:.7rem;font-weight:700;color:#0c4a6e;background:#F8FAFC;position:sticky;left:0;z-index:2;white-space:nowrap;">${_gesc(room)}</td>`;
+      <td style="padding:3px 8px;border:1px solid #E2E8F0;font-size:.68rem;font-weight:700;color:#0c4a6e;background:#F8FAFC;
+                 position:sticky;left:0;z-index:2;width:${RW}px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+          title="${_gesc(room)}">${_gesc(room)}</td>`;
     for (const d of _RG_DAYS) {
       for (const s of _RG_SLOTS) {
         const bk  = bookMap[`${room}_${d}_${s}`];
@@ -639,27 +654,30 @@ function _renderGridView() {
         const gr  = !bk && !ext && gradeRestr(room, d, s);
         if (bk) {
           const gs = _RG_GRADE_ST[bk.grade] || {bg:'#F1F5F9',bdr:'#CBD5E1',txt:'#475569'};
-          h += `<td style="padding:2px;border:1px solid #E2E8F0;min-width:72px;vertical-align:top;">
-            <div style="background:${gs.bg};border:1.5px solid ${gs.bdr};border-radius:5px;padding:3px 4px;height:48px;overflow:hidden;position:relative;">
-              <div style="font-size:.6rem;font-weight:800;color:${gs.txt};">K${bk.grade} · ${_gesc(bk.subject)}</div>
-              <div style="font-size:.58rem;color:#374151;line-height:1.3;margin-top:1px;">${_gesc(bk.teacher)}</div>
+          h += `<td style="${TD}vertical-align:top;">
+            <div style="${IH}background:${gs.bg};border:1.5px solid ${gs.bdr};padding:3px 5px 3px 4px;position:relative;">
+              <div style="font-size:.58rem;font-weight:800;color:${gs.txt};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">K${bk.grade} · ${_gesc(bk.subject)}</div>
+              <div style="font-size:.56rem;color:#374151;line-height:1.3;margin-top:1px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${_gesc(bk.teacher)}</div>
               <button onclick="deleteGridClass(${bk.class_id},event)"
-                      style="position:absolute;top:1px;right:2px;background:none;border:none;cursor:pointer;color:#DC2626;font-size:.7rem;padding:0;line-height:1;" title="Xóa lớp">✕</button>
+                      style="position:absolute;top:1px;right:2px;background:none;border:none;cursor:pointer;color:#DC2626;font-size:.68rem;padding:0;line-height:1;" title="Xóa">✕</button>
             </div></td>`;
         } else if (ext) {
-          h += `<td style="padding:2px;border:1px solid #E2E8F0;min-width:72px;">
-            <div style="height:48px;border-radius:5px;background:repeating-linear-gradient(45deg,#E5E7EB,#E5E7EB 4px,#F3F4F6 4px,#F3F4F6 8px);display:flex;align-items:center;justify-content:center;">
-              <span style="font-size:.58rem;color:#6B7280;font-weight:700;">Bận</span>
+          h += `<td style="${TD}">
+            <div style="${IH}background:repeating-linear-gradient(45deg,#E5E7EB,#E5E7EB 4px,#F3F4F6 4px,#F3F4F6 8px);
+                          display:flex;align-items:center;justify-content:center;">
+              <span style="font-size:.56rem;color:#6B7280;font-weight:700;">Bận</span>
             </div></td>`;
         } else {
-          const grChip = gr ? `<div style="font-size:.52rem;color:#6D28D9;font-weight:700;background:#EDE9FE;border-radius:3px;padding:0 3px;line-height:1.5;">K${gr.split(',').join('+')}</div>` : '';
-          h += `<td style="padding:2px;border:1px solid #E2E8F0;min-width:72px;">
+          const grChip = gr
+            ? `<div style="font-size:.5rem;color:#6D28D9;font-weight:700;background:#EDE9FE;border-radius:3px;padding:0 3px;line-height:1.5;margin-bottom:1px;">K${gr.split(',').join('+')}</div>`
+            : '';
+          h += `<td style="${TD}">
             <div class="grid-slot" data-room="${_gesc(room)}" data-day="${d}" data-session="${ses}" data-start="${s}"
                  onclick="openRegisterModal(this)"
-                 style="height:48px;border-radius:5px;background:#F0FDF4;border:1.5px dashed #86EFAC;cursor:pointer;
-                        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:background .1s;"
+                 style="${IH}background:#F0FDF4;border:1.5px dashed #86EFAC;cursor:pointer;
+                        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:background .1s;"
                  onmouseenter="this.style.background='#DCFCE7'" onmouseleave="this.style.background='#F0FDF4'">
-              ${grChip}<span style="font-size:.58rem;color:#94A3B8;">+ Đăng ký</span>
+              ${grChip}<span style="font-size:.55rem;color:#94A3B8;">+ Đăng ký</span>
             </div></td>`;
         }
       }
@@ -683,29 +701,35 @@ function openRegisterModal(cell) {
   document.getElementById('teacherSearch').value = '';
   document.getElementById('selectedTeacherId').value = '';
   document.getElementById('selectedTeacherInfo').textContent = '';
-  document.getElementById('teacherDropdown').style.display = 'none';
   document.querySelectorAll('input[name="regGradeManual"]').forEach(r => r.checked = false);
   document.getElementById('regModalError').classList.add('d-none');
+  _filterTeachers('');  // show full list
   new bootstrap.Modal(document.getElementById('modalRegisterClass')).show();
 }
 
 function _filterTeachers(q) {
-  const dd = document.getElementById('teacherDropdown');
-  if (!q.trim()) { dd.style.display='none'; return; }
-  const matches = _TEACHERS.filter(t =>
-    t.full_name.toLowerCase().includes(q.toLowerCase()) ||
-    (t.subject_group||'').toLowerCase().includes(q.toLowerCase())
-  ).slice(0, 12);
-  if (!matches.length) { dd.style.display='none'; return; }
-  dd.innerHTML = matches.map(t =>
-    `<div onclick="_selectTeacher(${t.id},'${_gesc(t.full_name)}','${_gesc(t.subject_group||'')}')"
-          style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #E2E8F0;font-size:.8rem;"
-          onmouseenter="this.style.background='#EFF6FF'" onmouseleave="this.style.background=''">
-       <div class="fw-semibold" style="color:#0c4a6e;">${_gesc(t.full_name)}</div>
-       <div style="font-size:.72rem;color:#64748B;">${_gesc(t.subject_group||'')}</div>
-     </div>`
-  ).join('');
-  dd.style.display = 'block';
+  const list = document.getElementById('teacherList');
+  const matches = q.trim()
+    ? _TEACHERS.filter(t =>
+        t.full_name.toLowerCase().includes(q.toLowerCase()) ||
+        (t.subject_group||'').toLowerCase().includes(q.toLowerCase()))
+    : _TEACHERS;
+  const selId = document.getElementById('selectedTeacherId').value;
+  if (!matches.length) {
+    list.innerHTML = '<div style="padding:10px 12px;font-size:.78rem;color:#94A3B8;">Không tìm thấy.</div>';
+    return;
+  }
+  list.innerHTML = matches.map(t => {
+    const isSel = String(t.id) === String(selId);
+    return `<div onclick="_selectTeacher(${t.id},'${_gesc(t.full_name)}','${_gesc(t.subject_group||'')}')"
+                 id="topt_${t.id}"
+                 style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #E2E8F0;font-size:.8rem;
+                        background:${isSel?'#EFF6FF':'#fff'};"
+                 onmouseenter="this.style.background='#EFF6FF'" onmouseleave="this.style.background='${isSel?'#EFF6FF':'#fff'}'">
+              <div class="fw-semibold" style="color:${isSel?'#0369A1':'#0c4a6e'};">${_gesc(t.full_name)}${isSel?' <i class="bi bi-check2" style="color:#0EA5E9;"></i>':''}</div>
+              <div style="font-size:.7rem;color:#64748B;">${_gesc(t.subject_group||'')}</div>
+            </div>`;
+  }).join('');
 }
 
 function _selectTeacher(id, name, subj) {
@@ -713,14 +737,12 @@ function _selectTeacher(id, name, subj) {
   document.getElementById('teacherSearch').value = name;
   document.getElementById('selectedTeacherInfo').innerHTML =
     `<i class="bi bi-book me-1"></i>Môn: <strong>${_gesc(subj)}</strong>`;
-  document.getElementById('teacherDropdown').style.display = 'none';
+  // Re-render list to highlight selected
+  _filterTeachers(document.getElementById('teacherSearch').value);
+  // Scroll selected item into view
+  const el = document.getElementById('topt_' + id);
+  if (el) el.scrollIntoView({block:'nearest'});
 }
-
-// Close dropdown when clicking outside
-document.addEventListener('click', e => {
-  if (!e.target.closest('#teacherSearch') && !e.target.closest('#teacherDropdown'))
-    document.getElementById('teacherDropdown').style.display = 'none';
-});
 
 async function submitRegisterClass() {
   const teacherId = document.getElementById('selectedTeacherId').value;

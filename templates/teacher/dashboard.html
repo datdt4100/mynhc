@@ -1208,11 +1208,14 @@ setInterval(updateCounts, 5000);
           loadSlotGrid();
         }
       } else if (ev.type === 'schedule') {
-        // Admin changed room schedule — invalidate cache and refresh
         _invalidateRoomSched();
-        loadSlotGrid();
-        const day = document.getElementById('regDay')?.value;
-        if (day) loadRooms();
+        loadSlotGrid().then(() => {
+          // After fresh _rsData arrives, re-render the room schedule tab if visible
+          const modal = document.getElementById('roomSchedModal');
+          if (modal && modal.classList.contains('show')) showRoomDay(_rsDay);
+          const day = document.getElementById('regDay')?.value;
+          if (day) loadRooms();
+        });
       }
     } catch (_) {}
   };

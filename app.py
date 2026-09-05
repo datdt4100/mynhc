@@ -1009,6 +1009,20 @@ def teacher_register_class():
     # Acquire write lock — serialise concurrent registrations
     with _reg_lock:
         with engine.begin() as conn:
+            # Check teacher schedule conflict (same teacher, overlapping slot)
+            teacher_conflict = conn.execute(
+                select(classes.c.id).where(and_(
+                    classes.c.teacher_id == teacher_id,
+                    classes.c.day_of_week == day_of_week,
+                    classes.c.session_type == session_type,
+                    classes.c.start_session <= end_session,
+                    (classes.c.start_session + classes.c.duration - 1) >= start_session,
+                ))
+            ).first()
+            if teacher_conflict:
+                return jsonify(ok=False,
+                    error="Bạn đã có lớp trong khung giờ này. Vui lòng chọn khung giờ khác.")
+
             # Re-validate room availability inside the lock
             if location:
                 room_conflict = conn.execute(

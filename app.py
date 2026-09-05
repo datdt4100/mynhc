@@ -1793,9 +1793,28 @@ def api_slot_impact_grid():
     if dur not in (2, 4):
         return jsonify(error="Số tiết phải là 2 hoặc 4"), 400
 
+    teacher_id = session["user_id"]
     subject = _norm_subj(session.get("subject_group") or "")
     by_subj = _build_by_subj(grade)
     max_combos = count_combos_max(grade, subject)
+
+    # Build set of slots already occupied by this teacher
+    with engine.connect() as conn:
+        teacher_classes = conn.execute(
+            select(classes.c.day_of_week, classes.c.session_type,
+                   classes.c.start_session, classes.c.duration)
+            .where(classes.c.teacher_id == teacher_id)
+        ).fetchall()
+    teacher_occupied = set()
+    for c in teacher_classes:
+        end = c.start_session + c.duration - 1
+        for t in range(c.start_session, end + 1):
+            teacher_occupied.add((c.day_of_week, c.session_type, t))
+
+    def _teacher_conflict(dow, ses, start):
+        """True nếu GV đã có lớp chồng tiết với slot [start, start+dur-1]."""
+        end = start + dur - 1
+        return any((dow, ses, t) in teacher_occupied for t in range(start, end + 1))
 
     def _combos_for_slot(dow, ses, start):
         new_slot = {"day_of_week": dow, "session_type": ses,
@@ -1815,6 +1834,8 @@ def api_slot_impact_grid():
                 key = f"{dow}_{ses}_{start}"
                 if start not in valid_starts:
                     grid[key] = -1  # not an allowed starting tiet
+                elif _teacher_conflict(dow, ses, start):
+                    grid[key] = -1  # GV đã có lớp ở khung giờ này
                 else:
                     grid[key] = _combos_for_slot(dow, ses, start)
     return jsonify(grid=grid, max_combos=max_combos)

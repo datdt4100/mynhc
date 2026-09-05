@@ -368,6 +368,22 @@
             <span id="teacher-reg-label">{% if teacher_reg_open %}Đang mở{% else %}Đã đóng{% endif %}</span>
           </button>
         </div>
+        <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
+          <span style="font-size:.76rem; color:#64748B;">
+            <i class="bi bi-clock-history me-1" style="color:{% if schedule_constraint %}#F59E0B{% else %}#94A3B8{% endif %};" id="sched-icon"></i>
+            <span id="sched-constraint-desc">
+              {% if schedule_constraint %}Kiểm tra ràng buộc khung giờ{% else %}Không kiểm tra ràng buộc khung giờ{% endif %}
+            </span>
+          </span>
+          <button id="btn-toggle-sched-constraint"
+                  class="reg-toggle {% if schedule_constraint %}open{% else %}closed{% endif %}"
+                  data-on="{{ 'true' if schedule_constraint else 'false' }}"
+                  onclick="toggleSchedConstraint()"
+                  title="Bật: GV phải chọn khung giờ đảm bảo HS vẫn ghép được đủ môn. Tắt: chỉ kiểm tra phòng/tiết trống.">
+            <span class="toggle-dot"></span>
+            <span id="sched-constraint-label">{% if schedule_constraint %}Bật{% else %}Tắt{% endif %}</span>
+          </button>
+        </div>
       </div>
     </div>
     <div class="col-md-6">
@@ -954,6 +970,28 @@ function toggleReg(type) {
       btn.classList.toggle('open',   nowOpen);
       btn.classList.toggle('closed', !nowOpen);
       label.textContent = nowOpen ? 'Đang mở' : 'Đã đóng';
+    })
+    .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+    .finally(() => { btn.disabled = false; });
+}
+
+function toggleSchedConstraint() {
+  const btn   = document.getElementById('btn-toggle-sched-constraint');
+  const label = document.getElementById('sched-constraint-label');
+  const desc  = document.getElementById('sched-constraint-desc');
+  const icon  = document.getElementById('sched-icon');
+  btn.disabled = true;
+
+  fetch('{{ url_for("admin_schedule_constraint_toggle") }}', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      const on = data.on;
+      btn.dataset.on = on ? 'true' : 'false';
+      btn.classList.toggle('open',   on);
+      btn.classList.toggle('closed', !on);
+      label.textContent = on ? 'Bật' : 'Tắt';
+      desc.textContent  = on ? 'Kiểm tra ràng buộc khung giờ' : 'Không kiểm tra ràng buộc khung giờ';
+      icon.style.color  = on ? '#F59E0B' : '#94A3B8';
     })
     .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
     .finally(() => { btn.disabled = false; });

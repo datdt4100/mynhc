@@ -205,7 +205,8 @@ def init_db():
         for key, value in [("admin_password", "Admin@123"),
                            ("teacher_reg_open", "0"),
                            ("student_reg_open", "0"),
-                           ("maintenance_mode", "0")]:
+                           ("maintenance_mode", "0"),
+                           ("schedule_constraint", "1")]:
             try:
                 conn.execute(
                     insert(settings_table).values(key=key, value=value)
@@ -992,8 +993,8 @@ def teacher_register_class():
     location = (data.get("location") or "").strip() or None
     end_session = start_session + duration - 1
 
-    # Heavy combo check outside the lock (read-only, can run concurrently)
-    if subject:
+    # Heavy combo check — only when admin has not disabled the constraint
+    if subject and get_setting("schedule_constraint", "1") == "1":
         new_cls = {"subject": subject, "day_of_week": day_of_week,
                    "session_type": session_type, "start_session": start_session,
                    "duration": duration}
@@ -1985,6 +1986,7 @@ def admin_index():
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
     student_reg_open = get_setting("student_reg_open", "0") == "1"
     maintenance = get_setting("maintenance_mode", "0") == "1"
+    schedule_constraint = get_setting("schedule_constraint", "1") == "1"
     with engine.connect() as conn2:
         busy_room_count = conn2.execute(
             select(func.count()).select_from(room_external_busy)
@@ -2004,6 +2006,7 @@ def admin_index():
         teacher_reg_open=teacher_reg_open,
         student_reg_open=student_reg_open,
         maintenance=maintenance,
+        schedule_constraint=schedule_constraint,
         room_list=room_list,
         room_count=room_count,
         busy_room_count=busy_room_count,
@@ -2896,6 +2899,15 @@ def admin_maintenance_toggle():
     current = get_setting("maintenance_mode", "0")
     new_val = "0" if current == "1" else "1"
     set_setting("maintenance_mode", new_val)
+    return jsonify(ok=True, on=new_val == "1")
+
+
+@app.route("/admin/schedule-constraint/toggle", methods=["POST"])
+@admin_required
+def admin_schedule_constraint_toggle():
+    current = get_setting("schedule_constraint", "1")
+    new_val = "0" if current == "1" else "1"
+    set_setting("schedule_constraint", new_val)
     return jsonify(ok=True, on=new_val == "1")
 
 

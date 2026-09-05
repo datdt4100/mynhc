@@ -153,6 +153,14 @@ settings_table = Table(
     Column("value", Text, nullable=True),
 )
 
+operators = Table(
+    "operators", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("full_name", Text, nullable=False),
+    Column("login_code", Text, unique=True, nullable=False),  # Mã đăng nhập (như CCCD)
+    Column("password_hash", Text, nullable=False),
+)
+
 # ---------------------------------------------------------------------------
 # DB init
 # ---------------------------------------------------------------------------
@@ -617,6 +625,16 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
+
+def room_grid_access_required(f):
+    """Allow both admin and operator accounts."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if _is_admin() or session.get("user_type") == "operator":
+            return f(*args, **kwargs)
+        return redirect(url_for("login_page"))
+    return decorated
+
 # ---------------------------------------------------------------------------
 # Auth routes
 # ---------------------------------------------------------------------------
@@ -694,6 +712,21 @@ def login_step1():
                 gender=None,
                 title="Học sinh",
                 is_first_login=student.is_first_login,
+            )
+
+        operator = conn.execute(
+            select(operators).where(
+                and_(operators.c.full_name == full_name, operators.c.login_code == cccd)
+            )
+        ).fetchone()
+        if operator:
+            return jsonify(
+                ok=True,
+                user_type="operator",
+                full_name=operator.full_name,
+                gender=None,
+                title="Điều phối",
+                is_first_login=0,
             )
 
     return jsonify(ok=False, error="Không tìm thấy tài khoản phù hợp.")
@@ -809,6 +842,23 @@ def login_step2():
         if must_change and not student.is_first_login:
             return jsonify(ok=True, must_change=True, redirect=url_for("change_password_page"))
         return jsonify(ok=True, redirect=url_for("student_dashboard"))
+
+    elif user_type == "operator":
+        with engine.connect() as conn:
+            op = conn.execute(
+                select(operators).where(
+                    and_(operators.c.full_name == full_name, operators.c.login_code == cccd)
+                )
+            ).fetchone()
+        if not op:
+            return jsonify(ok=False, error="Không tìm thấy tài khoản.")
+        if not check_password_hash(op.password_hash, password):
+            return jsonify(ok=False, error="Sai mật khẩu.")
+        session.clear()
+        session["user_type"] = "operator"
+        session["operator_id"] = op.id
+        session["full_name"] = op.full_name
+        return jsonify(ok=True, redirect=url_for("admin_room_detail"))
 
     return jsonify(ok=False, error="Loại tài khoản không hợp lệ.")
 
@@ -2363,10 +2413,66 @@ def admin_students_clear():
     return redirect(url_for("admin_index"))
 
 
+# ---------------------------------------------------------------------------
+# Operator account management
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/operators")
+@admin_required
+def admin_operators():
+    with engine.connect() as conn:
+        ops = conn.execute(select(operators).order_by(operators.c.id)).fetchall()
+    return render_template("admin/operators.html", operators=ops)
+
+
+@app.route("/admin/operators", methods=["POST"])
+@admin_required
+def admin_operators_create():
+    full_name  = (request.form.get("full_name") or "").strip()
+    login_code = (request.form.get("login_code") or "").strip()
+    password   = (request.form.get("password") or "").strip()
+    if not full_name or not login_code or not password:
+        flash("Vui lòng nhập đầy đủ Họ tên, Mã đăng nhập và Mật khẩu.", "danger")
+        return redirect(url_for("admin_operators"))
+    pw_hash = generate_password_hash(password)
+    try:
+        with engine.begin() as conn:
+            conn.execute(insert(operators).values(
+                full_name=full_name,
+                login_code=login_code,
+                password_hash=pw_hash,
+            ))
+        flash(f"Đã tạo tài khoản '{full_name}'.", "success")
+    except Exception:
+        flash("Mã đăng nhập đã tồn tại.", "danger")
+    return redirect(url_for("admin_operators"))
+
+
+@app.route("/admin/operators/<int:op_id>/reset-password", methods=["POST"])
+@admin_required
+def admin_operators_reset_pw(op_id):
+    password = (request.form.get("password") or "").strip()
+    if not password:
+        return jsonify(ok=False, error="Mật khẩu không được để trống.")
+    with engine.begin() as conn:
+        conn.execute(update(operators).where(operators.c.id == op_id).values(
+            password_hash=generate_password_hash(password)
+        ))
+    return jsonify(ok=True)
+
+
+@app.route("/admin/operators/<int:op_id>", methods=["DELETE"])
+@admin_required
+def admin_operators_delete(op_id):
+    with engine.begin() as conn:
+        conn.execute(delete(operators).where(operators.c.id == op_id))
+    return jsonify(ok=True)
+
+
 # --- Admin: Class registration management ---
 
 @app.route("/admin/room-grid")
-@admin_required
+@room_grid_access_required
 def admin_room_grid():
     with engine.connect() as conn:
         all_rooms = sorted([r.name for r in conn.execute(select(rooms)).fetchall()], key=_room_sort_key)
@@ -2402,7 +2508,7 @@ def admin_room_grid():
 
 
 @app.route("/admin/room-detail")
-@admin_required
+@room_grid_access_required
 def admin_room_detail():
     with engine.connect() as conn:
         all_teachers = conn.execute(
@@ -2412,11 +2518,14 @@ def admin_room_detail():
         {"id": t.id, "full_name": t.full_name, "subject_group": t.subject_group or ""}
         for t in all_teachers
     ]
-    return render_template("admin/room_grid.html", teachers_json=teachers_json)
+    is_op = session.get("user_type") == "operator"
+    return render_template("admin/room_grid.html",
+                           teachers_json=teachers_json,
+                           is_operator_session=is_op)
 
 
 @app.route("/admin/room-detail/export")
-@admin_required
+@room_grid_access_required
 def admin_room_detail_export():
     with engine.connect() as conn:
         all_rooms = sorted([r.name for r in conn.execute(select(rooms)).fetchall()], key=_room_sort_key)
@@ -2541,7 +2650,7 @@ def admin_room_detail_export():
 
 
 @app.route("/admin/register-class", methods=["POST"])
-@admin_required
+@room_grid_access_required
 def admin_register_class():
     data = request.get_json(force=True)
     try:
@@ -2801,7 +2910,7 @@ def admin_class_publish(class_id):
 
 
 @app.route("/admin/classes/<int:class_id>", methods=["DELETE"])
-@admin_required
+@room_grid_access_required
 def admin_class_delete(class_id):
     with engine.begin() as conn:
         conn.execute(delete(enrollments).where(enrollments.c.class_id == class_id))

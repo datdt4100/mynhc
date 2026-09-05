@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Tài khoản điều phối – mynhc{% endblock %}
+{% block hero %}{% endblock %}
+
+{% block head %}
+<style>
+  body { background: #F0F9FF; }
+  .section-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1.5px solid #E2E8F0;
+    overflow: hidden;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  }
+  .section-card-header {
+    padding: 13px 20px;
+    background: linear-gradient(90deg, #F8FAFC, #F5F3FF);
+    border-bottom: 1.5px solid #E2E8F0;
+    display: flex; align-items: center; gap: 10px;
+    font-size: .9rem; font-weight: 700; color: #3B0764;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container pb-5" style="max-width:700px;">
+  <div class="d-flex align-items-center gap-2 mb-4 pt-4">
+    <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+       style="border-radius:8px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;padding:0;" title="Quay lại">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h1 style="font-size:1.1rem;font-weight:800;color:#3B0764;margin:0;">
+      <i class="bi bi-person-badge me-2" style="color:#7C3AED;"></i>Tài khoản điều phối
+    </h1>
+  </div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+      <div class="alert alert-{{ 'success' if cat == 'success' else 'danger' }} py-2 mb-3" style="font-size:.85rem;border-radius:10px;">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Danh sách tài khoản -->
+  <div class="section-card mb-4">
+    <div class="section-card-header">
+      <i class="bi bi-list-ul"></i>
+      <span>Danh sách tài khoản</span>
+    </div>
+    <div class="p-0">
+      {% if operators %}
+      <table class="table table-sm mb-0" style="font-size:.85rem;">
+        <thead>
+          <tr style="background:#F5F3FF;">
+            <th class="ps-4 py-2" style="color:#3B0764;font-weight:700;border:none;">Họ và tên</th>
+            <th class="py-2" style="color:#3B0764;font-weight:700;border:none;">Mã đăng nhập</th>
+            <th class="py-2 text-center" style="color:#3B0764;font-weight:700;border:none;width:140px;">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for op in operators %}
+          <tr id="op-row-{{ op.id }}">
+            <td class="ps-4 py-2 fw-semibold" style="color:#0c4a6e;">{{ op.full_name }}</td>
+            <td class="py-2">
+              <code style="background:#EDE9FE;color:#6D28D9;padding:2px 8px;border-radius:5px;">{{ op.login_code }}</code>
+            </td>
+            <td class="py-2 text-center">
+              <button onclick="openResetPw({{ op.id }}, '{{ op.full_name | e }}')"
+                      class="btn btn-sm" style="font-size:.72rem;padding:2px 8px;border-radius:6px;background:#EFF6FF;color:#0369A1;border:1px solid #BAE6FD;">
+                <i class="bi bi-key me-1"></i>Đổi MK
+              </button>
+              <button onclick="deleteOp({{ op.id }}, '{{ op.full_name | e }}')"
+                      class="btn btn-sm ms-1" style="font-size:.72rem;padding:2px 8px;border-radius:6px;background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;">
+                <i class="bi bi-trash me-1"></i>Xóa
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="p-4 text-center text-muted" style="font-size:.85rem;">
+        <i class="bi bi-person-x" style="font-size:1.5rem;display:block;margin-bottom:6px;"></i>
+        Chưa có tài khoản nào.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Thêm tài khoản mới -->
+  <div class="section-card">
+    <div class="section-card-header">
+      <i class="bi bi-person-plus"></i>
+      <span>Thêm tài khoản mới</span>
+    </div>
+    <div class="p-4">
+      <form method="post" action="{{ url_for('admin_operators_create') }}">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Họ và tên <span class="text-danger">*</span></label>
+            <input type="text" name="full_name" class="form-control form-control-sm"
+                   placeholder="VD: Nguyễn Văn A" required style="border-radius:8px;">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Mã đăng nhập <span class="text-danger">*</span></label>
+            <input type="text" name="login_code" class="form-control form-control-sm"
+                   placeholder="VD: PHONG001" required style="border-radius:8px;">
+            <div class="form-text" style="font-size:.75rem;">Nhập cùng với Họ tên khi đăng nhập.</div>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold" style="font-size:.85rem;">Mật khẩu <span class="text-danger">*</span></label>
+            <input type="password" name="password" class="form-control form-control-sm"
+                   placeholder="Mật khẩu ban đầu" required style="border-radius:8px;">
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-sm fw-bold"
+                    style="background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;border:none;border-radius:8px;padding:6px 20px;">
+              <i class="bi bi-plus-circle me-1"></i>Tạo tài khoản
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div><!-- /container -->
+
+<!-- Modal đổi mật khẩu -->
+<div class="modal fade" id="modalResetPw" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:380px;">
+    <div class="modal-content" style="border-radius:16px;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#075985,#0EA5E9);border:none;">
+        <h5 class="modal-title text-white fw-bold" style="font-size:.9rem;">
+          <i class="bi bi-key me-2"></i>Đổi mật khẩu
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <p class="text-muted mb-3" style="font-size:.85rem;">Tài khoản: <strong id="rpName"></strong></p>
+        <input type="password" id="rpPassword" class="form-control form-control-sm"
+               placeholder="Mật khẩu mới" style="border-radius:8px;">
+        <div id="rpError" class="text-danger mt-2 d-none" style="font-size:.8rem;"></div>
+      </div>
+      <div class="modal-footer border-top py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Hủy</button>
+        <button type="button" class="btn btn-sm btn-primary fw-bold" onclick="submitResetPw()">
+          <i class="bi bi-check2 me-1"></i>Cập nhật
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _rpOpId = null;
+
+function openResetPw(id, name) {
+  _rpOpId = id;
+  document.getElementById('rpName').textContent = name;
+  document.getElementById('rpPassword').value = '';
+  document.getElementById('rpError').classList.add('d-none');
+  new bootstrap.Modal(document.getElementById('modalResetPw')).show();
+}
+
+async function submitResetPw() {
+  const pw = document.getElementById('rpPassword').value.trim();
+  const errEl = document.getElementById('rpError');
+  if (!pw) { errEl.textContent = 'Vui lòng nhập mật khẩu.'; errEl.classList.remove('d-none'); return; }
+  const fd = new FormData();
+  fd.append('password', pw);
+  const res = await fetch(`/admin/operators/${_rpOpId}/reset-password`, { method: 'POST', body: fd });
+  const data = await res.json();
+  if (data.ok) {
+    bootstrap.Modal.getInstance(document.getElementById('modalResetPw')).hide();
+    showAlert('Đã cập nhật mật khẩu.', 'success');
+  } else {
+    errEl.textContent = data.error || 'Lỗi.';
+    errEl.classList.remove('d-none');
+  }
+}
+
+function deleteOp(id, name) {
+  showConfirm(`Xóa tài khoản "${name}"?`, 'Tài khoản sẽ bị xóa vĩnh viễn.', async () => {
+    const res = await fetch(`/admin/operators/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.ok) {
+      const row = document.getElementById('op-row-' + id);
+      if (row) row.remove();
+      showAlert('Đã xóa tài khoản.', 'success');
+    }
+  }, { confirmText: 'Xóa', confirmClass: 'btn-danger' });
+}
+</script>
+{% endblock %}

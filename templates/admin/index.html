@@ -691,7 +691,14 @@
         <div class="d-flex gap-2 align-items-center">
           <div class="d-flex align-items-center gap-2 me-2" style="font-size:.73rem; color:rgba(255,255,255,.8);">
             <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#FEE2E2;border:1px solid #FCA5A5;"></span>Bận
+            <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#EDE9FE;border:1px solid #A78BFA;margin-left:4px;"></span>Khối
             <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#F0FDF4;border:1px solid #86EFAC;margin-left:4px;"></span>Rảnh
+          </div>
+          <div class="d-flex align-items-center gap-1 me-2 px-2 py-1" style="background:rgba(255,255,255,.15);border-radius:8px;font-size:.72rem;color:#fff;">
+            <span style="opacity:.8;">Khối:</span>
+            <label style="cursor:pointer;display:flex;align-items:center;gap:2px;margin:0;"><input type="checkbox" id="gradeK10" value="10" onchange="_updateGradeMode()" style="accent-color:#A78BFA;"> K10</label>
+            <label style="cursor:pointer;display:flex;align-items:center;gap:2px;margin:0;"><input type="checkbox" id="gradeK11" value="11" onchange="_updateGradeMode()" style="accent-color:#A78BFA;"> K11</label>
+            <label style="cursor:pointer;display:flex;align-items:center;gap:2px;margin:0;"><input type="checkbox" id="gradeK12" value="12" onchange="_updateGradeMode()" style="accent-color:#A78BFA;"> K12</label>
           </div>
           <button type="button" class="btn btn-sm fw-bold" style="background:#fff;color:#0369A1;border-radius:8px;font-size:.8rem;" onclick="saveSchedule()">
             <i class="bi bi-save me-1"></i>Lưu
@@ -1179,8 +1186,17 @@ async function submitAddRoom() {
 // ════════════════════════════════════════
 let _schedRooms = [];
 let _schedBusy  = {};   // {room → Set<"dow_ses_tiet">}
+let _schedGrade = {};   // {room → {key → "10,11"}}
+let _gradeMode  = [];   // currently selected grades e.g. ['10','11']
 let _dragActive = false;
-let _dragValue  = null; // true = busy, false = free
+let _dragValue  = null; // 'busy' | 'grade' | 'free'
+
+function _gradeLabel(nums) {
+  return 'K' + (Array.isArray(nums) ? nums : nums.split(',')).join('-');
+}
+function _updateGradeMode() {
+  _gradeMode = ['10','11','12'].filter(g => document.getElementById('gradeK'+g)?.checked);
+}
 
 const _SD = [2,3,4,5,6,7];
 const _SDN = {2:'T2',3:'T3',4:'T4',5:'T5',6:'T6',7:'T7'};
@@ -1198,8 +1214,11 @@ async function openScheduleEditor() {
     const data = await (await fetch('/admin/rooms/schedule')).json();
     _schedRooms = [...(data.rooms || [])];
     _schedBusy  = {};
+    _schedGrade = {};
     for (const [room, keys] of Object.entries(data.busy || {}))
       _schedBusy[room] = new Set(keys);
+    for (const [room, keyGrades] of Object.entries(data.grade_map || {}))
+      _schedGrade[room] = {...keyGrades};
     _renderSched();
   } catch {
     document.getElementById('schedEditorWrap').innerHTML = '<div class="p-4 text-danger">Lỗi tải dữ liệu.</div>';
@@ -1250,12 +1269,17 @@ function _renderSched() {
                         background:#FAFBFC;position:sticky;left:${W0}px;z-index:2;">${tiet}</td>`;
       for (const ses of _SS) {
         for (const dow of _SD) {
-          const key  = _sk(dow, ses.key, tiet);
-          const busy = (_schedBusy[room] || new Set()).has(key);
+          const key      = _sk(dow, ses.key, tiet);
+          const busy     = (_schedBusy[room] || new Set()).has(key);
+          const gradeStr = (_schedGrade[room] || {})[key];
+          let bg, bdr, inner = '';
+          if (busy)           { bg='#FEE2E2'; bdr='#FCA5A5'; }
+          else if (gradeStr)  { bg='#EDE9FE'; bdr='#A78BFA'; inner=`<span style="font-size:.55rem;font-weight:700;color:#6D28D9;line-height:1;">${_gradeLabel(gradeStr)}</span>`; }
+          else                { bg='#F0FDF4'; bdr='#86EFAC'; }
           h += `<td style="padding:2px 3px;border:1px solid #E2E8F0;">
             <div class="sched-cell" data-room="${_esc(room)}" data-key="${key}"
-                 style="height:22px;border-radius:4px;cursor:pointer;transition:background .07s;
-                        background:${busy?'#FEE2E2':'#F0FDF4'};border:1.5px solid ${busy?'#FCA5A5':'#86EFAC'};"></div></td>`;
+                 style="height:22px;border-radius:4px;cursor:pointer;transition:background .07s;display:flex;align-items:center;justify-content:center;
+                        background:${bg};border:1.5px solid ${bdr};">${inner}</div></td>`;
         }
       }
       h += `</tr>`;
@@ -1295,6 +1319,7 @@ function _renderSched() {
               const idx = _schedRooms.indexOf(room);
               if (idx !== -1) _schedRooms.splice(idx, 1);
               delete _schedBusy[room];
+              delete _schedGrade[room];
               _renderSched();
               const cnt = document.getElementById('room-count');
               if (cnt) cnt.textContent = _schedRooms.length;
@@ -1310,12 +1335,23 @@ function _renderSched() {
   });
 }
 
+function _cellState(room, key) {
+  if ((_schedBusy[room]||new Set()).has(key)) return 'busy';
+  if ((_schedGrade[room]||{})[key])           return 'grade';
+  return 'free';
+}
+function _nextState(cur) {
+  // free → grade (if grades ticked) or busy → busy → free
+  if (cur === 'free')  return _gradeMode.length ? 'grade' : 'busy';
+  if (cur === 'grade') return 'busy';
+  return 'free';
+}
 function _smDown(e) {
   const cell = e.target.closest('.sched-cell');
   if (!cell) return;
   e.preventDefault();
   _dragActive = true;
-  _dragValue  = !(_schedBusy[cell.dataset.room]||new Set()).has(cell.dataset.key);
+  _dragValue  = _nextState(_cellState(cell.dataset.room, cell.dataset.key));
   _applyCell(cell);
 }
 function _smOver(e) {
@@ -1329,7 +1365,7 @@ function _stStart(e) {
   if (!cell) return;
   e.preventDefault();
   _dragActive = true;
-  _dragValue  = !(_schedBusy[cell.dataset.room]||new Set()).has(cell.dataset.key);
+  _dragValue  = _nextState(_cellState(cell.dataset.room, cell.dataset.key));
   _applyCell(cell);
 }
 function _stMove(e) {
@@ -1341,9 +1377,23 @@ function _stMove(e) {
 }
 function _applyCell(cell) {
   const room = cell.dataset.room, key = cell.dataset.key;
-  if (!_schedBusy[room]) _schedBusy[room] = new Set();
-  if (_dragValue) { _schedBusy[room].add(key); cell.style.background='#FEE2E2'; cell.style.borderColor='#FCA5A5'; }
-  else            { _schedBusy[room].delete(key); cell.style.background='#F0FDF4'; cell.style.borderColor='#86EFAC'; }
+  if (!_schedBusy[room])  _schedBusy[room]  = new Set();
+  if (!_schedGrade[room]) _schedGrade[room] = {};
+  // Clear both first
+  _schedBusy[room].delete(key);
+  delete _schedGrade[room][key];
+  cell.innerHTML = '';
+  if (_dragValue === 'busy') {
+    _schedBusy[room].add(key);
+    cell.style.background = '#FEE2E2'; cell.style.borderColor = '#FCA5A5';
+  } else if (_dragValue === 'grade') {
+    const grades = _gradeMode.join(',');
+    _schedGrade[room][key] = grades;
+    cell.style.background = '#EDE9FE'; cell.style.borderColor = '#A78BFA';
+    cell.innerHTML = `<span style="font-size:.55rem;font-weight:700;color:#6D28D9;line-height:1;">${_gradeLabel(grades)}</span>`;
+  } else {
+    cell.style.background = '#F0FDF4'; cell.style.borderColor = '#86EFAC';
+  }
 }
 
 function _editRoomName(oldName) {
@@ -1360,7 +1410,8 @@ function _editRoomName(oldName) {
     if (!nw || nw === oldName) { inp.replaceWith(span); return; }
     const idx = _schedRooms.indexOf(oldName);
     if (idx !== -1) _schedRooms[idx] = nw;
-    if (_schedBusy[oldName]) { _schedBusy[nw] = _schedBusy[oldName]; delete _schedBusy[oldName]; }
+    if (_schedBusy[oldName])  { _schedBusy[nw]  = _schedBusy[oldName];  delete _schedBusy[oldName]; }
+    if (_schedGrade[oldName]) { _schedGrade[nw] = _schedGrade[oldName]; delete _schedGrade[oldName]; }
     span.textContent = nw;
     span.id = 'rn_' + _rid(nw);
     inp.replaceWith(span);
@@ -1383,10 +1434,13 @@ async function saveSchedule() {
   const busy = {};
   for (const [room, keySet] of Object.entries(_schedBusy))
     if (keySet.size) busy[room] = [...keySet];
+  const grade_map = {};
+  for (const [room, keyGrades] of Object.entries(_schedGrade))
+    if (Object.keys(keyGrades).length) grade_map[room] = {...keyGrades};
   try {
     const res  = await fetch('/admin/rooms/schedule', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({rooms: _schedRooms, busy}),
+      body: JSON.stringify({rooms: _schedRooms, busy, grade_map}),
     });
     const data = await res.json();
     if (data.ok) {

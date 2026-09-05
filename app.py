@@ -1518,22 +1518,33 @@ def admin_rooms_schedule():
             select(rooms).order_by(rooms.c.name)
         ).fetchall()]
         busy_rows = conn.execute(select(room_external_busy)).fetchall()
+        grade_rows = conn.execute(select(room_grade_slots)).fetchall()
     busy_map = {}
     for r in busy_rows:
         key = f"{r.day_of_week}_{r.session_type}_{r.tiet}"
         busy_map.setdefault(r.room_name, []).append(key)
-    return jsonify(rooms=all_rooms, busy=busy_map)
+    grade_map = {}
+    for r in grade_rows:
+        key = f"{r.day_of_week}_{r.session_type}_{r.tiet}"
+        if r.room_name not in grade_map:
+            grade_map[r.room_name] = {}
+        grade_map[r.room_name][key] = r.available_grades
+    return jsonify(rooms=all_rooms, busy=busy_map, grade_map=grade_map)
 
 
 @app.route("/admin/rooms/schedule", methods=["POST"])
 @admin_required
 def admin_rooms_schedule_save():
     data = request.get_json(force=True)
-    room_list = [str(r).strip() for r in data.get("rooms", []) if str(r).strip()]
-    busy_map  = data.get("busy", {})
+    room_list  = [str(r).strip() for r in data.get("rooms", []) if str(r).strip()]
+    busy_map   = data.get("busy", {})
+    grade_map  = data.get("grade_map", {})  # {room: {key: "10,11"}}
+    VALID_SESS = ("morning", "afternoon")
+    VALID_TIET = (1, 2, 3, 4)
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM rooms"))
         conn.execute(text("DELETE FROM room_external_busy"))
+        conn.execute(text("DELETE FROM room_grade_slots"))
         for rn in room_list:
             conn.execute(text("INSERT INTO rooms (name) VALUES (:n)"), {"n": rn})
             for key in busy_map.get(rn, []):
@@ -1544,10 +1555,24 @@ def admin_rooms_schedule_save():
                     dow, ses, tiet = int(parts[0]), parts[1], int(parts[2])
                 except ValueError:
                     continue
-                if dow not in range(2, 8) or ses not in ("morning", "afternoon") or tiet not in (1, 2, 3, 4):
+                if dow not in range(2, 8) or ses not in VALID_SESS or tiet not in VALID_TIET:
                     continue
                 conn.execute(insert(room_external_busy).values(
                     room_name=rn, day_of_week=dow, session_type=ses, tiet=tiet,
+                ))
+            for key, grades in (grade_map.get(rn) or {}).items():
+                parts = key.split("_", 2)
+                if len(parts) != 3:
+                    continue
+                try:
+                    dow, ses, tiet = int(parts[0]), parts[1], int(parts[2])
+                except ValueError:
+                    continue
+                if dow not in range(2, 8) or ses not in VALID_SESS or tiet not in VALID_TIET:
+                    continue
+                conn.execute(insert(room_grade_slots).values(
+                    room_name=rn, day_of_week=dow, session_type=ses,
+                    tiet=tiet, available_grades=str(grades),
                 ))
     _bump(event_type="schedule")
     return jsonify(ok=True)

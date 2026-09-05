@@ -718,12 +718,14 @@ function _computeNoRooms(rsData, dur, grade) {
 }
 
 function _slotColor(val) {
+  if (!SCHED_CONSTRAINT) return ['#DCFCE7', '#86EFAC']; // luôn xanh khi tắt ràng buộc
   return val === 0
     ? ['#FEE2E2', '#FCA5A5']   // đỏ: không còn combo
     : ['#DCFCE7', '#86EFAC'];  // xanh: còn ít nhất 1 combo
 }
 
 function _slotTitle(val, maxCombos) {
+  if (!SCHED_CONSTRAINT) return 'Khung giờ trống';
   if (val === 0) return 'Chặn — không còn tổ hợp hợp lệ';
   if (maxCombos <= 0) return `${val} tổ hợp hợp lệ`;
   return `${val}/${maxCombos} tổ hợp hợp lệ`;
@@ -858,18 +860,17 @@ function _highlightAndBadge(day, ses, start, gridData) {
   const endTiet = start + dur - 1;
   const slotLabel = `${dayName} ${sesName} tiết ${start}${dur > 1 ? '–' + endTiet : ''}`;
 
-  if (combos === 0 && SCHED_CONSTRAINT) {
+  if (!SCHED_CONSTRAINT) {
+    // Khi tắt ràng buộc: ẩn badge, không hiển thị thông tin combo
+    badge.classList.add('d-none');
+    delete btn.dataset.impactBlock;
+    btn.disabled = false;
+  } else if (combos === 0) {
     badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEE2E2;color:#B91C1C;';
     icon.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
     textEl.textContent = `${slotLabel} — Trùng giờ với tất cả các lớp của các môn khác. Hãy chọn khung giờ khác.`;
     btn.dataset.impactBlock = '1';
     btn.disabled = true;
-  } else if (combos === 0 && !SCHED_CONSTRAINT) {
-    badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#FEF9C3;color:#854D0E;';
-    icon.innerHTML = '<i class="bi bi-exclamation-triangle"></i>';
-    textEl.textContent = `${slotLabel} — Trùng giờ với các môn khác (đang tắt ràng buộc).`;
-    delete btn.dataset.impactBlock;
-    btn.disabled = false;
   } else {
     badge.style.cssText = 'font-size:.8rem;border-radius:8px;padding:7px 11px;background:#DCFCE7;color:#166534;';
     icon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';

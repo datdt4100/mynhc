@@ -903,7 +903,8 @@ async function loadRooms() {
   setTimeout(() => wrap.scrollIntoView({behavior:'smooth', block:'nearest'}), 80);
 
   try {
-    const res  = await fetch(`/api/available-rooms?day_of_week=${day}&session_type=${ses}&start_session=${ss}&duration=${dur}`);
+    const grade = parseInt(document.getElementById('regGrade')?.value) || '';
+    const res  = await fetch(`/api/available-rooms?day_of_week=${day}&session_type=${ses}&start_session=${ss}&duration=${dur}&grade=${grade}`);
     const list = await res.json();
     sel.innerHTML = '<option value="">-- Chọn phòng --</option>' +
       list.map(r => `<option value="${r}">${r}</option>`).join('');

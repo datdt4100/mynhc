@@ -1762,6 +1762,7 @@ def api_available_rooms():
         st    = request.args["session_type"]
         ss    = int(request.args["start_session"])
         dur   = int(request.args["duration"])
+        grade = int(request.args.get("grade", 0))
     except (KeyError, ValueError):
         return jsonify([]), 400
     end = ss + dur - 1
@@ -1792,7 +1793,25 @@ def api_available_rooms():
             )
         ).fetchall()
         ext_busy_set = {r.room_name for r in ext_busy}
-    available = [r for r in all_rooms if r not in booked_set and r not in ext_busy_set]
+        # rooms grade-restricted and not allowed for this grade
+        grade_blocked_set = set()
+        if grade:
+            grade_rows = conn.execute(
+                select(room_grade_slots.c.room_name, room_grade_slots.c.available_grades).where(
+                    and_(
+                        room_grade_slots.c.day_of_week == dow,
+                        room_grade_slots.c.session_type == st,
+                        room_grade_slots.c.tiet >= ss,
+                        room_grade_slots.c.tiet <= end,
+                    )
+                )
+            ).fetchall()
+            for r in grade_rows:
+                allowed = [g.strip() for g in r.available_grades.split(",")]
+                if str(grade) not in allowed:
+                    grade_blocked_set.add(r.room_name)
+    available = [r for r in all_rooms
+                 if r not in booked_set and r not in ext_busy_set and r not in grade_blocked_set]
     return jsonify(available)
 
 

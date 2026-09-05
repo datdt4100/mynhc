@@ -943,6 +943,7 @@ def teacher_dashboard():
 
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
     maintenance = get_setting("maintenance_mode", "0") == "1"
+    schedule_constraint = get_setting("schedule_constraint", "1") == "1"
     return render_template(
         "teacher/dashboard.html",
         teacher=teacher_row,
@@ -951,6 +952,7 @@ def teacher_dashboard():
         schedule=schedule,
         teacher_reg_open=teacher_reg_open,
         maintenance=maintenance,
+        schedule_constraint=schedule_constraint,
         day_name=day_name,
         session_label=session_label,
     )

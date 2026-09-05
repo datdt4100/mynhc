@@ -983,6 +983,22 @@ def teacher_register_class():
                 if ext_busy:
                     return jsonify(ok=False,
                         error=f"Phòng {location} đang bận theo lịch đã cài đặt. Vui lòng chọn phòng khác.")
+                # Check room_grade_slots — room may be restricted to specific grades
+                grade_restrict = conn.execute(
+                    select(room_grade_slots.c.available_grades).where(and_(
+                        room_grade_slots.c.room_name == location,
+                        room_grade_slots.c.day_of_week == day_of_week,
+                        room_grade_slots.c.session_type == session_type,
+                        room_grade_slots.c.tiet >= start_session,
+                        room_grade_slots.c.tiet <= end_session,
+                    ))
+                ).first()
+                if grade_restrict:
+                    allowed = [g.strip() for g in grade_restrict.available_grades.split(",")]
+                    if str(grade) not in allowed:
+                        label = "+".join(f"Khối {g}" for g in allowed)
+                        return jsonify(ok=False,
+                            error=f"Phòng {location} khung giờ này chỉ dành cho {label}. Vui lòng chọn phòng khác.")
 
             result = conn.execute(
                 insert(classes).values(

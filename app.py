@@ -2485,6 +2485,10 @@ def admin_class_reg():
         conflict_info[c.id] = _class_impact(c.grade, cls_dict)
 
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
+    teachers_json = [
+        {"id": t.id, "full_name": t.full_name, "subject_group": t.subject_group or ""}
+        for t in all_teachers
+    ]
     return render_template(
         "admin/class_reg.html",
         all_teachers=all_teachers,
@@ -2494,6 +2498,7 @@ def admin_class_reg():
         teacher_reg_open=teacher_reg_open,
         day_name=day_name,
         session_label=session_label,
+        teachers_json=teachers_json,
     )
 
 

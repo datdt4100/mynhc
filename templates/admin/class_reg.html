@@ -558,7 +558,7 @@ const _RG_TH = 'padding:5px 8px;background:linear-gradient(135deg,#075985,#0EA5E
 let _gridData    = null;
 let _gridSession = 'morning';
 let _regCtx      = null;
-const _TEACHERS  = {{ all_teachers | tojson }};
+const _TEACHERS  = {{ teachers_json | tojson }};
 
 function _gesc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 

@@ -333,18 +333,31 @@
   <div class="row g-3 mb-4">
     <div class="col-md-6">
       <div class="nav-box d-flex flex-column" style="gap:0;">
-        <a href="{{ url_for('admin_class_reg') }}" class="text-decoration-none color-inherit d-block flex-grow-1 mb-3">
-          <div class="d-flex align-items-start gap-3">
-            <div class="nav-box-icon flex-shrink-0" style="background:#EFF6FF;">
-              <i class="bi bi-journal-plus" style="color:#0EA5E9;"></i>
-            </div>
-            <div class="flex-grow-1">
-              <h5>Giai đoạn 1 — Đăng ký mở lớp (GV)</h5>
-              <p>Xem danh sách lớp giáo viên đã đăng ký mở. Mở/đóng giai đoạn này.</p>
-            </div>
-            <i class="bi bi-arrow-right-circle nav-box-arrow ms-1 mt-1 flex-shrink-0"></i>
+        <div class="d-flex align-items-start gap-3 mb-3">
+          <div class="nav-box-icon flex-shrink-0" style="background:#EFF6FF;">
+            <i class="bi bi-journal-plus" style="color:#0EA5E9;"></i>
           </div>
-        </a>
+          <div class="flex-grow-1">
+            <h5>Giai đoạn 1 — Đăng ký mở lớp (GV)</h5>
+            <p>Xem tổng hợp lớp theo giáo viên hoặc xếp phòng chi tiết.</p>
+          </div>
+        </div>
+        <div class="d-flex flex-column gap-2 mb-3">
+          <a href="{{ url_for('admin_class_reg') }}" class="text-decoration-none d-flex align-items-center gap-2 px-3 py-2"
+             style="border-radius:9px;background:#F0F9FF;border:1.5px solid #BAE6FD;color:#0c4a6e;font-size:.82rem;font-weight:600;transition:background .15s;"
+             onmouseenter="this.style.background='#E0F2FE'" onmouseleave="this.style.background='#F0F9FF'">
+            <i class="bi bi-table" style="color:#0EA5E9;font-size:.9rem;"></i>
+            Tổng hợp đăng ký lớp theo giáo viên
+            <i class="bi bi-arrow-right-circle ms-auto" style="color:#0EA5E9;font-size:.88rem;"></i>
+          </a>
+          <a href="{{ url_for('admin_room_grid') }}" class="text-decoration-none d-flex align-items-center gap-2 px-3 py-2"
+             style="border-radius:9px;background:#F5F3FF;border:1.5px solid #DDD6FE;color:#3B0764;font-size:.82rem;font-weight:600;transition:background .15s;"
+             onmouseenter="this.style.background='#EDE9FE'" onmouseleave="this.style.background='#F5F3FF'">
+            <i class="bi bi-grid-3x3-gap" style="color:#7C3AED;font-size:.9rem;"></i>
+            Lịch phòng chi tiết
+            <i class="bi bi-arrow-right-circle ms-auto" style="color:#7C3AED;font-size:.88rem;"></i>
+          </a>
+        </div>
         <div class="d-flex align-items-center justify-content-between pt-2" style="border-top:1.5px solid #E2E8F0;">
           <span class="text-muted" style="font-size:.78rem; font-weight:600;">Giai đoạn 1</span>
           <button id="btn-toggle-teacher"

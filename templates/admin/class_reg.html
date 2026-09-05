@@ -329,7 +329,7 @@
       </div>
     </div>
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-      <div id="roomGridWrap" style="min-width:900px;">
+      <div id="roomGridWrap">
         <div class="p-4 text-center text-muted">Đang tải…</div>
       </div>
     </div>
@@ -619,21 +619,21 @@ function _renderGridView() {
     return gradeTiet[`${room}_${day}_${slotStart}`] || null;
   }
 
-  // Fixed dimensions
-  const CW = 82;   // slot cell width px
-  const CH = 50;   // slot cell height px
-  const RW = 116;  // room name col width px
-  const TD = `padding:2px 2px;border:1px solid #E2E8F0;width:${CW}px;`;
+  // Responsive dimensions – fill card width, scroll on small screens
+  const CH = 50;   // slot cell height px (fixed)
+  const RWP = 14;  // room name col %
+  const CWP = ((100 - RWP) / 12).toFixed(3); // slot cell %
+  const TD = `padding:2px 2px;border:1px solid #E2E8F0;`;
   const IH = `height:${CH}px;border-radius:5px;box-sizing:border-box;overflow:hidden;`;
 
-  let h = `<table style="border-collapse:collapse;table-layout:fixed;font-size:.7rem;width:${RW + CW*12}px;">
+  let h = `<table style="border-collapse:collapse;table-layout:fixed;font-size:.7rem;width:100%;min-width:860px;">
   <colgroup>
-    <col style="width:${RW}px;">`;
-  for (let i = 0; i < 12; i++) h += `<col style="width:${CW}px;">`;
+    <col style="width:${RWP}%;">`;
+  for (let i = 0; i < 12; i++) h += `<col style="width:${CWP}%;">`;
   h += `</colgroup>
   <thead>
     <tr>
-      <th rowspan="2" style="${_RG_TH}text-align:left;position:sticky;left:0;z-index:5;width:${RW}px;">Phòng</th>`;
+      <th rowspan="2" style="${_RG_TH}text-align:left;position:sticky;left:0;z-index:5;">Phòng</th>`;
   for (const d of _RG_DAYS)
     h += `<th colspan="2" style="${_RG_TH}">${_RG_DAY_NAMES[d]}</th>`;
   h += `</tr><tr>`;
@@ -645,7 +645,7 @@ function _renderGridView() {
   for (const room of rooms) {
     h += `<tr>
       <td style="padding:3px 8px;border:1px solid #E2E8F0;font-size:.68rem;font-weight:700;color:#0c4a6e;background:#F8FAFC;
-                 position:sticky;left:0;z-index:2;width:${RW}px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                 position:sticky;left:0;z-index:2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
           title="${_gesc(room)}">${_gesc(room)}</td>`;
     for (const d of _RG_DAYS) {
       for (const s of _RG_SLOTS) {

@@ -2401,6 +2401,145 @@ def admin_room_grid():
     )
 
 
+@app.route("/admin/room-detail")
+@admin_required
+def admin_room_detail():
+    with engine.connect() as conn:
+        all_teachers = conn.execute(
+            select(teachers).order_by(teachers.c.full_name)
+        ).fetchall()
+    teachers_json = [
+        {"id": t.id, "full_name": t.full_name, "subject_group": t.subject_group or ""}
+        for t in all_teachers
+    ]
+    return render_template("admin/room_grid.html", teachers_json=teachers_json)
+
+
+@app.route("/admin/room-detail/export")
+@admin_required
+def admin_room_detail_export():
+    with engine.connect() as conn:
+        all_rooms = sorted([r.name for r in conn.execute(select(rooms)).fetchall()], key=_room_sort_key)
+        rows = conn.execute(
+            select(classes, teachers.c.full_name.label("teacher_name"), teachers.c.subject_group)
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .where(classes.c.location.isnot(None))
+        ).fetchall()
+        ext_busy_rows = conn.execute(select(room_external_busy)).fetchall()
+
+    DAYS   = [2, 3, 4, 5, 6, 7]
+    DNAMES = {2:"Thứ Hai", 3:"Thứ Ba", 4:"Thứ Tư", 5:"Thứ Năm", 6:"Thứ Sáu", 7:"Thứ Bảy"}
+    SLOTS  = [1, 3]
+    SLBL   = {1:"T1-2", 3:"T3-4"}
+
+    # Build booking lookup: (session, room, day, slot_start) → booking row
+    book_map = {}
+    for r in rows:
+        gs = 1 if r.start_session <= 2 else 3
+        k = (r.session_type, r.location, r.day_of_week, gs)
+        if k not in book_map:
+            book_map[k] = r
+
+    busy_set = set()
+    for e in ext_busy_rows:
+        busy_set.add((e.session_type, e.room_name, e.day_of_week, e.tiet))
+
+    def is_ext_busy(ses, room, day, slot_start):
+        return any((ses, room, day, t) in busy_set for t in range(slot_start, slot_start + 2))
+
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    wb = openpyxl.Workbook()
+    thin = Side(border_style="thin", color="CBD5E1")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    for ses, ses_label in [("morning", "Buổi Sáng"), ("afternoon", "Buổi Chiều")]:
+        ws = wb.create_sheet(ses_label)
+
+        # Header row 1: Phòng + merged day names
+        hdr1 = ["Phòng"]
+        for d in DAYS:
+            hdr1 += [DNAMES[d], ""]
+        ws.append(hdr1)
+
+        # Header row 2: blank + slot labels
+        hdr2 = [""]
+        for d in DAYS:
+            for s in SLOTS:
+                hdr2.append(SLBL[s])
+        ws.append(hdr2)
+
+        # Merge day name cells in row 1
+        for i, d in enumerate(DAYS):
+            col = 2 + i * 2
+            ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 1)
+
+        # Style headers
+        hdr_fill  = PatternFill("solid", fgColor="075985")
+        hdr_font  = Font(color="FFFFFF", bold=True, size=9)
+        hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        for row_idx in [1, 2]:
+            for col_idx in range(1, 14):
+                c = ws.cell(row_idx, col_idx)
+                c.fill = hdr_fill
+                c.font = hdr_font
+                c.alignment = hdr_align
+                c.border = border
+
+        ws.row_dimensions[1].height = 18
+        ws.row_dimensions[2].height = 16
+        ws.column_dimensions["A"].width = 18
+        for col_idx in range(2, 14):
+            ws.column_dimensions[get_column_letter(col_idx)].width = 18
+
+        # Data rows
+        for room in all_rooms:
+            row_data = [room]
+            for d in DAYS:
+                for s in SLOTS:
+                    bk = book_map.get((ses, room, d, s))
+                    if bk:
+                        subj = bk.subject or bk.subject_group or ""
+                        row_data.append(f"K{bk.grade} – {subj}\n{bk.teacher_name}")
+                    elif is_ext_busy(ses, room, d, s):
+                        row_data.append("Bận")
+                    else:
+                        row_data.append("")
+            ws.append(row_data)
+            r_idx = ws.max_row
+            ws.row_dimensions[r_idx].height = 32
+            for col_idx in range(1, 14):
+                c = ws.cell(r_idx, col_idx)
+                c.alignment = Alignment(horizontal="center", vertical="center",
+                                        wrap_text=True)
+                c.border = border
+                if col_idx == 1:
+                    c.font = Font(bold=True, size=8)
+                    c.alignment = Alignment(horizontal="left", vertical="center")
+                else:
+                    c.font = Font(size=8)
+                    # Color booked cells by grade
+                    bk = book_map.get((ses, room, DAYS[(col_idx - 2) // 2],
+                                       SLOTS[(col_idx - 2) % 2]))
+                    if bk:
+                        grade_colors = {10: "DBEAFE", 11: "DCFCE7", 12: "FFF7ED"}
+                        fill_color = grade_colors.get(bk.grade, "F1F5F9")
+                        c.fill = PatternFill("solid", fgColor=fill_color)
+
+    # Remove default empty sheet
+    if "Sheet" in wb.sheetnames:
+        del wb["Sheet"]
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name="lich_phong_chi_tiet.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 @app.route("/admin/register-class", methods=["POST"])
 @admin_required
 def admin_register_class():
@@ -2485,10 +2624,6 @@ def admin_class_reg():
         conflict_info[c.id] = _class_impact(c.grade, cls_dict)
 
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
-    teachers_json = [
-        {"id": t.id, "full_name": t.full_name, "subject_group": t.subject_group or ""}
-        for t in all_teachers
-    ]
     return render_template(
         "admin/class_reg.html",
         all_teachers=all_teachers,
@@ -2498,7 +2633,6 @@ def admin_class_reg():
         teacher_reg_open=teacher_reg_open,
         day_name=day_name,
         session_label=session_label,
-        teachers_json=teachers_json,
     )
 
 

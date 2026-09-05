@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+{% block title %}Lịch phòng chi tiết – mynhc{% endblock %}
+{% block hero %}{% endblock %}
+
+{% block head %}
+<style>
+  body { background: #F0F9FF; }
+  .section-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1.5px solid #E2E8F0;
+    overflow: hidden;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  }
+  .section-card-header {
+    padding: 13px 20px;
+    background: linear-gradient(90deg, #F8FAFC, #EFF6FF);
+    border-bottom: 1.5px solid #E2E8F0;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+    font-size: .9rem; font-weight: 700; color: #0c4a6e;
+  }
+  .grid-ses-btn { transition: opacity .15s, font-weight .15s; }
+  .grid-ses-btn.active { opacity: 1 !important; box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+  .grid-ses-btn:not(.active) { opacity: .65; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container pb-5">
+  <div class="d-flex align-items-center gap-2 mb-4 pt-4">
+    <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+       style="border-radius:8px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;padding:0;" title="Quay lại">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h1 style="font-size:1.1rem;font-weight:800;color:#0c4a6e;margin:0;">
+      <i class="bi bi-grid-3x3-gap me-2" style="color:#7C3AED;"></i>Lịch phòng chi tiết
+    </h1>
+    <a href="{{ url_for('admin_room_detail_export') }}" class="btn btn-sm ms-auto"
+       style="border-radius:8px;background:#F0FDF4;color:#166534;border:1.5px solid #86EFAC;font-size:.8rem;font-weight:700;">
+      <i class="bi bi-file-earmark-excel me-1"></i>Xuất Excel
+    </a>
+  </div>
+
+  <div class="section-card" id="roomGridCard">
+    <div class="section-card-header">
+      <i class="bi bi-grid-3x3-gap"></i>
+      <span>Xếp phòng theo buổi</span>
+      <div class="ms-auto d-flex gap-2">
+        <button class="btn btn-sm grid-ses-btn active" data-ses="morning"
+                onclick="switchGridSession('morning')"
+                style="border-radius:8px;font-size:.78rem;background:#FFF7ED;color:#C2410C;border:1.5px solid #FED7AA;font-weight:700;">
+          <i class="bi bi-sun me-1"></i>Buổi Sáng
+        </button>
+        <button class="btn btn-sm grid-ses-btn" data-ses="afternoon"
+                onclick="switchGridSession('afternoon')"
+                style="border-radius:8px;font-size:.78rem;background:#EFF6FF;color:#1D4ED8;border:1.5px solid #BFDBFE;font-weight:700;">
+          <i class="bi bi-moon me-1"></i>Buổi Chiều
+        </button>
+      </div>
+    </div>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+      <div id="roomGridWrap">
+        <div class="p-4 text-center text-muted">Đang tải…</div>
+      </div>
+    </div>
+  </div>
+</div><!-- /container -->
+
+<!-- ── Modal: đăng ký lớp thủ công ── -->
+<div class="modal fade" id="modalRegisterClass" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:460px;">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#075985,#0EA5E9);border:none;">
+        <h5 class="modal-title fw-bold text-white" style="font-size:.95rem;">
+          <i class="bi bi-plus-circle me-2"></i>Đăng ký lớp thủ công
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div class="mb-3 p-3 rounded" style="background:#F0F9FF;border:1px solid #BAE6FD;font-size:.83rem;">
+          <div class="fw-semibold" style="color:#0c4a6e;font-size:.78rem;margin-bottom:4px;">Khung giờ đã chọn</div>
+          <div id="regModalSlotInfo" style="color:#0369A1;font-weight:700;"></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" style="font-size:.85rem;">Giáo viên <span class="text-danger">*</span></label>
+          <input type="text" id="teacherSearch" class="form-control form-control-sm mb-1"
+                 placeholder="Tìm tên hoặc tổ bộ môn…" autocomplete="off"
+                 oninput="_filterTeachers(this.value)">
+          <div id="teacherList"
+               style="border:1.5px solid #BAE6FD;border-radius:8px;max-height:170px;overflow-y:auto;background:#fff;"></div>
+          <input type="hidden" id="selectedTeacherId">
+          <div id="selectedTeacherInfo" style="font-size:.75rem;color:#0369A1;margin-top:4px;min-height:16px;"></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" style="font-size:.85rem;">Khối <span class="text-danger">*</span></label>
+          <div class="d-flex gap-3">
+            <div class="form-check"><input class="form-check-input" type="radio" name="regGradeManual" id="rg10" value="10"><label class="form-check-label" for="rg10" style="font-size:.85rem;">Khối 10</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="regGradeManual" id="rg11" value="11"><label class="form-check-label" for="rg11" style="font-size:.85rem;">Khối 11</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="regGradeManual" id="rg12" value="12"><label class="form-check-label" for="rg12" style="font-size:.85rem;">Khối 12</label></div>
+          </div>
+        </div>
+        <div id="regModalError" class="alert alert-danger d-none py-2" style="font-size:.82rem;"></div>
+      </div>
+      <div class="modal-footer border-top py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Hủy</button>
+        <button type="button" class="btn btn-sm btn-primary fw-bold" onclick="submitRegisterClass()">
+          <i class="bi bi-check-circle me-1"></i>Đăng ký
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const _RG_DAYS      = [2,3,4,5,6,7];
+const _RG_DAY_NAMES = {2:'Thứ Hai',3:'Thứ Ba',4:'Thứ Tư',5:'Thứ Năm',6:'Thứ Sáu',7:'Thứ Bảy'};
+const _RG_SLOTS     = [1,3];
+const _RG_SLOT_LBL  = {1:'T1–2', 3:'T3–4'};
+const _RG_GRADE_ST  = {
+  10: {bg:'#DBEAFE',bdr:'#93C5FD',txt:'#1D4ED8'},
+  11: {bg:'#DCFCE7',bdr:'#86EFAC',txt:'#166534'},
+  12: {bg:'#FFF7ED',bdr:'#FED7AA',txt:'#C2410C'},
+};
+const _RG_TH = 'padding:5px 8px;background:linear-gradient(135deg,#075985,#0EA5E9);color:#fff;font-size:.68rem;font-weight:700;text-align:center;white-space:nowrap;border:1px solid rgba(255,255,255,.15);';
+
+let _gridData    = null;
+let _gridSession = 'morning';
+let _regCtx      = null;
+const _TEACHERS  = {{ teachers_json | tojson }};
+
+function _gesc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+async function loadRoomGrid() {
+  const wrap = document.getElementById('roomGridWrap');
+  try {
+    const res = await fetch('/admin/room-grid');
+    _gridData = await res.json();
+    _renderGridView();
+  } catch {
+    wrap.innerHTML = '<div class="p-4 text-danger">Lỗi tải dữ liệu phòng.</div>';
+  }
+}
+
+function switchGridSession(ses) {
+  _gridSession = ses;
+  document.querySelectorAll('.grid-ses-btn').forEach(b => {
+    const isActive = b.dataset.ses === ses;
+    b.classList.toggle('active', isActive);
+    b.style.opacity    = isActive ? '1' : '.65';
+    b.style.fontWeight = isActive ? '800' : '600';
+  });
+  _renderGridView();
+}
+
+function _renderGridView() {
+  if (!_gridData) return;
+  const {rooms, bookings, ext_busy, grade_slots} = _gridData;
+  const ses = _gridSession;
+
+  const bookMap   = {};
+  const busyTiet  = {};
+  const gradeTiet = {};
+
+  bookings.filter(b => b.session === ses).forEach(b => {
+    const groupStart = b.start <= 2 ? 1 : 3;
+    const key = `${b.room}_${b.day}_${groupStart}`;
+    if (!bookMap[key]) bookMap[key] = b;
+  });
+  ext_busy.filter(e => e.session === ses).forEach(e => {
+    busyTiet[`${e.room}_${e.day}_${e.tiet}`] = true;
+  });
+  grade_slots.filter(g => g.session === ses).forEach(g => {
+    gradeTiet[`${g.room}_${g.day}_${g.tiet}`] = g.grades;
+  });
+
+  function isExtBusy(room, day, slotStart) {
+    for (let t = slotStart; t <= slotStart + 1; t++)
+      if (busyTiet[`${room}_${day}_${t}`]) return true;
+    return false;
+  }
+  function gradeRestr(room, day, slotStart) {
+    return gradeTiet[`${room}_${day}_${slotStart}`] || null;
+  }
+
+  const CH  = 50;
+  const RWP = 14;
+  const CWP = ((100 - RWP) / 12).toFixed(3);
+  const TD  = `padding:2px 2px;border:1px solid #E2E8F0;`;
+  const IH  = `height:${CH}px;border-radius:5px;box-sizing:border-box;overflow:hidden;`;
+
+  let h = `<table style="border-collapse:collapse;table-layout:fixed;font-size:.7rem;width:100%;min-width:860px;">
+  <colgroup><col style="width:${RWP}%;">`;
+  for (let i = 0; i < 12; i++) h += `<col style="width:${CWP}%;">`;
+  h += `</colgroup><thead><tr>
+    <th rowspan="2" style="${_RG_TH}text-align:left;position:sticky;left:0;z-index:5;">Phòng</th>`;
+  for (const d of _RG_DAYS)
+    h += `<th colspan="2" style="${_RG_TH}">${_RG_DAY_NAMES[d]}</th>`;
+  h += `</tr><tr>`;
+  for (const d of _RG_DAYS)
+    for (const s of _RG_SLOTS)
+      h += `<th style="${_RG_TH}top:29px;font-size:.62rem;">${_RG_SLOT_LBL[s]}</th>`;
+  h += `</tr></thead><tbody>`;
+
+  for (const room of rooms) {
+    h += `<tr>
+      <td style="padding:3px 8px;border:1px solid #E2E8F0;font-size:.68rem;font-weight:700;color:#0c4a6e;background:#F8FAFC;
+                 position:sticky;left:0;z-index:2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+          title="${_gesc(room)}">${_gesc(room)}</td>`;
+    for (const d of _RG_DAYS) {
+      for (const s of _RG_SLOTS) {
+        const bk  = bookMap[`${room}_${d}_${s}`];
+        const ext = !bk && isExtBusy(room, d, s);
+        const gr  = !bk && !ext && gradeRestr(room, d, s);
+        if (bk) {
+          const gs = _RG_GRADE_ST[bk.grade] || {bg:'#F1F5F9',bdr:'#CBD5E1',txt:'#475569'};
+          h += `<td style="${TD}vertical-align:top;">
+            <div style="${IH}background:${gs.bg};border:1.5px solid ${gs.bdr};padding:3px 5px 3px 4px;position:relative;">
+              <div style="font-size:.58rem;font-weight:800;color:${gs.txt};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">K${bk.grade} · ${_gesc(bk.subject)}</div>
+              <div style="font-size:.56rem;color:#374151;line-height:1.3;margin-top:1px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${_gesc(bk.teacher)}</div>
+              <button onclick="deleteGridClass(${bk.class_id},event)"
+                      style="position:absolute;top:1px;right:2px;background:none;border:none;cursor:pointer;color:#DC2626;font-size:.68rem;padding:0;line-height:1;" title="Xóa">✕</button>
+            </div></td>`;
+        } else if (ext) {
+          h += `<td style="${TD}">
+            <div style="${IH}background:repeating-linear-gradient(45deg,#E5E7EB,#E5E7EB 4px,#F3F4F6 4px,#F3F4F6 8px);
+                          display:flex;align-items:center;justify-content:center;">
+              <span style="font-size:.56rem;color:#6B7280;font-weight:700;">Bận</span>
+            </div></td>`;
+        } else {
+          const grChip = gr
+            ? `<div style="font-size:.5rem;color:#6D28D9;font-weight:700;background:#EDE9FE;border-radius:3px;padding:0 3px;line-height:1.5;margin-bottom:1px;">K${gr.split(',').join('+')}</div>`
+            : '';
+          h += `<td style="${TD}">
+            <div class="grid-slot" data-room="${_gesc(room)}" data-day="${d}" data-session="${ses}" data-start="${s}"
+                 onclick="openRegisterModal(this)"
+                 style="${IH}background:#F0FDF4;border:1.5px dashed #86EFAC;cursor:pointer;
+                        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:background .1s;"
+                 onmouseenter="this.style.background='#DCFCE7'" onmouseleave="this.style.background='#F0FDF4'">
+              ${grChip}<span style="font-size:.55rem;color:#94A3B8;">+ Đăng ký</span>
+            </div></td>`;
+        }
+      }
+    }
+    h += `</tr>`;
+  }
+  h += `</tbody></table>`;
+  document.getElementById('roomGridWrap').innerHTML = h;
+}
+
+function openRegisterModal(cell) {
+  _regCtx = {
+    room:    cell.dataset.room,
+    day:     parseInt(cell.dataset.day),
+    session: cell.dataset.session,
+    start:   parseInt(cell.dataset.start),
+  };
+  const SES = {morning:'Sáng', afternoon:'Chiều'};
+  document.getElementById('regModalSlotInfo').innerHTML =
+    `<i class="bi bi-door-open me-1"></i>${_gesc(_regCtx.room)} &nbsp;·&nbsp; ${_RG_DAY_NAMES[_regCtx.day]} ${SES[_regCtx.session]} ${_RG_SLOT_LBL[_regCtx.start]}`;
+  document.getElementById('teacherSearch').value = '';
+  document.getElementById('selectedTeacherId').value = '';
+  document.getElementById('selectedTeacherInfo').textContent = '';
+  document.querySelectorAll('input[name="regGradeManual"]').forEach(r => r.checked = false);
+  document.getElementById('regModalError').classList.add('d-none');
+  _filterTeachers('');
+  new bootstrap.Modal(document.getElementById('modalRegisterClass')).show();
+}
+
+function _filterTeachers(q) {
+  const list = document.getElementById('teacherList');
+  const matches = q.trim()
+    ? _TEACHERS.filter(t =>
+        t.full_name.toLowerCase().includes(q.toLowerCase()) ||
+        (t.subject_group||'').toLowerCase().includes(q.toLowerCase()))
+    : _TEACHERS;
+  const selId = document.getElementById('selectedTeacherId').value;
+  if (!matches.length) {
+    list.innerHTML = '<div style="padding:10px 12px;font-size:.78rem;color:#94A3B8;">Không tìm thấy.</div>';
+    return;
+  }
+  list.innerHTML = matches.map(t => {
+    const isSel = String(t.id) === String(selId);
+    return `<div onclick="_selectTeacher(${t.id},'${_gesc(t.full_name)}','${_gesc(t.subject_group||'')}')"
+                 id="topt_${t.id}"
+                 style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #E2E8F0;font-size:.8rem;
+                        background:${isSel?'#EFF6FF':'#fff'};"
+                 onmouseenter="this.style.background='#EFF6FF'" onmouseleave="this.style.background='${isSel?'#EFF6FF':'#fff'}'">
+              <div class="fw-semibold" style="color:${isSel?'#0369A1':'#0c4a6e'};">${_gesc(t.full_name)}${isSel?' <i class="bi bi-check2" style="color:#0EA5E9;"></i>':''}</div>
+              <div style="font-size:.7rem;color:#64748B;">${_gesc(t.subject_group||'')}</div>
+            </div>`;
+  }).join('');
+}
+
+function _selectTeacher(id, name, subj) {
+  document.getElementById('selectedTeacherId').value = id;
+  document.getElementById('teacherSearch').value = name;
+  document.getElementById('selectedTeacherInfo').innerHTML =
+    `<i class="bi bi-book me-1"></i>Môn: <strong>${_gesc(subj)}</strong>`;
+  _filterTeachers(document.getElementById('teacherSearch').value);
+  const el = document.getElementById('topt_' + id);
+  if (el) el.scrollIntoView({block:'nearest'});
+}
+
+async function submitRegisterClass() {
+  const teacherId = document.getElementById('selectedTeacherId').value;
+  const grade     = document.querySelector('input[name="regGradeManual"]:checked')?.value;
+  const errEl     = document.getElementById('regModalError');
+  errEl.classList.add('d-none');
+
+  if (!teacherId) { errEl.textContent='Vui lòng chọn giáo viên.';  errEl.classList.remove('d-none'); return; }
+  if (!grade)     { errEl.textContent='Vui lòng chọn khối giảng.'; errEl.classList.remove('d-none'); return; }
+
+  try {
+    const res  = await fetch('/admin/register-class', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        teacher_id: parseInt(teacherId), grade: parseInt(grade),
+        day_of_week: _regCtx.day, session_type: _regCtx.session,
+        start_session: _regCtx.start, duration: 2, location: _regCtx.room,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('modalRegisterClass')).hide();
+      showAlert('Đã đăng ký lớp thành công.', 'success');
+      loadRoomGrid();
+    } else {
+      errEl.textContent = data.error || 'Lỗi khi đăng ký.';
+      errEl.classList.remove('d-none');
+    }
+  } catch { errEl.textContent='Lỗi kết nối.'; errEl.classList.remove('d-none'); }
+}
+
+function deleteGridClass(classId, e) {
+  e.stopPropagation();
+  showConfirm('Xóa lớp này?',
+    'Học sinh đăng ký lớp này cũng sẽ bị hủy. Không thể hoàn tác.',
+    async () => {
+      try {
+        const res  = await fetch('/admin/classes/' + classId, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.ok) { showAlert('Đã xóa lớp.', 'success'); loadRoomGrid(); }
+        else showAlert(data.error || 'Không thể xóa.', 'error');
+      } catch { showAlert('Lỗi kết nối.', 'error'); }
+    },
+    { confirmText: 'Xóa', confirmClass: 'btn-danger' }
+  );
+}
+
+document.addEventListener('DOMContentLoaded', loadRoomGrid);
+</script>
+{% endblock %}

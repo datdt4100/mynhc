@@ -626,11 +626,11 @@ def admin_required(f):
     return decorated
 
 
-def room_grid_access_required(f):
-    """Allow both admin and operator accounts."""
+def operator_required(f):
+    """Allow only operator accounts (not admin)."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        if _is_admin() or session.get("user_type") == "operator":
+        if session.get("user_type") == "operator":
             return f(*args, **kwargs)
         return redirect(url_for("login_page"))
     return decorated
@@ -858,7 +858,7 @@ def login_step2():
         session["user_type"] = "operator"
         session["operator_id"] = op.id
         session["full_name"] = op.full_name
-        return jsonify(ok=True, redirect=url_for("admin_room_detail"))
+        return jsonify(ok=True, redirect=url_for("op_room_detail"))
 
     return jsonify(ok=False, error="Loại tài khoản không hợp lệ.")
 
@@ -2472,7 +2472,7 @@ def admin_operators_delete(op_id):
 # --- Admin: Class registration management ---
 
 @app.route("/admin/room-grid")
-@room_grid_access_required
+@admin_required
 def admin_room_grid():
     with engine.connect() as conn:
         all_rooms = sorted([r.name for r in conn.execute(select(rooms)).fetchall()], key=_room_sort_key)
@@ -2507,25 +2507,27 @@ def admin_room_grid():
     )
 
 
+def _teachers_json_list(conn):
+    all_teachers = conn.execute(select(teachers).order_by(teachers.c.full_name)).fetchall()
+    return [{"id": t.id, "full_name": t.full_name, "subject_group": t.subject_group or ""} for t in all_teachers]
+
+
 @app.route("/admin/room-detail")
-@room_grid_access_required
+@admin_required
 def admin_room_detail():
     with engine.connect() as conn:
-        all_teachers = conn.execute(
-            select(teachers).order_by(teachers.c.full_name)
-        ).fetchall()
-    teachers_json = [
-        {"id": t.id, "full_name": t.full_name, "subject_group": t.subject_group or ""}
-        for t in all_teachers
-    ]
-    is_op = session.get("user_type") == "operator"
+        tj = _teachers_json_list(conn)
     return render_template("admin/room_grid.html",
-                           teachers_json=teachers_json,
-                           is_operator_session=is_op)
+                           teachers_json=tj,
+                           is_operator_session=False,
+                           api_room_grid=url_for("admin_room_grid"),
+                           api_register_class=url_for("admin_register_class"),
+                           api_class_base="/admin/classes",
+                           api_export_url=url_for("admin_room_detail_export"))
 
 
 @app.route("/admin/room-detail/export")
-@room_grid_access_required
+@admin_required
 def admin_room_detail_export():
     with engine.connect() as conn:
         all_rooms = sorted([r.name for r in conn.execute(select(rooms)).fetchall()], key=_room_sort_key)
@@ -2650,7 +2652,7 @@ def admin_room_detail_export():
 
 
 @app.route("/admin/register-class", methods=["POST"])
-@room_grid_access_required
+@admin_required
 def admin_register_class():
     data = request.get_json(force=True)
     try:
@@ -2910,12 +2912,54 @@ def admin_class_publish(class_id):
 
 
 @app.route("/admin/classes/<int:class_id>", methods=["DELETE"])
-@room_grid_access_required
+@admin_required
 def admin_class_delete(class_id):
     with engine.begin() as conn:
         conn.execute(delete(enrollments).where(enrollments.c.class_id == class_id))
         conn.execute(delete(classes).where(classes.c.id == class_id))
     return jsonify(ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Operator routes — separate /op/ namespace, never exposes /admin/ to operators
+# ---------------------------------------------------------------------------
+
+@app.route("/op/room-detail")
+@operator_required
+def op_room_detail():
+    with engine.connect() as conn:
+        tj = _teachers_json_list(conn)
+    return render_template("admin/room_grid.html",
+                           teachers_json=tj,
+                           is_operator_session=True,
+                           api_room_grid=url_for("op_room_grid"),
+                           api_register_class=url_for("op_register_class"),
+                           api_class_base="/op/classes",
+                           api_export_url=url_for("op_room_detail_export"))
+
+
+@app.route("/op/room-grid")
+@operator_required
+def op_room_grid():
+    return admin_room_grid.__wrapped__()
+
+
+@app.route("/op/room-detail/export")
+@operator_required
+def op_room_detail_export():
+    return admin_room_detail_export.__wrapped__()
+
+
+@app.route("/op/register-class", methods=["POST"])
+@operator_required
+def op_register_class():
+    return admin_register_class.__wrapped__()
+
+
+@app.route("/op/classes/<int:class_id>", methods=["DELETE"])
+@operator_required
+def op_class_delete(class_id):
+    return admin_class_delete.__wrapped__(class_id)
 
 
 # --- Admin: Enrollment management ---

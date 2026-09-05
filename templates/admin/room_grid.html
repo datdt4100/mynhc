@@ -5,6 +5,7 @@
 {% block head %}
 <style>
   body { background: #F0F9FF; }
+
   .section-card {
     background: #fff;
     border-radius: 16px;
@@ -20,58 +21,111 @@
     display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
     font-size: .9rem; font-weight: 700; color: #0c4a6e;
   }
-  .grid-ses-btn { transition: opacity .15s, font-weight .15s; }
+
+  /* Fix: overflow:hidden on section-card can block sticky column on some browsers.
+     Use overflow:clip (no scroll container created) so position:sticky works correctly. */
+  #roomGridCard { overflow: clip; }
+
+  /* Horizontal scroll wrapper — touch-friendly */
+  .rg-scroll {
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    padding-bottom: 6px; /* scrollbar breathing room on desktop */
+  }
+
+  /* Toggle session buttons */
+  .grid-ses-btn { transition: opacity .15s, font-weight .15s; min-height: 36px; }
   .grid-ses-btn.active { opacity: 1 !important; box-shadow: 0 2px 6px rgba(0,0,0,.12); }
   .grid-ses-btn:not(.active) { opacity: .65; }
+
+  /* ── Mobile ── */
+  @media (max-width: 575px) {
+    /* Container tighter on phone */
+    .rg-container { padding-left: 10px !important; padding-right: 10px !important; }
+    /* Page title smaller */
+    .rg-page-title { font-size: .92rem !important; }
+    /* Export button: icon only */
+    .rg-export-text { display: none; }
+    /* Section card header: compact */
+    .section-card-header { padding: 10px 12px; gap: 8px; font-size: .82rem; }
+    /* Toggle buttons: hide text label, keep icon */
+    .ses-btn-label { display: none; }
+    .grid-ses-btn { padding: 6px 10px !important; min-width: 36px; }
+    /* Reduce card heading text */
+    .rg-section-title { display: none; }
+  }
+
+  /* Modal full-width on very small screens */
+  @media (max-width: 480px) {
+    #modalRegisterClass .modal-dialog { margin: 0.5rem; max-width: calc(100vw - 1rem) !important; }
+    #modalRegisterClass .modal-body { padding: 1rem !important; }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container pb-5">
-  <div class="d-flex align-items-center gap-2 mb-4 pt-4 flex-wrap">
-    {% if is_operator_session %}
-      <span class="fw-semibold" style="font-size:.82rem;color:#64748B;">
-        <i class="bi bi-person-badge me-1"></i>Quản trị lớp học ·{{ session['full_name'] }}
-      </span>
-      <form method="post" action="{{ url_for('logout') }}" style="display:inline;">
-        <button type="submit" class="btn btn-sm btn-outline-secondary flex-shrink-0"
-                style="border-radius:8px;font-size:.78rem;">
-          <i class="bi bi-box-arrow-right me-1"></i>Đăng xuất
-        </button>
-      </form>
-    {% else %}
-      <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary flex-shrink-0"
-         style="border-radius:8px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;padding:0;" title="Quay lại">
-        <i class="bi bi-arrow-left"></i>
-      </a>
+<div class="container rg-container pb-5">
+
+  <!-- ── Page header ── -->
+  {% if is_operator_session %}
+  <!-- Operator bar: role + name on left, logout on right -->
+  <div class="d-flex align-items-center gap-2 pt-3 mb-2"
+       style="border-bottom:1.5px solid #E9D5FF;padding-bottom:10px;">
+    <div class="flex-grow-1" style="min-width:0;font-size:.8rem;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+      <i class="bi bi-person-badge me-1" style="color:#7C3AED;"></i>
+      <span class="fw-semibold" style="color:#3B0764;">Quản trị lớp học</span>
+      <span class="mx-1">·</span>{{ session['full_name'] }}
+    </div>
+    <form method="post" action="{{ url_for('logout') }}" style="display:inline;flex-shrink:0;">
+      <button type="submit" class="btn btn-sm btn-outline-danger"
+              style="border-radius:8px;height:30px;padding:0 10px;font-size:.76rem;"
+              title="Đăng xuất">
+        <i class="bi bi-box-arrow-right me-1"></i>Đăng xuất
+      </button>
+    </form>
+  </div>
+  {% endif %}
+
+  <!-- Title row -->
+  <div class="d-flex align-items-center gap-2 mb-3 {% if is_operator_session %}mt-3{% else %}pt-4{% endif %}">
+    {% if not is_operator_session %}
+    <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+       style="border-radius:8px;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;padding:0;" title="Quay lại">
+      <i class="bi bi-arrow-left"></i>
+    </a>
     {% endif %}
-    <h1 style="font-size:1.1rem;font-weight:800;color:#0c4a6e;margin:0;">
-      <i class="bi bi-grid-3x3-gap me-2" style="color:#7C3AED;"></i>Lịch phòng chi tiết
+    <h1 class="rg-page-title mb-0 flex-grow-1 text-truncate" style="font-size:1.05rem;font-weight:800;color:#0c4a6e;">
+      <i class="bi bi-grid-3x3-gap me-1" style="color:#7C3AED;"></i>Lịch phòng chi tiết
     </h1>
-    <a href="{{ url_for('admin_room_detail_export') }}" class="btn btn-sm ms-auto"
-       style="border-radius:8px;background:#F0FDF4;color:#166534;border:1.5px solid #86EFAC;font-size:.8rem;font-weight:700;">
-      <i class="bi bi-file-earmark-excel me-1"></i>Xuất Excel
+    <!-- Export: icon only on mobile, icon+text on wider screens -->
+    <a href="{{ api_export_url }}" class="btn btn-sm flex-shrink-0"
+       style="border-radius:8px;background:#F0FDF4;color:#166534;border:1.5px solid #86EFAC;font-size:.8rem;font-weight:700;height:34px;white-space:nowrap;display:inline-flex;align-items:center;">
+      <i class="bi bi-file-earmark-excel"></i>
+      <span class="rg-export-text ms-1">Xuất Excel</span>
     </a>
   </div>
 
+  <!-- ── Room grid card ── -->
   <div class="section-card" id="roomGridCard">
     <div class="section-card-header">
-      <i class="bi bi-grid-3x3-gap"></i>
-      <span>Xếp phòng theo buổi</span>
-      <div class="ms-auto d-flex gap-2">
+      <i class="bi bi-grid-3x3-gap flex-shrink-0"></i>
+      <span class="rg-section-title">Xếp phòng theo buổi</span>
+      <div class="ms-auto d-flex gap-2 flex-shrink-0">
         <button class="btn btn-sm grid-ses-btn active" data-ses="morning"
                 onclick="switchGridSession('morning')"
                 style="border-radius:8px;font-size:.78rem;background:#FFF7ED;color:#C2410C;border:1.5px solid #FED7AA;font-weight:700;">
-          <i class="bi bi-sun me-1"></i>Buổi Sáng
+          <i class="bi bi-sun"></i><span class="ses-btn-label ms-1">Buổi Sáng</span>
         </button>
         <button class="btn btn-sm grid-ses-btn" data-ses="afternoon"
                 onclick="switchGridSession('afternoon')"
                 style="border-radius:8px;font-size:.78rem;background:#EFF6FF;color:#1D4ED8;border:1.5px solid #BFDBFE;font-weight:700;">
-          <i class="bi bi-moon me-1"></i>Buổi Chiều
+          <i class="bi bi-moon"></i><span class="ses-btn-label ms-1">Buổi Chiều</span>
         </button>
       </div>
     </div>
-    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+    <div class="rg-scroll">
       <div id="roomGridWrap">
         <div class="p-4 text-center text-muted">Đang tải…</div>
       </div>
@@ -142,13 +196,18 @@ let _gridData    = null;
 let _gridSession = 'morning';
 let _regCtx      = null;
 const _TEACHERS  = {{ teachers_json | tojson }};
+const _API = {
+  roomGrid:      {{ api_room_grid | tojson }},
+  registerClass: {{ api_register_class | tojson }},
+  classBase:     {{ api_class_base | tojson }},
+};
 
 function _gesc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 async function loadRoomGrid() {
   const wrap = document.getElementById('roomGridWrap');
   try {
-    const res = await fetch('/admin/room-grid');
+    const res = await fetch(_API.roomGrid);
     _gridData = await res.json();
     _renderGridView();
   } catch {
@@ -326,7 +385,7 @@ async function submitRegisterClass() {
   if (!grade)     { errEl.textContent='Vui lòng chọn khối giảng.'; errEl.classList.remove('d-none'); return; }
 
   try {
-    const res  = await fetch('/admin/register-class', {
+    const res  = await fetch(_API.registerClass, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         teacher_id: parseInt(teacherId), grade: parseInt(grade),
@@ -352,7 +411,7 @@ function deleteGridClass(classId, e) {
     'Học sinh đăng ký lớp này cũng sẽ bị hủy. Không thể hoàn tác.',
     async () => {
       try {
-        const res  = await fetch('/admin/classes/' + classId, { method: 'DELETE' });
+        const res  = await fetch(_API.classBase + '/' + classId, { method: 'DELETE' });
         const data = await res.json();
         if (data.ok) { showAlert('Đã xóa lớp.', 'success'); loadRoomGrid(); }
         else showAlert(data.error || 'Không thể xóa.', 'error');

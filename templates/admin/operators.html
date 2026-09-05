@@ -47,24 +47,24 @@
       <i class="bi bi-list-ul"></i>
       <span>Danh sách tài khoản</span>
     </div>
-    <div class="p-0">
+    <div class="p-0" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
       {% if operators %}
-      <table class="table table-sm mb-0" style="font-size:.85rem;">
+      <table class="table table-sm mb-0" style="font-size:.85rem;min-width:400px;">
         <thead>
           <tr style="background:#F5F3FF;">
-            <th class="ps-4 py-2" style="color:#3B0764;font-weight:700;border:none;">Họ và tên</th>
+            <th class="ps-3 py-2" style="color:#3B0764;font-weight:700;border:none;">Họ và tên</th>
             <th class="py-2" style="color:#3B0764;font-weight:700;border:none;">Mã đăng nhập</th>
-            <th class="py-2 text-center" style="color:#3B0764;font-weight:700;border:none;width:140px;">Thao tác</th>
+            <th class="py-2 text-center" style="color:#3B0764;font-weight:700;border:none;width:130px;">Thao tác</th>
           </tr>
         </thead>
         <tbody>
           {% for op in operators %}
           <tr id="op-row-{{ op.id }}">
-            <td class="ps-4 py-2 fw-semibold" style="color:#0c4a6e;">{{ op.full_name }}</td>
+            <td class="ps-3 py-2 fw-semibold" style="color:#0c4a6e;">{{ op.full_name }}</td>
             <td class="py-2">
               <code style="background:#EDE9FE;color:#6D28D9;padding:2px 8px;border-radius:5px;">{{ op.login_code }}</code>
             </td>
-            <td class="py-2 text-center">
+            <td class="py-2 text-center" style="white-space:nowrap;">
               <button onclick="openResetPw({{ op.id }}, '{{ op.full_name | e }}')"
                       class="btn btn-sm" style="font-size:.72rem;padding:2px 8px;border-radius:6px;background:#EFF6FF;color:#0369A1;border:1px solid #BAE6FD;">
                 <i class="bi bi-key me-1"></i>Đổi MK

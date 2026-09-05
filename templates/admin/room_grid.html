@@ -31,7 +31,7 @@
   <div class="d-flex align-items-center gap-2 mb-4 pt-4 flex-wrap">
     {% if is_operator_session %}
       <span class="fw-semibold" style="font-size:.82rem;color:#64748B;">
-        <i class="bi bi-person-badge me-1"></i>Điều phối ·{{ session['full_name'] }}
+        <i class="bi bi-person-badge me-1"></i>Quản trị lớp học ·{{ session['full_name'] }}
       </span>
       <form method="post" action="{{ url_for('logout') }}" style="display:inline;">
         <button type="submit" class="btn btn-sm btn-outline-secondary flex-shrink-0"

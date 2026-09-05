@@ -725,7 +725,7 @@ def login_step1():
                 user_type="operator",
                 full_name=operator.full_name,
                 gender=None,
-                title="Điều phối",
+                title="Quản trị lớp học",
                 is_first_login=0,
             )
 

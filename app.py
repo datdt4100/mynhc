@@ -2365,6 +2365,96 @@ def admin_students_clear():
 
 # --- Admin: Class registration management ---
 
+@app.route("/admin/room-grid")
+@admin_required
+def admin_room_grid():
+    with engine.connect() as conn:
+        all_rooms = sorted([r.name for r in conn.execute(select(rooms)).fetchall()], key=_room_sort_key)
+        rows = conn.execute(
+            select(classes, teachers.c.full_name.label("teacher_name"), teachers.c.subject_group)
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .where(classes.c.location.isnot(None))
+        ).fetchall()
+        ext_busy_rows = conn.execute(select(room_external_busy)).fetchall()
+        grade_slot_rows = conn.execute(select(room_grade_slots)).fetchall()
+    return jsonify(
+        rooms=all_rooms,
+        bookings=[{
+            "class_id": r.id,
+            "room": r.location,
+            "day": r.day_of_week,
+            "session": r.session_type,
+            "start": r.start_session,
+            "duration": r.duration,
+            "grade": r.grade,
+            "subject": r.subject or r.subject_group or "",
+            "teacher": r.teacher_name,
+        } for r in rows],
+        ext_busy=[{
+            "room": r.room_name, "day": r.day_of_week,
+            "session": r.session_type, "tiet": r.tiet,
+        } for r in ext_busy_rows],
+        grade_slots=[{
+            "room": r.room_name, "day": r.day_of_week,
+            "session": r.session_type, "tiet": r.tiet, "grades": r.available_grades,
+        } for r in grade_slot_rows],
+    )
+
+
+@app.route("/admin/register-class", methods=["POST"])
+@admin_required
+def admin_register_class():
+    data = request.get_json(force=True)
+    try:
+        teacher_id    = int(data["teacher_id"])
+        grade         = int(data["grade"])
+        day_of_week   = int(data["day_of_week"])
+        session_type  = data["session_type"]
+        start_session = int(data["start_session"])
+        duration      = int(data.get("duration", 2))
+        location      = (data.get("location") or "").strip() or None
+    except (KeyError, ValueError, TypeError):
+        return jsonify(ok=False, error="Dữ liệu không hợp lệ.")
+
+    if grade not in (10, 11, 12):
+        return jsonify(ok=False, error="Khối phải là 10, 11 hoặc 12.")
+    if duration not in (2, 4):
+        return jsonify(ok=False, error="Số tiết phải là 2 hoặc 4.")
+    if session_type not in ("morning", "afternoon"):
+        return jsonify(ok=False, error="Buổi không hợp lệ.")
+
+    end_session = start_session + duration - 1
+    with engine.begin() as conn:
+        teacher = conn.execute(select(teachers).where(teachers.c.id == teacher_id)).first()
+        if not teacher:
+            return jsonify(ok=False, error="Giáo viên không tồn tại.")
+        if location:
+            conflict = conn.execute(
+                select(classes.c.id).where(and_(
+                    classes.c.day_of_week == day_of_week,
+                    classes.c.session_type == session_type,
+                    classes.c.location == location,
+                    classes.c.start_session <= end_session,
+                    (classes.c.start_session + classes.c.duration - 1) >= start_session,
+                ))
+            ).first()
+            if conflict:
+                return jsonify(ok=False, error=f"Phòng {location} đã bị đặt trong khung giờ này.")
+        result = conn.execute(
+            insert(classes).values(
+                teacher_id=teacher_id, grade=grade, duration=duration,
+                day_of_week=day_of_week, session_type=session_type,
+                start_session=start_session,
+                subject=teacher.subject_group,
+                location=location, max_capacity=50,
+                extra_data=None, is_published=1,
+            )
+        )
+        class_id = result.inserted_primary_key[0]
+    _bump(event_type="class", grade=grade)
+    return jsonify(ok=True, class_id=class_id)
+
+
 @app.route("/admin/class-reg")
 @admin_required
 def admin_class_reg():

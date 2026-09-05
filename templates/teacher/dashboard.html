@@ -558,19 +558,6 @@
           <span id="impactText" class="ms-1"></span>
         </div>
 
-        <!-- Room selection -->
-        <div id="roomWrap" class="mt-3" style="display:none;">
-          <div class="d-flex align-items-center justify-content-between mb-1">
-            <label class="form-label fw-semibold mb-0" style="font-size:.85rem;">Phòng học <span class="text-danger">*</span></label>
-            <button type="button" class="btn btn-link p-0" style="font-size:.75rem; color:#0369A1;" onclick="openRoomScheduleFromModal()">
-              <i class="bi bi-grid me-1"></i>Xem lịch phòng
-            </button>
-          </div>
-          <select id="regRoom" class="form-select custom-input">
-            <option value="">-- Chọn phòng --</option>
-          </select>
-          <div id="roomHint" class="mt-1" style="font-size:.78rem; color:#64748B;"></div>
-        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
@@ -597,9 +584,6 @@ function openRegModal() {
   document.getElementById('durationWarning').classList.add('d-none');
   document.getElementById('regDuration').value = '2';
   document.getElementById('regGrade').value = '10';
-  document.getElementById('regRoom').innerHTML = '<option value="">-- Chọn phòng --</option>';
-  document.getElementById('roomWrap').style.display = 'none';
-  document.getElementById('roomHint').textContent = '';
   document.getElementById('impactBadge').classList.add('d-none');
   new bootstrap.Modal(document.getElementById('regModal')).show();
   loadSlotGrid();
@@ -661,13 +645,11 @@ async function loadSlotGrid() {
       const dur = parseInt(document.getElementById('regDuration').value);
       if (_gridData[key] !== undefined && _gridData[key] !== -1 && ss + dur - 1 <= 4) {
         _highlightAndBadge(day, ses, ss, _gridData);
-        await loadRooms();
       } else {
         // slot cũ không còn hợp lệ với duration mới → reset
         document.getElementById('regDay').value = '';
         document.getElementById('regSession').value = '';
         document.getElementById('regStart').value = '';
-        document.getElementById('roomWrap').style.display = 'none';
         document.getElementById('impactBadge').classList.add('d-none');
       }
     }
@@ -822,7 +804,6 @@ async function selectSlot(day, ses, start, combos) {
   document.getElementById('regStart').value   = start;
   _highlightAndBadge(day, ses, start, _gridData);
   checkDuration();
-  await loadRooms();
 }
 
 function _highlightAndBadge(day, ses, start, gridData) {
@@ -894,35 +875,6 @@ async function refreshCalendar() {
   }
 }
 
-async function loadRooms() {
-  const day  = document.getElementById('regDay').value;
-  const ses  = document.getElementById('regSession').value;
-  const ss   = parseInt(document.getElementById('regStart').value);
-  const dur  = parseInt(document.getElementById('regDuration').value);
-  const wrap = document.getElementById('roomWrap');
-  const sel  = document.getElementById('regRoom');
-  const hint = document.getElementById('roomHint');
-
-  if (!day || !ses || !ss || dur + ss - 1 > 4) { wrap.style.display = 'none'; return; }
-
-  sel.innerHTML = '<option value="">-- Đang tải... --</option>';
-  wrap.style.display = '';
-  hint.textContent = '';
-  setTimeout(() => wrap.scrollIntoView({behavior:'smooth', block:'nearest'}), 80);
-
-  try {
-    const grade = parseInt(document.getElementById('regGrade')?.value) || '';
-    const res  = await fetch(`/api/available-rooms?day_of_week=${day}&session_type=${ses}&start_session=${ss}&duration=${dur}&grade=${grade}`);
-    const list = await res.json();
-    sel.innerHTML = '<option value="">-- Chọn phòng --</option>' +
-      list.map(r => `<option value="${r}">${r}</option>`).join('');
-    hint.textContent = list.length === 0 ? 'Không còn phòng trống cho khung giờ này.' : `${list.length} phòng trống`;
-    hint.style.color = list.length === 0 ? '#DC2626' : '#16A34A';
-    if (list.length === 0) document.getElementById('regSubmitBtn').disabled = true;
-  } catch {
-    hint.textContent = 'Không thể tải danh sách phòng.';
-  }
-}
 
 function submitReg() {
   const errEl = document.getElementById('regError');
@@ -941,14 +893,6 @@ function submitReg() {
     return;
   }
 
-  const roomWrap = document.getElementById('roomWrap');
-  const room = document.getElementById('regRoom').value;
-  if (roomWrap.style.display !== 'none' && !room) {
-    errEl.textContent = 'Vui lòng chọn phòng học.';
-    errEl.classList.remove('d-none');
-    return;
-  }
-
   const payload = {
     grade:         parseInt(document.getElementById('regGrade').value),
     day_of_week:   parseInt(document.getElementById('regDay').value),
@@ -956,8 +900,6 @@ function submitReg() {
     start_session: parseInt(document.getElementById('regStart').value),
     duration:      parseInt(document.getElementById('regDuration').value),
   };
-
-  if (room) payload.location = room;
 
   if (payload.start_session + payload.duration - 1 > 4) return;
 
@@ -1223,7 +1165,7 @@ setInterval(updateCounts, 5000);
           const modal = document.getElementById('roomSchedModal');
           if (modal && modal.classList.contains('show')) showRoomDay(_rsDay);
           const day = document.getElementById('regDay')?.value;
-          if (day) loadRooms();
+          if (day) _highlightAndBadge(parseInt(day), document.getElementById('regSession').value, parseInt(document.getElementById('regStart').value), _gridData);
         });
       }
     } catch (_) {}

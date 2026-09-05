@@ -992,7 +992,6 @@ def teacher_register_class():
         return jsonify(ok=False, error="Tiết kết thúc vượt quá tiết 4.")
 
     subject  = session.get("subject_group") or (data.get("subject") or "").strip() or None
-    location = (data.get("location") or "").strip() or None
     end_session = start_session + duration - 1
 
     # Heavy combo check — only when admin has not disabled the constraint
@@ -1023,49 +1022,44 @@ def teacher_register_class():
                 return jsonify(ok=False,
                     error="Bạn đã có lớp trong khung giờ này. Vui lòng chọn khung giờ khác.")
 
-            # Re-validate room availability inside the lock
-            if location:
-                room_conflict = conn.execute(
-                    select(classes.c.id).where(and_(
+            # Verify at least 1 room is free for this grade + slot
+            all_rooms_rows = conn.execute(select(rooms)).fetchall()
+            if all_rooms_rows:
+                booked_locs = {r.location for r in conn.execute(
+                    select(classes.c.location).where(and_(
                         classes.c.day_of_week == day_of_week,
                         classes.c.session_type == session_type,
-                        classes.c.location == location,
+                        classes.c.location.isnot(None),
                         classes.c.start_session <= end_session,
                         (classes.c.start_session + classes.c.duration - 1) >= start_session,
                     ))
-                ).first()
-                if room_conflict:
-                    return jsonify(ok=False,
-                        error=f"Phòng {location} vừa được đặt bởi giáo viên khác. Vui lòng chọn phòng khác.")
-                # Also check external busy schedule
-                ext_busy = conn.execute(
-                    select(room_external_busy.c.id).where(and_(
-                        room_external_busy.c.room_name == location,
+                ).fetchall() if r.location}
+                ext_busy_locs = {r.room_name for r in conn.execute(
+                    select(room_external_busy.c.room_name).where(and_(
                         room_external_busy.c.day_of_week == day_of_week,
                         room_external_busy.c.session_type == session_type,
                         room_external_busy.c.tiet >= start_session,
                         room_external_busy.c.tiet <= end_session,
                     ))
-                ).first()
-                if ext_busy:
-                    return jsonify(ok=False,
-                        error=f"Phòng {location} đang bận theo lịch đã cài đặt. Vui lòng chọn phòng khác.")
-                # Check room_grade_slots — room may be restricted to specific grades
-                grade_restrict = conn.execute(
-                    select(room_grade_slots.c.available_grades).where(and_(
-                        room_grade_slots.c.room_name == location,
+                ).fetchall()}
+                grade_blocked_locs = set()
+                for gr in conn.execute(
+                    select(room_grade_slots.c.room_name, room_grade_slots.c.available_grades).where(and_(
                         room_grade_slots.c.day_of_week == day_of_week,
                         room_grade_slots.c.session_type == session_type,
                         room_grade_slots.c.tiet >= start_session,
                         room_grade_slots.c.tiet <= end_session,
                     ))
-                ).first()
-                if grade_restrict:
-                    allowed = [g.strip() for g in grade_restrict.available_grades.split(",")]
+                ).fetchall():
+                    allowed = [g.strip() for g in gr.available_grades.split(",")]
                     if str(grade) not in allowed:
-                        label = "+".join(f"Khối {g}" for g in allowed)
-                        return jsonify(ok=False,
-                            error=f"Phòng {location} khung giờ này chỉ dành cho {label}. Vui lòng chọn phòng khác.")
+                        grade_blocked_locs.add(gr.room_name)
+                free_rooms = [r.name for r in all_rooms_rows
+                              if r.name not in booked_locs
+                              and r.name not in ext_busy_locs
+                              and r.name not in grade_blocked_locs]
+                if not free_rooms:
+                    return jsonify(ok=False, error="Không còn phòng trống cho khung giờ này.")
 
             result = conn.execute(
                 insert(classes).values(
@@ -1076,7 +1070,7 @@ def teacher_register_class():
                     session_type=session_type,
                     start_session=start_session,
                     subject=subject,
-                    location=location,
+                    location=None,
                     max_capacity=50,
                     extra_data=None,
                     is_published=1,
@@ -2907,6 +2901,117 @@ def admin_class_update(class_id):
             )
         )
     return jsonify(ok=True, location=location, max_capacity=max_capacity)
+
+
+@app.route("/admin/class-schedule")
+@admin_required
+def admin_class_schedule():
+    with engine.connect() as conn:
+        all_classes = conn.execute(
+            select(classes, teachers.c.full_name.label("teacher_name"),
+                   teachers.c.subject_group)
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .order_by(classes.c.grade, classes.c.start_session)
+        ).fetchall()
+    # Build grid: {session_type: {(day_of_week, start_session): [class_info, ...]}}
+    grid = {}
+    for ses in ("morning", "afternoon"):
+        grid[ses] = {}
+        for d in range(2, 8):
+            for s in (1, 3):
+                grid[ses][(d, s)] = []
+    for c in all_classes:
+        key = (c.day_of_week, c.start_session)
+        if key in grid.get(c.session_type, {}):
+            grid[c.session_type][key].append(c)
+    return render_template(
+        "admin/class_schedule.html",
+        grid=grid,
+        day_name=day_name,
+    )
+
+
+@app.route("/admin/class-schedule/export")
+@admin_required
+def admin_class_schedule_export():
+    with engine.connect() as conn:
+        all_classes = conn.execute(
+            select(classes, teachers.c.full_name.label("teacher_name"),
+                   teachers.c.subject_group)
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .order_by(classes.c.session_type, classes.c.day_of_week,
+                      classes.c.start_session, classes.c.grade)
+        ).fetchall()
+
+    wb = openpyxl.Workbook()
+    DAYS = [2, 3, 4, 5, 6, 7]
+    DAY_NAMES_VN = {2: "Thứ 2", 3: "Thứ 3", 4: "Thứ 4", 5: "Thứ 5", 6: "Thứ 6", 7: "Thứ 7"}
+    SLOTS = [(1, "Tiết 1-2"), (3, "Tiết 3-4")]
+    SESSION_VN = {"morning": "Buổi Sáng", "afternoon": "Buổi Chiều"}
+
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    thin = Side(border_style="thin", color="CCCCCC")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    hdr_fill = PatternFill("solid", fgColor="0EA5E9")
+    sub_fill = PatternFill("solid", fgColor="EFF6FF")
+
+    for ses_key in ("morning", "afternoon"):
+        ws = wb.create_sheet(SESSION_VN[ses_key])
+        # Header row 1: empty + day names (colspan 2 each — we'll just repeat)
+        ws.append(["Tiết"] + [n for d in DAYS for n in [DAY_NAMES_VN[d], ""]])
+        # Header row 2: slot label + (start_session) repeated
+        ws.append([""] + ["Tiết 1-2", "Tiết 3-4"] * len(DAYS))
+
+        # Build lookup
+        grid = {}
+        for c in all_classes:
+            if c.session_type != ses_key:
+                continue
+            k = (c.day_of_week, c.start_session)
+            grid.setdefault(k, []).append(c)
+
+        for slot_start, slot_label in SLOTS:
+            # Collect max items per column to know how many rows
+            max_items = max(
+                (len(grid.get((d, slot_start), [])) for d in DAYS),
+                default=1
+            )
+            for i in range(max(max_items, 1)):
+                row = [slot_label if i == 0 else ""]
+                for d in DAYS:
+                    items = grid.get((d, slot_start), [])
+                    if i < len(items):
+                        c = items[i]
+                        row.append(f"K{c.grade} — {c.teacher_name}")
+                    else:
+                        row.append("")
+                ws.append(row)
+
+        for cell in ws[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = hdr_fill
+            cell.alignment = Alignment(horizontal="center")
+            cell.border = border
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                cell.border = border
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+        ws.column_dimensions["A"].width = 12
+        for col in range(2, 2 + len(DAYS)):
+            ws.column_dimensions[get_column_letter(col)].width = 22
+
+    if "Sheet" in wb.sheetnames:
+        del wb["Sheet"]
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf,
+        download_name="lich_dang_ky.xlsx",
+        as_attachment=True,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @app.route("/admin/class-reg/toggle", methods=["POST"])

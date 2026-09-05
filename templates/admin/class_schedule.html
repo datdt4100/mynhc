@@ -10,217 +10,317 @@
 
 {% block head %}
 <style>
-  body { background: #FFF7ED; }
-  .sched-card {
-    background: #fff;
-    border-radius: 16px;
-    border: 1.5px solid #E2E8F0;
-    box-shadow: 0 1px 6px rgba(0,0,0,.04);
-    overflow: hidden;
-  }
+  body { background: #F0F9FF; }
+
+  /* ── Tabs ── */
+  .ses-tabs { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
   .tab-btn {
-    padding: 7px 20px;
+    padding: 7px 18px;
     border-radius: 9px;
-    font-size: .83rem;
+    font-size: .82rem;
     font-weight: 700;
-    border: 1.5px solid #E2E8F0;
-    background: #F8FAFC;
-    color: #64748B;
+    border: 1.5px solid transparent;
     cursor: pointer;
     transition: all .15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
-  .tab-btn.active {
-    background: #EA580C;
-    border-color: #EA580C;
-    color: #fff;
+  .tab-btn-morning { background:#FFF7ED; border-color:#FED7AA; color:#92400E; }
+  .tab-btn-morning.active { background:#F97316; border-color:#F97316; color:#fff; }
+  .tab-btn-afternoon { background:#EFF6FF; border-color:#BAE6FD; color:#0c4a6e; }
+  .tab-btn-afternoon.active { background:#0EA5E9; border-color:#0EA5E9; color:#fff; }
+
+  /* ── Schedule card ── */
+  .sched-card {
+    background: #fff;
+    border-radius: 14px;
+    border: 1.5px solid #E2E8F0;
+    box-shadow: 0 1px 6px rgba(0,0,0,.04);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
+  .sched-card-inner { min-width: 520px; }
+
   .sched-table {
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
+    border-collapse: collapse;
     font-size: .78rem;
+    table-layout: fixed;
   }
   .sched-table th {
-    padding: 9px 6px;
+    padding: 8px 4px;
     text-align: center;
     font-weight: 700;
-    color: #0c4a6e;
-    background: #EFF6FF;
-    border-bottom: 2px solid #BAE6FD;
     white-space: nowrap;
   }
-  .sched-table th:first-child {
+  .sched-table th.col-label {
     background: #F8FAFC;
     color: #64748B;
-    width: 76px;
-    border-bottom-color: #E2E8F0;
+    width: 64px;
+    border-right: 1px solid #E2E8F0;
+    border-bottom: 1.5px solid #E2E8F0;
+  }
+  .sched-table th.col-morning {
+    background: #FFF7ED;
+    color: #92400E;
+    border-bottom: 2px solid #FED7AA;
+    border-right: 1px solid #FEE4C4;
+  }
+  .sched-table th.col-afternoon {
+    background: #EFF6FF;
+    color: #0c4a6e;
+    border-bottom: 2px solid #BAE6FD;
+    border-right: 1px solid #DBEAFE;
   }
   .sched-table td {
-    vertical-align: top;
     padding: 6px 5px;
+    vertical-align: top;
     border: 1px solid #E2E8F0;
-    min-width: 110px;
   }
-  .sched-table td:first-child {
+  .sched-table td.col-label {
     background: #F8FAFC;
     font-weight: 700;
-    font-size: .75rem;
+    font-size: .73rem;
     color: #475569;
     text-align: center;
     white-space: nowrap;
-    width: 76px;
+    width: 64px;
+    border-right: 1px solid #E2E8F0;
   }
-  .class-chip {
-    display: block;
-    margin-bottom: 4px;
-    padding: 4px 7px;
-    border-radius: 7px;
-    font-size: .73rem;
-    line-height: 1.35;
-    background: #DBEAFE;
-    border: 1px solid #93C5FD;
-    color: #1E3A5F;
-  }
-  .class-chip .grade-badge {
-    display: inline-block;
-    padding: 1px 5px;
-    border-radius: 4px;
-    background: #0EA5E9;
-    color: #fff;
+
+  /* ── Cell stat ── */
+  .slot-stat { font-size: .72rem; }
+  .slot-total {
+    font-size: .75rem;
     font-weight: 700;
-    font-size: .68rem;
-    margin-bottom: 2px;
+    color: #1E293B;
+    margin-bottom: 3px;
   }
-  .class-chip .teacher-name {
-    color: #374151;
-    display: block;
-    font-size: .71rem;
+  .grade-row { margin-bottom: 2px; line-height: 1.4; }
+  .gbadge {
+    display: inline-block;
+    padding: 0 5px;
+    border-radius: 4px;
+    font-size: .65rem;
+    font-weight: 700;
+    margin-right: 3px;
+    line-height: 1.6;
   }
-  .class-chip .subject-label {
-    color: #6B7280;
-    font-size: .69rem;
-    display: block;
+  .gbadge-10 { background:#DBEAFE; color:#1D4ED8; }
+  .gbadge-11 { background:#FEF3C7; color:#92400E; }
+  .gbadge-12 { background:#DCFCE7; color:#166534; }
+  .grade-count { font-weight: 600; color: #374151; }
+  .subj-detail { color: #9CA3AF; font-size: .65rem; display:block; margin-left:4px; line-height:1.35; }
+  .detail-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 5px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: .66rem;
+    font-weight: 600;
+    background: #F1F5F9;
+    border: 1px solid #CBD5E1;
+    color: #475569;
+    cursor: pointer;
+    transition: background .12s;
   }
-  .empty-cell {
-    color: #CBD5E1;
-    font-size: .7rem;
+  .detail-btn:hover { background:#E2E8F0; }
+  .empty-cell { color:#CBD5E1; font-size:.68rem; text-align:center; padding:8px 0; }
+
+  /* ── Detail modal ── */
+  .detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .78rem;
+  }
+  .detail-table th {
+    padding: 7px 10px;
     text-align: center;
-    padding-top: 8px;
+    font-weight: 700;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    color: #374151;
+    white-space: nowrap;
   }
+  .detail-table th:first-child { width: 64px; }
+  .detail-table td {
+    padding: 6px 10px;
+    border: 1px solid #E2E8F0;
+    vertical-align: top;
+  }
+  .drow-10 td { background:#EFF6FF; }
+  .drow-11 td { background:#FFFBEB; }
+  .drow-12 td { background:#F0FDF4; }
+  .drow-10 td:first-child { color:#1D4ED8; font-weight:700; font-size:.8rem; }
+  .drow-11 td:first-child { color:#92400E; font-weight:700; font-size:.8rem; }
+  .drow-12 td:first-child { color:#166534; font-weight:700; font-size:.8rem; }
+  .t-entry { display:block; font-size:.72rem; color:#374151; padding:1px 0; }
+  .t-entry::before { content:"·"; color:#94A3B8; margin-right:4px; }
+  .no-cls { color:#D1D5DB; font-size:.68rem; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container pb-5">
+<div class="container-fluid pb-5" style="max-width:1200px; padding-left:16px; padding-right:16px;">
   <div class="d-flex align-items-center gap-2 mb-4 pt-4">
     <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary flex-shrink-0"
-       style="border-radius:8px; width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; padding:0;" title="Quay lại">
+       style="border-radius:8px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;padding:0;" title="Quay lại">
       <i class="bi bi-arrow-left"></i>
     </a>
-    <h1 style="font-size:1.1rem; font-weight:800; color:#7C2D12; margin:0;">
+    <h1 style="font-size:1.05rem;font-weight:800;color:#0c4a6e;margin:0;">
       <i class="bi bi-calendar3 me-2" style="color:#EA580C;"></i>Lịch đăng ký lớp học
     </h1>
     <a href="{{ url_for('admin_class_schedule_export') }}"
        class="btn btn-sm ms-auto flex-shrink-0"
-       style="background:#EA580C;color:#fff;border-radius:9px;font-size:.78rem;font-weight:600;border:none;padding:5px 13px;">
+       style="background:#EA580C;color:#fff;border-radius:9px;font-size:.77rem;font-weight:600;border:none;padding:5px 12px;">
       <i class="bi bi-file-earmark-excel me-1"></i>Xuất Excel
     </a>
   </div>
 
-  <!-- Session tabs -->
-  <div class="d-flex gap-2 mb-3">
-    <button class="tab-btn active" id="tab-afternoon" onclick="showSession('afternoon')">
-      <i class="bi bi-sun me-1"></i>Buổi Chiều
+  <!-- Tabs: Sáng first, Chiều second -->
+  <div class="ses-tabs">
+    <button class="tab-btn tab-btn-morning active" id="tab-morning" onclick="showSession('morning')">
+      <i class="bi bi-brightness-high"></i>Buổi Sáng
     </button>
-    <button class="tab-btn" id="tab-morning" onclick="showSession('morning')">
-      <i class="bi bi-brightness-high me-1"></i>Buổi Sáng
+    <button class="tab-btn tab-btn-afternoon" id="tab-afternoon" onclick="showSession('afternoon')">
+      <i class="bi bi-sun"></i>Buổi Chiều
     </button>
   </div>
 
-  <!-- Afternoon grid -->
-  <div id="grid-afternoon" class="sched-card mb-4" style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
-    <table class="sched-table">
-      <thead>
-        <tr>
-          <th></th>
-          {% for d in [2,3,4,5,6,7] %}
-          <th>{{ day_name(d) }}</th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for slot_start, slot_label in [(1, 'Tiết 1–2'), (3, 'Tiết 3–4')] %}
-        <tr>
-          <td>{{ slot_label }}</td>
-          {% for d in [2,3,4,5,6,7] %}
-          <td>
-            {% set items = grid['afternoon'].get((d, slot_start), []) %}
-            {% if items %}
-              {% for c in items %}
-              <span class="class-chip">
-                <span class="grade-badge">K{{ c.grade }}</span>
-                <span class="teacher-name"><i class="bi bi-person-fill me-1" style="font-size:.65rem;"></i>{{ c.teacher_name }}</span>
-                {% if c.subject_group %}<span class="subject-label">{{ c.subject_group }}</span>{% endif %}
-              </span>
-              {% endfor %}
-            {% else %}
-              <div class="empty-cell">—</div>
-            {% endif %}
-          </td>
-          {% endfor %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <div id="grid-morning"   class="sched-card mb-4"><div class="sched-card-inner" id="inner-morning"></div></div>
+  <div id="grid-afternoon" class="sched-card mb-4" style="display:none;"><div class="sched-card-inner" id="inner-afternoon"></div></div>
+</div>
 
-  <!-- Morning grid -->
-  <div id="grid-morning" class="sched-card mb-4" style="overflow-x:auto; -webkit-overflow-scrolling:touch; display:none;">
-    <table class="sched-table">
-      <thead>
-        <tr>
-          <th></th>
-          {% for d in [2,3,4,5,6,7] %}
-          <th>{{ day_name(d) }}</th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for slot_start, slot_label in [(1, 'Tiết 1–2'), (3, 'Tiết 3–4')] %}
-        <tr>
-          <td>{{ slot_label }}</td>
-          {% for d in [2,3,4,5,6,7] %}
-          <td>
-            {% set items = grid['morning'].get((d, slot_start), []) %}
-            {% if items %}
-              {% for c in items %}
-              <span class="class-chip">
-                <span class="grade-badge">K{{ c.grade }}</span>
-                <span class="teacher-name"><i class="bi bi-person-fill me-1" style="font-size:.65rem;"></i>{{ c.teacher_name }}</span>
-                {% if c.subject_group %}<span class="subject-label">{{ c.subject_group }}</span>{% endif %}
-              </span>
-              {% endfor %}
-            {% else %}
-              <div class="empty-cell">—</div>
-            {% endif %}
-          </td>
-          {% endfor %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<!-- Detail modal -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header" style="border-bottom:1.5px solid #E2E8F0;padding:12px 18px;">
+        <div>
+          <div class="fw-bold" id="detailModalTitle" style="font-size:.92rem;color:#0c4a6e;"></div>
+          <div id="detailModalSub" style="font-size:.75rem;color:#64748B;margin-top:1px;"></div>
+        </div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="detailModalBody" style="padding:14px;overflow-x:auto;"></div>
+      </div>
+    </div>
   </div>
-
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+const GRID   = {{ grid_json | tojson }};
+const SUBJS  = {{ all_subjects | tojson }};
+const DAYS   = [2,3,4,5,6,7];
+const DNAMES = {2:'Thứ 2',3:'Thứ 3',4:'Thứ 4',5:'Thứ 5',6:'Thứ 6',7:'Thứ 7'};
+const SLABEL = {morning:'Buổi Sáng', afternoon:'Buổi Chiều'};
+
 function showSession(ses) {
-  document.getElementById('grid-morning').style.display   = ses === 'morning'   ? '' : 'none';
-  document.getElementById('grid-afternoon').style.display = ses === 'afternoon' ? '' : 'none';
-  document.getElementById('tab-morning').classList.toggle('active', ses === 'morning');
-  document.getElementById('tab-afternoon').classList.toggle('active', ses === 'afternoon');
+  const isMorn = ses === 'morning';
+  document.getElementById('grid-morning').style.display   = isMorn ? '' : 'none';
+  document.getElementById('grid-afternoon').style.display = isMorn ? 'none' : '';
+  document.getElementById('tab-morning').classList.toggle('active', isMorn);
+  document.getElementById('tab-afternoon').classList.toggle('active', !isMorn);
 }
+
+function _gbadge(g) {
+  return `<span class="gbadge gbadge-${g}">K${g}</span>`;
+}
+
+function _cellHtml(ses, day, slot) {
+  const items = (GRID[ses] || {})[`${day}_${slot}`] || [];
+  if (!items.length) return '<div class="empty-cell">—</div>';
+
+  const byGrade = {};
+  for (const c of items) {
+    if (!byGrade[c.grade]) byGrade[c.grade] = {};
+    byGrade[c.grade][c.subject] = (byGrade[c.grade][c.subject] || 0) + 1;
+  }
+
+  let h = `<div class="slot-stat">`;
+  h += `<div class="slot-total">${items.length} lớp</div>`;
+  for (const g of Object.keys(byGrade).map(Number).sort()) {
+    const sm = byGrade[g];
+    const tot = Object.values(sm).reduce((a,b)=>a+b,0);
+    const bd = Object.entries(sm).sort((a,b)=>a[0].localeCompare(b[0]))
+      .map(([s,n]) => n > 1 ? `${s} ×${n}` : s).join(', ');
+    h += `<div class="grade-row">${_gbadge(g)}<span class="grade-count">${tot}</span>
+      <span class="subj-detail">${bd}</span></div>`;
+  }
+  h += `<button class="detail-btn" onclick="openDetail(${day},${slot},'${ses}')">
+      <i class="bi bi-list-ul" style="font-size:.62rem;"></i>Chi tiết
+    </button></div>`;
+  return h;
+}
+
+function _buildGrid(ses) {
+  const thCls = ses === 'morning' ? 'col-morning' : 'col-afternoon';
+  let h = `<table class="sched-table"><thead><tr>
+    <th class="col-label"></th>`;
+  for (const d of DAYS) h += `<th class="${thCls}">${DNAMES[d]}</th>`;
+  h += `</tr></thead><tbody>`;
+  for (const [slot, label] of [[1,'Tiết 1–2'],[3,'Tiết 3–4']]) {
+    h += `<tr><td class="col-label">${label}</td>`;
+    for (const d of DAYS) h += `<td>${_cellHtml(ses, d, slot)}</td>`;
+    h += `</tr>`;
+  }
+  h += `</tbody></table>`;
+  return h;
+}
+
+function openDetail(day, slot, ses) {
+  const items = (GRID[ses] || {})[`${day}_${slot}`] || [];
+  const label = `${DNAMES[day]} ${SLABEL[ses]} — Tiết ${slot}–${slot+1}`;
+  document.getElementById('detailModalTitle').textContent = label;
+  document.getElementById('detailModalSub').textContent = `${items.length} lớp`;
+
+  const grades  = [...new Set(items.map(c=>c.grade))].sort();
+  const subjs   = [...new Set(items.map(c=>c.subject))].sort();
+  const matrix  = {};
+  for (const c of items) {
+    if (!matrix[c.grade]) matrix[c.grade] = {};
+    if (!matrix[c.grade][c.subject]) matrix[c.grade][c.subject] = [];
+    matrix[c.grade][c.subject].push(c.teacher);
+  }
+
+  if (!subjs.length) {
+    document.getElementById('detailModalBody').innerHTML =
+      '<p class="text-muted text-center py-4">Không có lớp nào.</p>';
+    new bootstrap.Modal(document.getElementById('detailModal')).show();
+    return;
+  }
+
+  let h = `<table class="detail-table"><thead><tr>
+    <th>Khối</th>`;
+  for (const s of subjs) h += `<th>${s}</th>`;
+  h += `</tr></thead><tbody>`;
+  for (const g of grades) {
+    h += `<tr class="drow-${g}"><td>K${g}</td>`;
+    for (const s of subjs) {
+      const ts = matrix[g]?.[s] || [];
+      h += `<td>${ts.length
+        ? ts.map(t=>`<span class="t-entry">${t}</span>`).join('')
+        : '<div class="no-cls">—</div>'
+      }</td>`;
+    }
+    h += `</tr>`;
+  }
+  h += `</tbody></table>
+    <p style="font-size:.73rem;color:#94A3B8;margin-top:10px;margin-bottom:0;">
+      Tổng ${items.length} lớp · ${grades.length} khối · ${subjs.length} môn
+    </p>`;
+
+  document.getElementById('detailModalBody').innerHTML = h;
+  new bootstrap.Modal(document.getElementById('detailModal')).show();
+}
+
+document.getElementById('inner-morning').innerHTML   = _buildGrid('morning');
+document.getElementById('inner-afternoon').innerHTML = _buildGrid('afternoon');
 </script>
 {% endblock %}

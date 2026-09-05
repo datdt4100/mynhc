@@ -2911,22 +2911,32 @@ def admin_class_schedule():
             select(classes, teachers.c.full_name.label("teacher_name"),
                    teachers.c.subject_group)
             .join(teachers, classes.c.teacher_id == teachers.c.id)
-            .order_by(classes.c.grade, classes.c.start_session)
+            .order_by(classes.c.grade, teachers.c.subject_group, classes.c.start_session)
         ).fetchall()
-    # Build grid: {session_type: {(day_of_week, start_session): [class_info, ...]}}
-    grid = {}
+    # Build JSON-serialisable grid for JS: {ses: {"{day}_{start}": [...]}}
+    grid_json = {}
     for ses in ("morning", "afternoon"):
-        grid[ses] = {}
+        grid_json[ses] = {}
         for d in range(2, 8):
             for s in (1, 3):
-                grid[ses][(d, s)] = []
+                grid_json[ses][f"{d}_{s}"] = []
     for c in all_classes:
-        key = (c.day_of_week, c.start_session)
-        if key in grid.get(c.session_type, {}):
-            grid[c.session_type][key].append(c)
+        key = f"{c.day_of_week}_{c.start_session}"
+        if key in grid_json.get(c.session_type, {}):
+            grid_json[c.session_type][key].append({
+                "id": c.id,
+                "grade": c.grade,
+                "subject": c.subject_group or c.subject or "",
+                "teacher": c.teacher_name,
+            })
+    # Collect all distinct subjects (sorted) for modal columns
+    all_subjects = sorted({
+        c.subject_group or c.subject or "" for c in all_classes if (c.subject_group or c.subject)
+    })
     return render_template(
         "admin/class_schedule.html",
-        grid=grid,
+        grid_json=grid_json,
+        all_subjects=all_subjects,
         day_name=day_name,
     )
 

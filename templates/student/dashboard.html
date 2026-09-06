@@ -90,6 +90,27 @@
 }
 .tab-btn:hover { border-color:#0EA5E9; color:#0369A1; background:#F0F9FF; }
 .tab-btn.active { background:var(--p); border-color:var(--p); color:#fff; box-shadow:0 2px 8px rgba(14,165,233,.3); }
+/* ── Subject progress ── */
+.subj-progress-bar {
+  display:flex; flex-wrap:wrap; gap:7px; align-items:center;
+}
+.subj-pill {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:4px 11px; border-radius:20px; font-size:.76rem; font-weight:700;
+  transition: all .2s;
+}
+.subj-pill-done {
+  background:#DCFCE7; color:#15803D; border:1.5px solid #86EFAC;
+}
+.subj-pill-miss {
+  background:#FEF2F2; color:#B91C1C; border:1.5px solid #FCA5A5;
+}
+.subj-progress-warn {
+  display:none; margin-top:8px; padding:8px 12px; border-radius:9px;
+  background:#FFFBEB; border:1.5px solid #FDE68A; color:#92400E;
+  font-size:.78rem; line-height:1.5;
+}
+.subj-progress-warn.show { display:flex; align-items:flex-start; gap:8px; }
 </style>
 <div class="container py-4" style="max-width: 960px;">
 
@@ -208,6 +229,16 @@
         <i class="bi bi-info-circle-fill flex-shrink-0" style="color:#F59E0B;"></i>
         <span>Bạn chưa đăng ký môn học nào — hãy chuyển sang tab <strong>Đăng ký môn học</strong> để đăng ký.</span>
       </div>
+      {% elif covered_subjects | length < required_subjects | length %}
+      {% set missing_s = required_subjects | reject("in", covered_subjects) | list %}
+      <div class="d-flex align-items-center gap-2 mb-2 px-1 py-2 rounded-2"
+           style="background:#FFFBEB; border:1px solid #FDE68A; font-size:.8rem; color:#92400E;">
+        <i class="bi bi-exclamation-triangle-fill flex-shrink-0" style="color:#F59E0B;"></i>
+        <span>Chưa đủ {{ required_subjects | length }} môn — còn thiếu:
+          {% for m in missing_s %}<strong>{{ m }}</strong>{% if not loop.last %}, {% endif %}{% endfor %}.
+          Vào <strong>Đăng ký môn học</strong> để đăng ký thêm.
+        </span>
+      </div>
       {% endif %}
       <div class="d-flex align-items-center gap-3 flex-wrap">
         <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;color:#64748B;">
@@ -235,6 +266,42 @@
   <div class="alert alert-warning d-flex align-items-center gap-2 mb-4 reveal" role="alert">
     <i class="bi bi-lock-fill fs-5 flex-shrink-0"></i>
     <span class="fw-semibold">Đăng ký môn học hiện đang đóng</span>
+  </div>
+  {% endif %}
+
+  {# ── Subject progress ─────────────────────────────────────── #}
+  {% if required_subjects %}
+  <div class="section-card mb-4 reveal" style="border-radius:var(--r); padding:14px 18px;">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <i class="bi bi-list-check" style="color:var(--p); font-size:1rem;"></i>
+      <span class="fw-bold" style="font-size:.83rem; color:#334155;">Tiến độ đăng ký — {{ required_subjects | length }} môn</span>
+      <span id="subj-done-count" class="badge ms-1"
+            style="font-size:.72rem; background:{% if covered_subjects | length == required_subjects | length %}#16A34A{% else %}#0EA5E9{% endif %}; color:#fff;">
+        {{ covered_subjects | length }}/{{ required_subjects | length }}
+      </span>
+    </div>
+    <div class="subj-progress-bar" id="subj-pills">
+      {% for subj in required_subjects %}
+      <span class="subj-pill {% if subj in covered_subjects %}subj-pill-done{% else %}subj-pill-miss{% endif %}"
+            data-subj="{{ subj }}">
+        {% if subj in covered_subjects %}
+          <i class="bi bi-check-circle-fill"></i>
+        {% else %}
+          <i class="bi bi-circle"></i>
+        {% endif %}
+        {{ subj }}
+      </span>
+      {% endfor %}
+    </div>
+    <div class="subj-progress-warn{% if covered_subjects | length < required_subjects | length %} show{% endif %}" id="subj-warn">
+      <i class="bi bi-exclamation-triangle-fill flex-shrink-0" style="color:#F59E0B; margin-top:1px;"></i>
+      <span id="subj-warn-text">
+        {% set missing = required_subjects | reject("in", covered_subjects) | list %}
+        Còn thiếu <strong>{{ missing | length }} môn</strong>:
+        {% for m in missing %}<em>{{ m }}</em>{% if not loop.last %}, {% endif %}{% endfor %}.
+        Hãy đăng ký đủ {{ required_subjects | length }} môn cho thời khoá biểu.
+      </span>
+    </div>
   </div>
   {% endif %}
 
@@ -616,6 +683,7 @@ async function refreshStudentSchedule() {
       if (data.ok) {
         setCardEnrolled(classId, true);
         addEnrolledCard(classId);
+        if (data.covered_subjects) updateSubjectProgress(data.covered_subjects);
         refreshStudentSchedule();
       } else if (data.conflict_subject) {
         showConflictModal(data.error, data.conflict_subject, data.conflict_teacher, data.conflict_schedule);
@@ -640,6 +708,7 @@ async function refreshStudentSchedule() {
         if (data.ok) {
           setCardEnrolled(classId, false);
           removeEnrolledCard(classId);
+          if (data.covered_subjects) updateSubjectProgress(data.covered_subjects);
           refreshStudentSchedule();
         } else {
           showAlert(data.error || 'Đã xảy ra lỗi, vui lòng thử lại.', 'error');
@@ -669,6 +738,40 @@ async function refreshStudentSchedule() {
     modal.show();
   }
 
+  /* ── Subject progress ──────────────────────────────────────── */
+  var REQUIRED_SUBJS = {{ required_subjects | tojson }};
+
+  function updateSubjectProgress(coveredArr) {
+    var covered = new Set(coveredArr || []);
+    // Update pills
+    document.querySelectorAll('.subj-pill').forEach(function(pill) {
+      var subj = pill.dataset.subj;
+      var done = covered.has(subj);
+      pill.className = 'subj-pill ' + (done ? 'subj-pill-done' : 'subj-pill-miss');
+      pill.querySelector('i').className = done ? 'bi bi-check-circle-fill' : 'bi bi-circle';
+    });
+    // Update badge
+    var badge = document.getElementById('subj-done-count');
+    if (badge) {
+      badge.textContent = covered.size + '/' + REQUIRED_SUBJS.length;
+      badge.style.background = covered.size >= REQUIRED_SUBJS.length ? '#16A34A' : '#0EA5E9';
+    }
+    // Update warning
+    var warn = document.getElementById('subj-warn');
+    var warnText = document.getElementById('subj-warn-text');
+    if (warn && warnText) {
+      var missing = REQUIRED_SUBJS.filter(function(s) { return !covered.has(s); });
+      if (missing.length > 0) {
+        warnText.innerHTML = 'Còn thiếu <strong>' + missing.length + ' môn</strong>: '
+          + missing.map(function(m){ return '<em>' + m + '</em>'; }).join(', ')
+          + '. Hãy đăng ký đủ ' + REQUIRED_SUBJS.length + ' môn cho thời khoá biểu.';
+        warn.classList.add('show');
+      } else {
+        warn.classList.remove('show');
+      }
+    }
+  }
+
   /* ── Per-class config for client-side button logic ──────────── */
   var regOpen = {{ 'true' if student_reg_open else 'false' }};
 
@@ -676,7 +779,8 @@ async function refreshStudentSchedule() {
     {% for cls in published_classes %}
     {{ cls.id }}: {
       maxCapacity: {{ cls.max_capacity | tojson }},
-      enrolled: {{ 'true' if cls.id in my_class_ids else 'false' }}
+      enrolled: {{ 'true' if cls.id in my_class_ids else 'false' }},
+      subject: {{ (cls.subject_group or cls.subject or '') | tojson }}
     }{% if not loop.last %},{% endif %}
     {% endfor %}
   };

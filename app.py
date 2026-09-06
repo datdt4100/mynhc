@@ -1191,6 +1191,17 @@ def student_dashboard():
                         student_schedule[key] = {"status": "blocked"}
 
     student_reg_open = get_setting("student_reg_open", "0") == "1"
+    # Required = all distinct subjects available for this grade
+    required_subjects = sorted({
+        c.subject_group or c.subject or ""
+        for c in published_classes if (c.subject_group or c.subject)
+    })
+    # Covered = subjects the student already has at least 1 enrollment for
+    covered_subjects = {
+        c.subject_group or c.subject or ""
+        for c in published_classes
+        if c.id in my_class_ids and (c.subject_group or c.subject)
+    }
     return render_template(
         "student/dashboard.html",
         student=student_row,
@@ -1199,6 +1210,8 @@ def student_dashboard():
         my_class_ids=my_class_ids,
         student_schedule=student_schedule,
         student_reg_open=student_reg_open,
+        required_subjects=required_subjects,
+        covered_subjects=list(covered_subjects),
         day_name=day_name,
         session_label=session_label,
     )
@@ -1294,14 +1307,31 @@ def student_enroll():
             )
         )
         conn.commit()
+        covered = _student_covered_subjects(conn, student_id, student_grade)
 
-    return jsonify(ok=True)
+    return jsonify(ok=True, covered_subjects=covered)
+
+
+def _student_covered_subjects(conn, student_id, student_grade):
+    """Return list of subject_group values the student has ≥1 enrollment in."""
+    rows = conn.execute(
+        select(teachers.c.subject_group)
+        .join(classes, classes.c.teacher_id == teachers.c.id)
+        .join(enrollments, enrollments.c.class_id == classes.c.id)
+        .where(and_(
+            enrollments.c.student_id == student_id,
+            classes.c.grade == student_grade,
+            classes.c.is_published == 1,
+        ))
+    ).fetchall()
+    return list({r.subject_group for r in rows if r.subject_group})
 
 
 @app.route("/student/enroll/<int:class_id>", methods=["DELETE"])
 @student_required
 def student_cancel_enroll(class_id):
     student_id = session["user_id"]
+    student_grade = session.get("grade")
     with engine.connect() as conn:
         conn.execute(
             delete(enrollments).where(
@@ -1310,7 +1340,8 @@ def student_cancel_enroll(class_id):
             )
         )
         conn.commit()
-    return jsonify(ok=True)
+        covered = _student_covered_subjects(conn, student_id, student_grade)
+    return jsonify(ok=True, covered_subjects=covered)
 
 
 @app.route("/api/class-counts")

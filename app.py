@@ -206,7 +206,8 @@ def init_db():
                            ("teacher_reg_open", "0"),
                            ("student_reg_open", "0"),
                            ("maintenance_mode", "0"),
-                           ("schedule_constraint", "1")]:
+                           ("schedule_constraint", "1"),
+                           ("allow_multi_class", "1")]:
             try:
                 conn.execute(
                     insert(settings_table).values(key=key, value=value)
@@ -1254,6 +1255,23 @@ def student_enroll():
         if existing:
             return jsonify(ok=False, error="Bạn đã đăng ký lớp này rồi.")
 
+        # Check multi-class per subject
+        if get_setting("allow_multi_class", "1") != "1":
+            this_subject = cls.subject_group or cls.subject or ""
+            if this_subject:
+                dup = conn.execute(
+                    select(classes.c.id).where(and_(
+                        enrollments.c.student_id == student_id,
+                        classes.c.id == enrollments.c.class_id,
+                        func.coalesce(classes.c.subject_group, classes.c.subject, "") == this_subject,
+                    ))
+                ).fetchone()
+                if dup:
+                    return jsonify(
+                        ok=False,
+                        error=f"Bạn đã đăng ký 1 lớp môn {this_subject} rồi. Hiện không cho phép đăng ký thêm giờ cho cùng 1 môn.",
+                    )
+
         # Check capacity
         if cls.max_capacity is not None:
             cnt = conn.execute(
@@ -2041,6 +2059,7 @@ def admin_index():
     student_reg_open = get_setting("student_reg_open", "0") == "1"
     maintenance = get_setting("maintenance_mode", "0") == "1"
     schedule_constraint = get_setting("schedule_constraint", "1") == "1"
+    allow_multi_class = get_setting("allow_multi_class", "1") == "1"
     with engine.connect() as conn2:
         busy_room_count = conn2.execute(
             select(func.count()).select_from(room_external_busy)
@@ -2061,6 +2080,7 @@ def admin_index():
         student_reg_open=student_reg_open,
         maintenance=maintenance,
         schedule_constraint=schedule_constraint,
+        allow_multi_class=allow_multi_class,
         room_list=room_list,
         room_count=room_count,
         busy_room_count=busy_room_count,
@@ -3099,6 +3119,15 @@ def admin_schedule_constraint_toggle():
     current = get_setting("schedule_constraint", "1")
     new_val = "0" if current == "1" else "1"
     set_setting("schedule_constraint", new_val)
+    return jsonify(ok=True, on=new_val == "1")
+
+
+@app.route("/admin/allow-multi-class/toggle", methods=["POST"])
+@admin_required
+def admin_allow_multi_class_toggle():
+    current = get_setting("allow_multi_class", "1")
+    new_val = "0" if current == "1" else "1"
+    set_setting("allow_multi_class", new_val)
     return jsonify(ok=True, on=new_val == "1")
 
 

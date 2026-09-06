@@ -417,6 +417,23 @@
             <span id="student-reg-label">{% if student_reg_open %}Đang mở{% else %}Đã đóng{% endif %}</span>
           </button>
         </div>
+        <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
+          <div>
+            <span style="font-size:.78rem; font-weight:600; color:#374151;">
+              <i class="bi bi-clock-history me-1" style="color:#0EA5E9;"></i>Đăng ký thêm giờ
+            </span>
+            <span id="multi-class-desc" style="font-size:.72rem; color:#64748B; display:block; margin-top:1px;">
+              {% if allow_multi_class %}Cho phép HS đăng ký nhiều lớp cùng môn{% else %}Mỗi môn chỉ được đăng ký 1 lớp{% endif %}
+            </span>
+          </div>
+          <button id="btn-toggle-multi-class"
+                  class="reg-toggle {% if allow_multi_class %}open{% else %}closed{% endif %}"
+                  data-on="{{ 'true' if allow_multi_class else 'false' }}"
+                  onclick="toggleMultiClass()">
+            <span class="toggle-dot"></span>
+            <span id="multi-class-label">{% if allow_multi_class %}Bật{% else %}Tắt{% endif %}</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -999,6 +1016,26 @@ function toggleSchedConstraint() {
       label.textContent = on ? 'Bật' : 'Tắt';
       desc.textContent  = on ? 'Kiểm tra ràng buộc khung giờ' : 'Không kiểm tra ràng buộc khung giờ';
       icon.style.color  = on ? '#F59E0B' : '#94A3B8';
+    })
+    .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+    .finally(() => { btn.disabled = false; });
+}
+
+function toggleMultiClass() {
+  const btn   = document.getElementById('btn-toggle-multi-class');
+  const label = document.getElementById('multi-class-label');
+  const desc  = document.getElementById('multi-class-desc');
+  btn.disabled = true;
+
+  fetch('{{ url_for("admin_allow_multi_class_toggle") }}', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      const on = data.on;
+      btn.dataset.on = on ? 'true' : 'false';
+      btn.classList.toggle('open',   on);
+      btn.classList.toggle('closed', !on);
+      label.textContent = on ? 'Bật' : 'Tắt';
+      desc.textContent  = on ? 'Cho phép HS đăng ký nhiều lớp cùng môn' : 'Mỗi môn chỉ được đăng ký 1 lớp';
     })
     .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
     .finally(() => { btn.disabled = false; });

@@ -1163,9 +1163,6 @@ def student_dashboard():
             .where(and_(
                 classes.c.is_published == 1,
                 classes.c.grade == student_grade,
-                classes.c.location.isnot(None),
-                classes.c.location != '',
-                classes.c.max_capacity.isnot(None),
             ))
             .order_by(classes.c.day_of_week, classes.c.session_type, classes.c.start_session)
         ).fetchall()
@@ -1233,8 +1230,6 @@ def student_enroll():
             return jsonify(ok=False, error="Lớp chưa được mở đăng ký.")
         if cls.grade != student_grade:
             return jsonify(ok=False, error="Lớp không thuộc khối của bạn.")
-        if not cls.location or not cls.max_capacity:
-            return jsonify(ok=False, error="Lớp chưa cập nhật đầy đủ thông tin.")
 
         # Check already enrolled
         existing = conn.execute(
@@ -1333,9 +1328,6 @@ def api_class_counts():
             where_clause = and_(
                 classes.c.is_published == 1,
                 classes.c.grade == student_grade,
-                classes.c.location.isnot(None),
-                classes.c.location != '',
-                classes.c.max_capacity.isnot(None),
             )
         elif user_type == "teacher":
             teacher_id = session.get("user_id")

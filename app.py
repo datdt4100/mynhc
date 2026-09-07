@@ -3189,15 +3189,19 @@ def admin_class_assign_room(class_id):
 @admin_required
 def admin_add_class_manual():
     data = request.get_json(force=True)
-    teacher_name = (data.get("teacher_name") or "").strip()
-    grade        = data.get("grade")
-    session_type = data.get("session_type")
-    day_of_week  = data.get("day_of_week")
+    teacher_name  = (data.get("teacher_name") or "").strip()
+    school_assign = not teacher_name   # empty name → school-assigned placeholder
+    subject_input = (data.get("subject") or "").strip()
+    grade         = data.get("grade")
+    session_type  = data.get("session_type")
+    day_of_week   = data.get("day_of_week")
     start_session = data.get("start_session")
     duration      = int(data.get("duration") or 2)
 
-    if not all([teacher_name, grade, session_type, day_of_week, start_session]):
+    if not all([grade, session_type, day_of_week, start_session]):
         return jsonify(ok=False, error="Thiếu thông tin bắt buộc.")
+    if not teacher_name and not subject_input:
+        return jsonify(ok=False, error="Khi chọn 'Do trường phân công', phải chọn môn học.")
 
     try:
         grade         = int(grade)
@@ -3207,29 +3211,61 @@ def admin_add_class_manual():
         return jsonify(ok=False, error="Dữ liệu không hợp lệ.")
 
     with engine.connect() as conn:
-        teacher_row = conn.execute(
-            select(teachers).where(func.lower(func.trim(teachers.c.full_name)) == teacher_name.lower())
-        ).fetchone()
-        if not teacher_row:
-            return jsonify(ok=False, error=f"Không tìm thấy giáo viên '{teacher_name}'.")
+        if school_assign:
+            teacher_row = conn.execute(
+                select(teachers).where(teachers.c.cccd == _UNASSIGNED_CCCD)
+            ).fetchone()
+            if not teacher_row:
+                return jsonify(ok=False, error="Không tìm thấy bản ghi 'Do trường phân công' trong hệ thống.")
+        else:
+            def _sdiac(s):
+                import unicodedata as _ud
+                return ''.join(c for c in _ud.normalize('NFD', s) if _ud.category(c) != 'Mn').lower()
+            teacher_row = conn.execute(
+                select(teachers).where(func.lower(func.trim(teachers.c.full_name)) == teacher_name.lower())
+            ).fetchone()
+            if not teacher_row:
+                # diacritic-stripped fallback
+                all_t = conn.execute(select(teachers)).fetchall()
+                stripped_q = _sdiac(teacher_name)
+                teacher_row = next((t for t in all_t if _sdiac(t.full_name) == stripped_q), None)
+            if not teacher_row:
+                return jsonify(ok=False, error=f"Không tìm thấy giáo viên '{teacher_name}'.")
 
-        end_session = start_session + duration - 1
+        # Duplicate check
         dup = conn.execute(
             select(classes.c.id).where(and_(
-                classes.c.teacher_id   == teacher_row.id,
-                classes.c.grade        == grade,
-                classes.c.day_of_week  == day_of_week,
-                classes.c.session_type == session_type,
+                classes.c.teacher_id    == teacher_row.id,
+                classes.c.grade         == grade,
+                classes.c.day_of_week   == day_of_week,
+                classes.c.session_type  == session_type,
                 classes.c.start_session == start_session,
             ))
         ).fetchone()
         if dup:
-            return jsonify(ok=False, error="Lớp này đã tồn tại.")
+            return jsonify(ok=False, error="Lớp này đã tồn tại (trùng giáo viên / khối / thời gian).")
 
+        # Teacher time-overlap check
+        conflict = conn.execute(
+            select(classes.c.grade.label("g"), classes.c.start_session.label("s"),
+                   classes.c.duration.label("d")).where(and_(
+                classes.c.teacher_id   == teacher_row.id,
+                classes.c.day_of_week  == day_of_week,
+                classes.c.session_type == session_type,
+                classes.c.start_session < start_session + duration,
+                (classes.c.start_session + classes.c.duration) > start_session,
+            ))
+        ).fetchone()
+        if conflict:
+            return jsonify(ok=False,
+                error=f"Giáo viên đã có lớp K{conflict.g} tiết {conflict.s}–{conflict.s+conflict.d-1}"
+                      f" trùng khung giờ tiết {start_session}–{start_session+duration-1}.")
+
+        subject = subject_input or teacher_row.subject_group or ""
         conn.execute(insert(classes).values(
             teacher_id    = teacher_row.id,
             grade         = grade,
-            subject       = teacher_row.subject_group,
+            subject       = subject,
             day_of_week   = day_of_week,
             session_type  = session_type,
             start_session = start_session,
@@ -3276,6 +3312,8 @@ def admin_import_classes_excel():
 
     imported, skipped, errors_list = 0, 0, []
 
+    BUOI_LABEL = {"morning": "Sáng", "afternoon": "Chiều"}
+
     def parse_time_string(s):
         import re
         s = str(s).strip()
@@ -3292,7 +3330,6 @@ def admin_import_classes_excel():
 
     with engine.connect() as conn:
         all_teachers = conn.execute(select(teachers)).fetchall()
-        # Primary: exact lower match; Secondary: diacritic-stripped match
         teacher_map_exact    = {t.full_name.strip().lower(): t for t in all_teachers}
         teacher_map_stripped = {_strip_diacritics(t.full_name): t for t in all_teachers}
         placeholder_teacher  = (teacher_map_exact.get("do trường phân công")
@@ -3310,30 +3347,54 @@ def admin_import_classes_excel():
                 continue
             try:
                 if is_format_b:
-                    # timestamp | teacher | subject | grade | time_string
                     _, teacher_name, subj_raw, grade_raw, time_raw = (row + (None,)*5)[:5]
                     buoi, thu, tiet = parse_time_string(time_raw or "")
                     so_tiet = 2
                 else:
-                    # teacher | subject | grade | buoi | thu | tiet | so_tiet
                     teacher_name, subj_raw, grade_raw, buoi_str, thu_raw, tiet_raw, so_tiet = (row + (None,)*7)[:7]
-                    buoi     = BUOI_MAP.get(str(buoi_str or "").strip().lower())
-                    thu      = int(thu_raw) if thu_raw else None
-                    tiet     = int(tiet_raw) if tiet_raw else None
-                    so_tiet  = int(so_tiet) if so_tiet else 2
+                    buoi    = BUOI_MAP.get(str(buoi_str or "").strip().lower())
+                    thu     = int(thu_raw) if thu_raw else None
+                    tiet    = int(tiet_raw) if tiet_raw else None
+                    so_tiet = int(so_tiet) if so_tiet else 2
 
                 teacher_name = str(teacher_name or "").strip()
                 grade        = int(float(grade_raw)) if grade_raw else None
 
-                if not teacher_name or not grade or not buoi or not thu or not tiet:
-                    errors_list.append(f"Dòng {i}: Thiếu dữ liệu.")
+                # Validate required fields (teacher_name empty is OK → placeholder)
+                missing = []
+                if not grade:  missing.append("khối")
+                if not buoi:   missing.append("buổi")
+                if not thu:    missing.append("thứ")
+                if not tiet:   missing.append("tiết bắt đầu")
+                if missing:
+                    errors_list.append(f"Dòng {i}: Thiếu {', '.join(missing)}.")
                     continue
 
+                # Validate grade range
+                if grade not in (10, 11, 12):
+                    errors_list.append(f"Dòng {i}: Khối '{grade}' không hợp lệ (chỉ chấp nhận 10, 11, 12).")
+                    continue
+
+                # Validate day/session/slot
+                if thu not in range(2, 8):
+                    errors_list.append(f"Dòng {i}: Thứ '{thu}' không hợp lệ.")
+                    continue
+                if tiet not in (1, 3):
+                    errors_list.append(f"Dòng {i}: Tiết bắt đầu '{tiet}' không hợp lệ (phải là 1 hoặc 3).")
+                    continue
+
+                # Resolve teacher
                 teacher_row = _find_teacher(teacher_name)
                 if not teacher_row:
-                    errors_list.append(f"Dòng {i}: Không tìm thấy GV '{teacher_name}'.")
+                    errors_list.append(
+                        f"Dòng {i}: GV '{teacher_name}' không có trong hệ thống."
+                        " Kiểm tra lại tên hoặc thêm GV trước khi import."
+                    )
                     continue
 
+                buoi_label = BUOI_LABEL.get(buoi, buoi)
+
+                # Check duplicate: same class already exists
                 dup = conn.execute(
                     select(classes.c.id).where(and_(
                         classes.c.teacher_id    == teacher_row.id,
@@ -3347,10 +3408,37 @@ def admin_import_classes_excel():
                     skipped += 1
                     continue
 
+                # Check teacher time conflict: overlapping slot on same day/session
+                # Overlap: new=[tiet, tiet+so_tiet) ∩ existing=[start, start+duration) ≠ ∅
+                conflict = conn.execute(
+                    select(
+                        classes.c.grade.label("g"),
+                        classes.c.start_session.label("s"),
+                        classes.c.duration.label("d"),
+                    ).where(and_(
+                        classes.c.teacher_id   == teacher_row.id,
+                        classes.c.day_of_week  == thu,
+                        classes.c.session_type == buoi,
+                        classes.c.start_session < tiet + so_tiet,
+                        (classes.c.start_session + classes.c.duration) > tiet,
+                    ))
+                ).fetchone()
+                if conflict:
+                    errors_list.append(
+                        f"Dòng {i}: GV '{teacher_row.full_name}' đã có lớp K{conflict.g}"
+                        f" {buoi_label} T{thu} tiết {conflict.s}–{conflict.s + conflict.d - 1}"
+                        f" → trùng giờ với lớp đang import (tiết {tiet}–{tiet + so_tiet - 1})."
+                    )
+                    continue
+
+                # Normalise subject from Excel column, fall back to teacher's subject_group
+                subj_key = str(subj_raw or "").strip().lower()
+                subject  = SUBJ_NORM.get(subj_key) or teacher_row.subject_group or ""
+
                 conn.execute(insert(classes).values(
                     teacher_id    = teacher_row.id,
                     grade         = grade,
-                    subject       = teacher_row.subject_group,
+                    subject       = subject,
                     day_of_week   = thu,
                     session_type  = buoi,
                     start_session = tiet,
@@ -3362,11 +3450,18 @@ def admin_import_classes_excel():
                 ))
                 imported += 1
             except Exception as e:
-                errors_list.append(f"Dòng {i}: Lỗi — {e}")
+                errors_list.append(f"Dòng {i}: Lỗi không xác định — {e}")
 
         conn.commit()
 
-    return jsonify(ok=True, total=total_rows, imported=imported, skipped=skipped, errors=errors_list)
+    return jsonify(
+        ok=True,
+        total=total_rows,
+        imported=imported,
+        skipped=skipped,
+        errors=errors_list,
+        error_count=len(errors_list),
+    )
 
 
 @app.route("/admin/class-schedule")

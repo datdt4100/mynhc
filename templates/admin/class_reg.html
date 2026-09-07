@@ -344,11 +344,11 @@
             <td style="font-size:.78rem;">{{ enrollment_counts.get(cls.id, 0) }}</td>
             <td>
               <div class="d-flex gap-1">
-                <button class="btn btn-sm fw-semibold" style="border-radius:7px;font-size:.72rem;padding:3px 8px;background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;"
+                <button class="btn btn-sm" style="border-radius:7px;padding:4px 7px;background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;" title="Phân công giáo viên"
                         onclick="openAssignModal({{ cls.id }}, '{{ cls.subject or '' }}', {{ cls.grade }}, '{{ day_name(cls.day_of_week) }}', '{{ session_label(cls.session_type, cls.start_session, cls.duration) }}', '{{ cls.session_type }}', {{ cls.day_of_week }}, {{ cls.start_session }}, {{ cls.duration }})">
-                  <i class="bi bi-person-check me-1"></i>Phân công
+                  <i class="bi bi-person-check"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:7px;font-size:.72rem;padding:3px 6px;"
+                <button class="btn btn-sm btn-outline-danger" style="border-radius:7px;padding:4px 7px;" title="Xoá lớp"
                         onclick="deleteUnassigned({{ cls.id }})">
                   <i class="bi bi-trash3"></i>
                 </button>

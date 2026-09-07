@@ -3086,11 +3086,19 @@ def admin_import_classes_excel():
         tiet = int(tiet_m.group(1)) if tiet_m else None
         return buoi, thu, tiet
 
+    def _strip_diacritics(s):
+        import unicodedata as _ud
+        return ''.join(c for c in _ud.normalize('NFD', s) if _ud.category(c) != 'Mn').lower()
+
     with engine.connect() as conn:
-        teacher_map = {
-            t.full_name.strip().lower(): t
-            for t in conn.execute(select(teachers)).fetchall()
-        }
+        all_teachers = conn.execute(select(teachers)).fetchall()
+        # Primary: exact lower match; Secondary: diacritic-stripped match
+        teacher_map_exact    = {t.full_name.strip().lower(): t for t in all_teachers}
+        teacher_map_stripped = {_strip_diacritics(t.full_name): t for t in all_teachers}
+
+        def _find_teacher(name):
+            return (teacher_map_exact.get(name.strip().lower()) or
+                    teacher_map_stripped.get(_strip_diacritics(name)))
 
         total_rows = sum(1 for row in rows if any(row))
         for i, row in enumerate(rows, start=2):
@@ -3117,7 +3125,7 @@ def admin_import_classes_excel():
                     errors_list.append(f"Dòng {i}: Thiếu dữ liệu.")
                     continue
 
-                teacher_row = teacher_map.get(teacher_name.lower())
+                teacher_row = _find_teacher(teacher_name)
                 if not teacher_row:
                     errors_list.append(f"Dòng {i}: Không tìm thấy GV '{teacher_name}'.")
                     continue

@@ -442,7 +442,12 @@ function openAssignModal(classId, subject, grade, dayLabel, sessionLabel, sessio
 
 function _atRenderTeachers(list) {
   const el = document.getElementById('atTeacherList');
-  if (!list.length) { el.innerHTML = '<div style="padding:8px 12px;font-size:.78rem;color:#94A3B8;">Không tìm thấy giáo viên.</div>'; return; }
+  if (!list.length) {
+    el.innerHTML = '';
+    el.style.border = 'none';
+    return;
+  }
+  el.style.border = '1.5px solid #FDE68A';
   el.innerHTML = list.map(t => `
     <div onclick="_atSelectTeacher(${t.id},'${t.full_name.replace(/'/g,"&#39;")}','${t.subject_group.replace(/'/g,"&#39;")}')"
          style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #FEF3C7;font-size:.8rem;transition:background .1s;"
@@ -453,9 +458,18 @@ function _atRenderTeachers(list) {
 }
 
 function _atFilterTeachers(q) {
-  const s = q.toLowerCase();
+  document.getElementById('atSelectedTeacherId').value = '';
+  document.getElementById('atSelectedTeacherInfo').textContent = '';
+  const s = q.toLowerCase().trim();
+  if (!s) { _atRenderTeachers(_AT_TEACHERS); return; }
   const filtered = _AT_TEACHERS.filter(t =>
     t.full_name.toLowerCase().includes(s) || t.subject_group.toLowerCase().includes(s));
+  if (!filtered.length) {
+    const el = document.getElementById('atTeacherList');
+    el.innerHTML = '<div style="padding:8px 12px;font-size:.78rem;color:#94A3B8;">Không tìm thấy giáo viên.</div>';
+    el.style.border = '1.5px solid #FDE68A';
+    return;
+  }
   _atRenderTeachers(filtered);
 }
 
@@ -463,7 +477,7 @@ function _atSelectTeacher(id, name, group) {
   document.getElementById('atSelectedTeacherId').value = id;
   document.getElementById('atSelectedTeacherInfo').textContent = '✓ ' + name + (group ? ' · ' + group : '');
   document.getElementById('atTeacherSearch').value = name;
-  _atRenderTeachers([]);
+  document.getElementById('atTeacherList').innerHTML = '';
 }
 
 function _atLoadRooms(sessionType, day, start, duration, grade) {

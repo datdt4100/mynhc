@@ -136,8 +136,23 @@
   .admin-table tbody tr:hover { background: rgba(224,242,254,.35); }
   .admin-table td { vertical-align: middle; padding: 9px 10px; }
 
-  /* ── Table scroll on mobile ── */
-  .table-responsive-admin { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* ── Table scroll: fixed height + scroll on mobile ── */
+  .table-responsive-admin {
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    max-height: 420px;   /* ~10 rows visible; scrolls vertically when list is long */
+  }
+  .table-responsive-admin thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #F8FAFC;
+  }
+  @media (max-width: 640px) {
+    .table-responsive-admin { max-height: 320px; }
+    .admin-table td, .admin-table th { padding: 7px 6px; font-size: .73rem; }
+  }
 
   /* ── Section toolbar ── */
   .section-toolbar {

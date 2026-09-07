@@ -2174,6 +2174,40 @@ def admin_teachers_template():
     )
 
 
+@app.route("/admin/teachers/export")
+@admin_required
+def admin_teachers_export():
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(teachers).order_by(teachers.c.subject_group, teachers.c.full_name)
+        ).fetchall()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Danh sách GV"
+    HEADERS = ["STT", "Họ và tên", "Tổ bộ môn", "Giới tính", "Mã đăng nhập (CCCD)"]
+    hfill = PatternFill("solid", fgColor="0EA5E9")
+    hfont = Font(bold=True, color="FFFFFF", size=10)
+    for c, h in enumerate(HEADERS, 1):
+        cell = ws.cell(row=1, column=c, value=h)
+        cell.font = hfont; cell.fill = hfill
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.column_dimensions["A"].width = 6
+    ws.column_dimensions["B"].width = 28
+    ws.column_dimensions["C"].width = 18
+    ws.column_dimensions["D"].width = 10
+    ws.column_dimensions["E"].width = 22
+    ws.row_dimensions[1].height = 24
+    for i, r in enumerate(rows, 1):
+        ws.append([i, r.full_name, r.subject_group, getattr(r, "gender", ""), r.cccd])
+    buf = io.BytesIO()
+    wb.save(buf); buf.seek(0)
+    return send_file(buf, as_attachment=True,
+                     download_name="danh_sach_giao_vien.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 @app.route("/admin/teachers/add", methods=["POST"])
 @admin_required
 def admin_teachers_add():
@@ -2949,6 +2983,177 @@ def admin_class_update(class_id):
             )
         )
     return jsonify(ok=True, location=location, max_capacity=max_capacity)
+
+
+@app.route("/admin/classes/add-manual", methods=["POST"])
+@admin_required
+def admin_add_class_manual():
+    data = request.get_json(force=True)
+    teacher_name = (data.get("teacher_name") or "").strip()
+    grade        = data.get("grade")
+    session_type = data.get("session_type")
+    day_of_week  = data.get("day_of_week")
+    start_session = data.get("start_session")
+    duration      = int(data.get("duration") or 2)
+
+    if not all([teacher_name, grade, session_type, day_of_week, start_session]):
+        return jsonify(ok=False, error="Thiếu thông tin bắt buộc.")
+
+    try:
+        grade         = int(grade)
+        day_of_week   = int(day_of_week)
+        start_session = int(start_session)
+    except (ValueError, TypeError):
+        return jsonify(ok=False, error="Dữ liệu không hợp lệ.")
+
+    with engine.connect() as conn:
+        teacher_row = conn.execute(
+            select(teachers).where(func.lower(func.trim(teachers.c.full_name)) == teacher_name.lower())
+        ).fetchone()
+        if not teacher_row:
+            return jsonify(ok=False, error=f"Không tìm thấy giáo viên '{teacher_name}'.")
+
+        end_session = start_session + duration - 1
+        dup = conn.execute(
+            select(classes.c.id).where(and_(
+                classes.c.teacher_id   == teacher_row.id,
+                classes.c.grade        == grade,
+                classes.c.day_of_week  == day_of_week,
+                classes.c.session_type == session_type,
+                classes.c.start_session == start_session,
+            ))
+        ).fetchone()
+        if dup:
+            return jsonify(ok=False, error="Lớp này đã tồn tại.")
+
+        conn.execute(insert(classes).values(
+            teacher_id    = teacher_row.id,
+            grade         = grade,
+            subject       = teacher_row.subject_group,
+            day_of_week   = day_of_week,
+            session_type  = session_type,
+            start_session = start_session,
+            duration      = duration,
+            location      = None,
+            max_capacity  = None,
+            is_published  = 1,
+            created_at    = now_vn(),
+        ))
+        conn.commit()
+    return jsonify(ok=True)
+
+
+@app.route("/admin/classes/import-excel", methods=["POST"])
+@admin_required
+def admin_import_classes_excel():
+    import openpyxl, io
+    f = request.files.get("file")
+    if not f:
+        return jsonify(ok=False, error="Không có file.")
+
+    SUBJ_NORM = {
+        "tiếng anh": "Tiếng Anh", "anh": "Tiếng Anh",
+        "ngữ văn": "Ngữ Văn", "văn": "Ngữ Văn",
+        "vật lý": "Vật lý", "lý": "Vật lý",
+        "hóa học": "Hóa học", "hóa": "Hóa học",
+        "toán": "Toán",
+    }
+    BUOI_MAP  = {"sáng": "morning", "chiều": "afternoon"}
+    THU_MAP   = {str(i): i for i in range(2, 8)}
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(f.read()), data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+    except Exception as e:
+        return jsonify(ok=False, error=f"Không đọc được file: {e}")
+
+    # Detect columns: try both formats
+    # Format A (reformatted): teacher | subject | grade | buoi | thu | tiet | so_tiet
+    # Format B (original form): timestamp | teacher | subject_short | grade | time_string
+    header_row = [str(c).strip().lower() if c else "" for c in (list(ws.iter_rows(min_row=1, max_row=1, values_only=True))[0] or [])]
+    is_format_b = "dấu thời gian" in header_row or "họ và tên" in " ".join(header_row)
+
+    imported, skipped, errors_list = 0, 0, []
+
+    def parse_time_string(s):
+        import re
+        s = str(s).strip()
+        buoi = "morning" if "sáng" in s.lower() else ("afternoon" if "chiều" in s.lower() else None)
+        thu_m = re.search(r'[Tt](\d)', s)
+        thu = int(thu_m.group(1)) if thu_m else None
+        tiet_m = re.search(r'[Tt]iết\s*(\d)', s)
+        tiet = int(tiet_m.group(1)) if tiet_m else None
+        return buoi, thu, tiet
+
+    with engine.connect() as conn:
+        teacher_map = {
+            t.full_name.strip().lower(): t
+            for t in conn.execute(select(teachers)).fetchall()
+        }
+
+        for i, row in enumerate(rows, start=2):
+            if not any(row):
+                continue
+            try:
+                if is_format_b:
+                    # timestamp | teacher | subject | grade | time_string
+                    _, teacher_name, subj_raw, grade_raw, time_raw = (row + (None,)*5)[:5]
+                    buoi, thu, tiet = parse_time_string(time_raw or "")
+                    so_tiet = 2
+                else:
+                    # teacher | subject | grade | buoi | thu | tiet | so_tiet
+                    teacher_name, subj_raw, grade_raw, buoi_str, thu_raw, tiet_raw, so_tiet = (row + (None,)*7)[:7]
+                    buoi     = BUOI_MAP.get(str(buoi_str or "").strip().lower())
+                    thu      = int(thu_raw) if thu_raw else None
+                    tiet     = int(tiet_raw) if tiet_raw else None
+                    so_tiet  = int(so_tiet) if so_tiet else 2
+
+                teacher_name = str(teacher_name or "").strip()
+                grade        = int(float(grade_raw)) if grade_raw else None
+
+                if not teacher_name or not grade or not buoi or not thu or not tiet:
+                    errors_list.append(f"Dòng {i}: Thiếu dữ liệu.")
+                    continue
+
+                teacher_row = teacher_map.get(teacher_name.lower())
+                if not teacher_row:
+                    errors_list.append(f"Dòng {i}: Không tìm thấy GV '{teacher_name}'.")
+                    continue
+
+                dup = conn.execute(
+                    select(classes.c.id).where(and_(
+                        classes.c.teacher_id    == teacher_row.id,
+                        classes.c.grade         == grade,
+                        classes.c.day_of_week   == thu,
+                        classes.c.session_type  == buoi,
+                        classes.c.start_session == tiet,
+                    ))
+                ).fetchone()
+                if dup:
+                    skipped += 1
+                    continue
+
+                conn.execute(insert(classes).values(
+                    teacher_id    = teacher_row.id,
+                    grade         = grade,
+                    subject       = teacher_row.subject_group,
+                    day_of_week   = thu,
+                    session_type  = buoi,
+                    start_session = tiet,
+                    duration      = so_tiet,
+                    location      = None,
+                    max_capacity  = None,
+                    is_published  = 1,
+                    created_at    = now_vn(),
+                ))
+                imported += 1
+            except Exception as e:
+                errors_list.append(f"Dòng {i}: Lỗi — {e}")
+
+        conn.commit()
+
+    return jsonify(ok=True, imported=imported, skipped=skipped, errors=errors_list)
 
 
 @app.route("/admin/class-schedule")

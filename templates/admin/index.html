@@ -365,6 +365,16 @@
             <i class="bi bi-arrow-right-circle ms-auto" style="color:#EA580C;font-size:.88rem;"></i>
           </a>
         </div>
+        <div class="d-flex gap-2">
+          <button onclick="openImportExcel()" class="btn btn-sm flex-fill fw-semibold"
+                  style="background:#F0FDF4;border:1.5px solid #86EFAC;color:#15803D;border-radius:9px;font-size:.78rem;">
+            <i class="bi bi-file-earmark-excel me-1" style="color:#16A34A;"></i>Nhập Excel
+          </button>
+          <button onclick="openAddManual()" class="btn btn-sm flex-fill fw-semibold"
+                  style="background:#EFF6FF;border:1.5px solid #93C5FD;color:#1D4ED8;border-radius:9px;font-size:.78rem;">
+            <i class="bi bi-plus-circle me-1" style="color:#2563EB;"></i>Thêm thủ công
+          </button>
+        </div>
         <div class="d-flex align-items-center justify-content-between pt-2" style="border-top:1.5px solid #E2E8F0;">
           <span class="text-muted" style="font-size:.78rem; font-weight:600;">Giai đoạn 1</span>
           <button id="btn-toggle-teacher"
@@ -542,6 +552,10 @@
       </button>
       <a href="{{ url_for('admin_teachers_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px; font-size:.78rem;">
         <i class="bi bi-download me-1"></i>Tải file mẫu
+      </a>
+      <a href="{{ url_for('admin_teachers_export') }}" class="btn btn-sm fw-semibold"
+         style="border-radius:8px; font-size:.78rem; background:#F0FDF4; border:1px solid #86EFAC; color:#15803D;">
+        <i class="bi bi-file-earmark-excel me-1" style="color:#16A34A;"></i>Xuất Excel
       </a>
       <div class="divider"></div>
       <button class="btn btn-sm btn-outline-primary fw-semibold" style="border-radius:8px; font-size:.78rem;"
@@ -966,6 +980,110 @@
       </div>
       <div class="modal-footer border-top" style="padding:12px 20px;">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-radius:8px;">Đóng</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Modal: Import Excel ── #}
+<div class="modal fade" id="importExcelModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:480px;">
+    <div class="modal-content" style="border-radius:16px;border:none;">
+      <div class="modal-header" style="border-bottom:1.5px solid #E2E8F0;padding:14px 18px;">
+        <div class="fw-bold" style="font-size:.9rem;color:#15803D;">
+          <i class="bi bi-file-earmark-excel me-2" style="color:#16A34A;"></i>Nhập lớp từ file Excel
+        </div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:16px 18px;">
+        <p style="font-size:.8rem;color:#475569;margin-bottom:10px;">
+          Chọn file <code>.xlsx</code> đã chuẩn hóa. Hệ thống tự động khớp tên GV, bỏ qua lớp đã tồn tại.
+        </p>
+        <p style="font-size:.77rem;color:#64748B;margin-bottom:14px;">
+          Cột hợp lệ: <strong>Tên giáo viên · Môn · Khối · Buổi · Thứ · Tiết bắt đầu · Số tiết</strong>
+        </p>
+        <input type="file" id="importExcelFile" accept=".xlsx"
+               class="form-control form-control-sm" style="font-size:.8rem;border-radius:8px;">
+        <div id="importExcelResult" class="mt-3" style="display:none;"></div>
+      </div>
+      <div class="modal-footer" style="border-top:1.5px solid #E2E8F0;padding:10px 18px;gap:8px;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" style="border-radius:8px;font-size:.8rem;">Huỷ</button>
+        <button class="btn btn-sm fw-bold" id="btnDoImport"
+                onclick="doImportExcel()"
+                style="background:#16A34A;color:#fff;border-radius:8px;font-size:.8rem;border:none;padding:6px 16px;">
+          <i class="bi bi-upload me-1"></i>Nhập
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Modal: Thêm lớp thủ công ── #}
+<div class="modal fade" id="addManualModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:440px;">
+    <div class="modal-content" style="border-radius:16px;border:none;">
+      <div class="modal-header" style="border-bottom:1.5px solid #E2E8F0;padding:14px 18px;">
+        <div class="fw-bold" style="font-size:.9rem;color:#1D4ED8;">
+          <i class="bi bi-plus-circle me-2" style="color:#2563EB;"></i>Thêm lớp thủ công
+        </div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:14px 18px;">
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Tên giáo viên</label>
+            <input type="text" id="manTeacher" class="form-control form-control-sm" placeholder="Họ và tên đầy đủ" style="font-size:.82rem;border-radius:8px;">
+          </div>
+          <div class="col-4">
+            <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Khối</label>
+            <select id="manGrade" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+              <option value="">--</option>
+              <option value="10">10</option>
+              <option value="11">11</option>
+              <option value="12">12</option>
+            </select>
+          </div>
+          <div class="col-4">
+            <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Buổi</label>
+            <select id="manSession" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+              <option value="">--</option>
+              <option value="morning">Sáng</option>
+              <option value="afternoon">Chiều</option>
+            </select>
+          </div>
+          <div class="col-4">
+            <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Thứ</label>
+            <select id="manDay" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+              <option value="">--</option>
+              {% for d in range(2,8) %}
+              <option value="{{ d }}">T{{ d }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Tiết bắt đầu</label>
+            <select id="manStart" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+              <option value="">--</option>
+              <option value="1">Tiết 1 (Tiết 1-2)</option>
+              <option value="3">Tiết 3 (Tiết 3-4)</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Số tiết</label>
+            <select id="manDuration" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+              <option value="2">2 tiết</option>
+              <option value="1">1 tiết</option>
+            </select>
+          </div>
+        </div>
+        <div id="manualResult" class="mt-3" style="display:none;"></div>
+      </div>
+      <div class="modal-footer" style="border-top:1.5px solid #E2E8F0;padding:10px 18px;gap:8px;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" style="border-radius:8px;font-size:.8rem;">Huỷ</button>
+        <button class="btn btn-sm fw-bold" onclick="doAddManual()"
+                style="background:#2563EB;color:#fff;border-radius:8px;font-size:.8rem;border:none;padding:6px 16px;">
+          <i class="bi bi-plus me-1"></i>Thêm lớp
+        </button>
       </div>
     </div>
   </div>
@@ -1624,6 +1742,82 @@ function deleteAccount(type, id, name) {
     },
     { confirmText: 'Xóa', confirmClass: 'btn-danger' }
   );
+}
+
+// ── Import Excel ──────────────────────────────────────────────
+function openImportExcel() {
+  document.getElementById('importExcelResult').style.display = 'none';
+  document.getElementById('importExcelFile').value = '';
+  new bootstrap.Modal(document.getElementById('importExcelModal')).show();
+}
+
+async function doImportExcel() {
+  const input = document.getElementById('importExcelFile');
+  const resEl = document.getElementById('importExcelResult');
+  const btn   = document.getElementById('btnDoImport');
+  if (!input.files.length) { showAlert('Chọn file .xlsx trước.', 'error'); return; }
+  btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang nhập…';
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  try {
+    const res  = await fetch('{{ url_for("admin_import_classes_excel") }}', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!data.ok) { showAlert(data.error || 'Lỗi.', 'error'); return; }
+    let html = `<div class="alert alert-success py-2 px-3 mb-2" style="font-size:.8rem;border-radius:8px;">
+      <strong>Nhập xong!</strong> Đã thêm <strong>${data.imported}</strong> lớp
+      ${data.skipped ? `, bỏ qua ${data.skipped} đã tồn tại` : ''}.
+    </div>`;
+    if (data.errors && data.errors.length) {
+      html += `<div style="font-size:.75rem;color:#B45309;background:#FFFBEB;border-radius:8px;padding:8px 10px;max-height:140px;overflow-y:auto;">
+        <strong>Cảnh báo (${data.errors.length}):</strong><br>` +
+        data.errors.map(e => `<div style="margin-top:3px;">· ${e}</div>`).join('') + '</div>';
+    }
+    resEl.innerHTML = html;
+    resEl.style.display = '';
+    if (data.imported > 0) setTimeout(() => location.reload(), 2200);
+  } catch { showAlert('Lỗi kết nối.', 'error'); }
+  finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-upload me-1"></i>Nhập'; }
+}
+
+// ── Thêm lớp thủ công ────────────────────────────────────────
+function openAddManual() {
+  document.getElementById('manualResult').style.display = 'none';
+  ['manTeacher','manGrade','manSession','manDay','manStart'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('manDuration').value = '2';
+  new bootstrap.Modal(document.getElementById('addManualModal')).show();
+}
+
+async function doAddManual() {
+  const resEl = document.getElementById('manualResult');
+  const payload = {
+    teacher_name : document.getElementById('manTeacher').value.trim(),
+    grade        : document.getElementById('manGrade').value,
+    session_type : document.getElementById('manSession').value,
+    day_of_week  : document.getElementById('manDay').value,
+    start_session: document.getElementById('manStart').value,
+    duration     : document.getElementById('manDuration').value,
+  };
+  if (!payload.teacher_name || !payload.grade || !payload.session_type || !payload.day_of_week || !payload.start_session) {
+    resEl.innerHTML = '<div class="alert alert-warning py-2 px-3" style="font-size:.8rem;border-radius:8px;">Vui lòng điền đầy đủ thông tin.</div>';
+    resEl.style.display = ''; return;
+  }
+  try {
+    const res  = await fetch('{{ url_for("admin_add_class_manual") }}', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      resEl.innerHTML = '<div class="alert alert-success py-2 px-3" style="font-size:.8rem;border-radius:8px;">Đã thêm lớp thành công!</div>';
+      resEl.style.display = '';
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      resEl.innerHTML = `<div class="alert alert-danger py-2 px-3" style="font-size:.8rem;border-radius:8px;">${data.error}</div>`;
+      resEl.style.display = '';
+    }
+  } catch { showAlert('Lỗi kết nối.', 'error'); }
 }
 </script>
 {% endblock %}

@@ -135,43 +135,78 @@
 
 <!-- ── Modal: đăng ký lớp thủ công ── -->
 <div class="modal fade" id="modalRegisterClass" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" style="max-width:460px;">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:480px;">
     <div class="modal-content" style="border-radius:16px;overflow:hidden;">
-      <div class="modal-header" style="background:linear-gradient(135deg,#075985,#0EA5E9);border:none;">
-        <h5 class="modal-title fw-bold text-white" style="font-size:.95rem;">
-          <i class="bi bi-plus-circle me-2"></i>Đăng ký lớp thủ công
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      <div class="modal-header" style="background:linear-gradient(135deg,#075985,#0EA5E9);border:none;padding:12px 18px;">
+        <div>
+          <h5 class="modal-title fw-bold text-white mb-0" style="font-size:.92rem;">
+            <i class="bi bi-door-open me-2"></i>Xếp phòng
+          </h5>
+          <div id="regModalSlotInfo" style="font-size:.75rem;color:rgba(255,255,255,.8);margin-top:2px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body p-4">
-        <div class="mb-3 p-3 rounded" style="background:#F0F9FF;border:1px solid #BAE6FD;font-size:.83rem;">
-          <div class="fw-semibold" style="color:#0c4a6e;font-size:.78rem;margin-bottom:4px;">Khung giờ đã chọn</div>
-          <div id="regModalSlotInfo" style="color:#0369A1;font-weight:700;"></div>
+
+      {# ── Mode toggle ── #}
+      <div style="background:#F8FAFC;border-bottom:1.5px solid #E2E8F0;padding:10px 16px;">
+        <div style="display:flex;gap:6px;background:#E2E8F0;border-radius:9px;padding:3px;">
+          <button id="modeTabExisting" onclick="_switchMode('existing')"
+                  style="flex:1;border:none;border-radius:7px;font-size:.78rem;font-weight:700;padding:5px 8px;cursor:pointer;transition:all .15s;background:#0EA5E9;color:#fff;">
+            <i class="bi bi-list-ul me-1"></i>Lớp có sẵn
+          </button>
+          <button id="modeTabNew" onclick="_switchMode('new')"
+                  style="flex:1;border:none;border-radius:7px;font-size:.78rem;font-weight:700;padding:5px 8px;cursor:pointer;transition:all .15s;background:transparent;color:#64748B;">
+            <i class="bi bi-plus-circle me-1"></i>Lớp mới
+          </button>
         </div>
-        <div class="mb-3">
-          <label class="form-label fw-semibold" style="font-size:.85rem;">Giáo viên <span class="text-danger">*</span></label>
-          <input type="text" id="teacherSearch" class="form-control form-control-sm mb-1"
-                 placeholder="Tìm tên hoặc tổ bộ môn…" autocomplete="off"
-                 oninput="_filterTeachers(this.value)">
-          <div id="teacherList"
-               style="border:1.5px solid #BAE6FD;border-radius:8px;max-height:170px;overflow-y:auto;background:#fff;"></div>
-          <input type="hidden" id="selectedTeacherId">
-          <div id="selectedTeacherInfo" style="font-size:.75rem;color:#0369A1;margin-top:4px;min-height:16px;"></div>
-        </div>
-        <div class="mb-3">
-          <label class="form-label fw-semibold" style="font-size:.85rem;">Khối <span class="text-danger">*</span></label>
-          <div class="d-flex gap-3">
-            <div class="form-check"><input class="form-check-input" type="radio" name="regGradeManual" id="rg10" value="10"><label class="form-check-label" for="rg10" style="font-size:.85rem;">Khối 10</label></div>
-            <div class="form-check"><input class="form-check-input" type="radio" name="regGradeManual" id="rg11" value="11"><label class="form-check-label" for="rg11" style="font-size:.85rem;">Khối 11</label></div>
-            <div class="form-check"><input class="form-check-input" type="radio" name="regGradeManual" id="rg12" value="12"><label class="form-check-label" for="rg12" style="font-size:.85rem;">Khối 12</label></div>
+      </div>
+
+      <div class="modal-body" style="padding:14px 16px;min-height:200px;">
+
+        {# ── Panel: Lớp có sẵn ── #}
+        <div id="panelExisting">
+          <div id="existingLoading" style="text-align:center;padding:24px 0;color:#94A3B8;font-size:.8rem;">
+            <div class="spinner-border spinner-border-sm me-2" style="color:#0EA5E9;"></div>Đang tải…
+          </div>
+          <div id="existingList" style="display:none;max-height:260px;overflow-y:auto;"></div>
+          <div id="existingEmpty" style="display:none;text-align:center;padding:28px 0;color:#94A3B8;font-size:.82rem;">
+            <i class="bi bi-inbox" style="font-size:1.4rem;display:block;margin-bottom:6px;"></i>
+            Không có lớp nào đã đăng ký cho khung giờ này.
           </div>
         </div>
-        <div id="regModalError" class="alert alert-danger d-none py-2" style="font-size:.82rem;"></div>
+
+        {# ── Panel: Lớp mới ── #}
+        <div id="panelNew" style="display:none;">
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.83rem;">Giáo viên <span class="text-danger">*</span></label>
+            <input type="text" id="teacherSearch" class="form-control form-control-sm mb-1"
+                   placeholder="Tìm tên hoặc tổ bộ môn…" autocomplete="off"
+                   oninput="_filterTeachers(this.value)">
+            <div id="teacherList"
+                 style="border:1.5px solid #BAE6FD;border-radius:8px;max-height:160px;overflow-y:auto;background:#fff;"></div>
+            <input type="hidden" id="selectedTeacherId">
+            <div id="selectedTeacherInfo" style="font-size:.75rem;color:#0369A1;margin-top:4px;min-height:16px;"></div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label fw-semibold" style="font-size:.83rem;">Khối <span class="text-danger">*</span></label>
+            <div class="d-flex gap-3">
+              <div class="form-check"><input class="form-check-input" type="radio" name="regGradeManual" id="rg10" value="10"><label class="form-check-label" for="rg10" style="font-size:.83rem;">Khối 10</label></div>
+              <div class="form-check"><input class="form-check-input" type="radio" name="regGradeManual" id="rg11" value="11"><label class="form-check-label" for="rg11" style="font-size:.83rem;">Khối 11</label></div>
+              <div class="form-check"><input class="form-check-input" type="radio" name="regGradeManual" id="rg12" value="12"><label class="form-check-label" for="rg12" style="font-size:.83rem;">Khối 12</label></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="regModalError" class="alert alert-danger d-none py-2 mt-2" style="font-size:.8rem;border-radius:8px;"></div>
       </div>
-      <div class="modal-footer border-top py-2">
-        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Hủy</button>
-        <button type="button" class="btn btn-sm btn-primary fw-bold" onclick="submitRegisterClass()">
-          <i class="bi bi-check-circle me-1"></i>Đăng ký
+
+      <div class="modal-footer border-top py-2" style="gap:8px;">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" style="border-radius:8px;">Hủy</button>
+        <button type="button" id="btnSubmitExisting" class="btn btn-sm btn-primary fw-bold" onclick="submitAssignExisting()" style="border-radius:8px;display:none;">
+          <i class="bi bi-check-circle me-1"></i>Xếp phòng
+        </button>
+        <button type="button" id="btnSubmitNew" class="btn btn-sm btn-primary fw-bold" onclick="submitRegisterClass()" style="border-radius:8px;display:none;">
+          <i class="bi bi-plus-circle me-1"></i>Tạo lớp mới
         </button>
       </div>
     </div>
@@ -197,10 +232,14 @@ let _gridSession = 'morning';
 let _regCtx      = null;
 const _TEACHERS  = {{ teachers_json | tojson }};
 const _API = {
-  roomGrid:      {{ api_room_grid | tojson }},
-  registerClass: {{ api_register_class | tojson }},
-  classBase:     {{ api_class_base | tojson }},
+  roomGrid:         {{ api_room_grid | tojson }},
+  registerClass:    {{ api_register_class | tojson }},
+  availableForSlot: {{ api_available_for_slot | tojson }},
+  assignRoom:       {{ api_assign_room | tojson }},
+  classBase:        {{ api_class_base | tojson }},
 };
+let _regMode = 'existing';
+let _selectedExistingId = null;
 
 function _gesc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -321,6 +360,82 @@ function _renderGridView() {
   document.getElementById('roomGridWrap').innerHTML = h;
 }
 
+function _switchMode(mode) {
+  _regMode = mode;
+  _selectedExistingId = null;
+  document.getElementById('regModalError').classList.add('d-none');
+  const isExisting = mode === 'existing';
+  const tabEx  = document.getElementById('modeTabExisting');
+  const tabNew = document.getElementById('modeTabNew');
+  tabEx.style.background  = isExisting ? '#0EA5E9' : 'transparent';
+  tabEx.style.color       = isExisting ? '#fff' : '#64748B';
+  tabNew.style.background = isExisting ? 'transparent' : '#0EA5E9';
+  tabNew.style.color      = isExisting ? '#64748B' : '#fff';
+  document.getElementById('panelExisting').style.display  = isExisting ? '' : 'none';
+  document.getElementById('panelNew').style.display       = isExisting ? 'none' : '';
+  document.getElementById('btnSubmitExisting').style.display = isExisting ? '' : 'none';
+  document.getElementById('btnSubmitNew').style.display      = isExisting ? 'none' : '';
+  if (isExisting) loadExistingClasses();
+}
+
+async function loadExistingClasses() {
+  const listEl    = document.getElementById('existingList');
+  const loadingEl = document.getElementById('existingLoading');
+  const emptyEl   = document.getElementById('existingEmpty');
+  listEl.style.display = 'none';
+  emptyEl.style.display = 'none';
+  loadingEl.style.display = '';
+  _selectedExistingId = null;
+
+  const url = `${_API.availableForSlot}?session=${_regCtx.session}&day=${_regCtx.day}&start=${_regCtx.start}`;
+  try {
+    const res  = await fetch(url);
+    const data = await res.json();
+    loadingEl.style.display = 'none';
+    if (!data.ok || !data.classes.length) {
+      emptyEl.style.display = '';
+      return;
+    }
+    const GS = {10:{bg:'#DBEAFE',bdr:'#93C5FD',txt:'#1D4ED8'},11:{bg:'#DCFCE7',bdr:'#86EFAC',txt:'#166534'},12:{bg:'#FFF7ED',bdr:'#FED7AA',txt:'#C2410C'}};
+    listEl.innerHTML = data.classes.map(c => {
+      const gs = GS[c.grade] || {bg:'#F1F5F9',bdr:'#CBD5E1',txt:'#475569'};
+      return `<div id="ecls_${c.id}" onclick="_selectExisting(${c.id})"
+                   style="display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;
+                          border-bottom:1px solid #F1F5F9;border-radius:0;transition:background .1s;"
+                   onmouseenter="if(_selectedExistingId!=${c.id})this.style.background='#F0F9FF'"
+                   onmouseleave="if(_selectedExistingId!=${c.id})this.style.background=''">
+              <div style="flex-shrink:0;width:36px;height:36px;border-radius:50%;background:${gs.bg};
+                          border:1.5px solid ${gs.bdr};display:flex;align-items:center;justify-content:center;
+                          font-size:.65rem;font-weight:800;color:${gs.txt};">K${c.grade}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:.82rem;font-weight:700;color:#0c4a6e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_gesc(c.teacher)}</div>
+                <div style="font-size:.7rem;color:#64748B;">${_gesc(c.subject)}</div>
+              </div>
+              <i class="bi bi-check-circle-fill" id="echeck_${c.id}" style="color:#0EA5E9;font-size:1rem;display:none;flex-shrink:0;"></i>
+            </div>`;
+    }).join('');
+    listEl.style.display = '';
+  } catch {
+    loadingEl.style.display = 'none';
+    emptyEl.style.display = '';
+  }
+}
+
+function _selectExisting(id) {
+  if (_selectedExistingId) {
+    const prev = document.getElementById('ecls_' + _selectedExistingId);
+    if (prev) { prev.style.background = ''; }
+    const chk = document.getElementById('echeck_' + _selectedExistingId);
+    if (chk) chk.style.display = 'none';
+  }
+  _selectedExistingId = id;
+  const el  = document.getElementById('ecls_' + id);
+  const chk = document.getElementById('echeck_' + id);
+  if (el)  el.style.background = '#EFF6FF';
+  if (chk) chk.style.display = '';
+  document.getElementById('regModalError').classList.add('d-none');
+}
+
 function openRegisterModal(cell) {
   _regCtx = {
     room:    cell.dataset.room,
@@ -329,14 +444,15 @@ function openRegisterModal(cell) {
     start:   parseInt(cell.dataset.start),
   };
   const SES = {morning:'Sáng', afternoon:'Chiều'};
-  document.getElementById('regModalSlotInfo').innerHTML =
-    `<i class="bi bi-door-open me-1"></i>${_gesc(_regCtx.room)} &nbsp;·&nbsp; ${_RG_DAY_NAMES[_regCtx.day]} ${SES[_regCtx.session]} ${_RG_SLOT_LBL[_regCtx.start]}`;
+  document.getElementById('regModalSlotInfo').textContent =
+    `${_gesc(_regCtx.room)}  ·  ${_RG_DAY_NAMES[_regCtx.day]} ${SES[_regCtx.session]} ${_RG_SLOT_LBL[_regCtx.start]}`;
   document.getElementById('teacherSearch').value = '';
   document.getElementById('selectedTeacherId').value = '';
   document.getElementById('selectedTeacherInfo').textContent = '';
   document.querySelectorAll('input[name="regGradeManual"]').forEach(r => r.checked = false);
   document.getElementById('regModalError').classList.add('d-none');
   _filterTeachers('');
+  _switchMode('existing');
   new bootstrap.Modal(document.getElementById('modalRegisterClass')).show();
 }
 
@@ -373,6 +489,31 @@ function _selectTeacher(id, name, subj) {
   _filterTeachers(document.getElementById('teacherSearch').value);
   const el = document.getElementById('topt_' + id);
   if (el) el.scrollIntoView({block:'nearest'});
+}
+
+async function submitAssignExisting() {
+  const errEl = document.getElementById('regModalError');
+  errEl.classList.add('d-none');
+  if (!_selectedExistingId) {
+    errEl.textContent = 'Vui lòng chọn một lớp từ danh sách.';
+    errEl.classList.remove('d-none');
+    return;
+  }
+  try {
+    const res  = await fetch(`${_API.assignRoom}/${_selectedExistingId}/assign-room`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({location: _regCtx.room}),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('modalRegisterClass')).hide();
+      showAlert(`Đã xếp phòng ${_regCtx.room} thành công.`, 'success');
+      loadRoomGrid();
+    } else {
+      errEl.textContent = data.error || 'Lỗi khi xếp phòng.';
+      errEl.classList.remove('d-none');
+    }
+  } catch { errEl.textContent = 'Lỗi kết nối.'; errEl.classList.remove('d-none'); }
 }
 
 async function submitRegisterClass() {

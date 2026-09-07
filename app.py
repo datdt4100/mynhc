@@ -2638,6 +2638,8 @@ def admin_room_detail():
                            is_operator_session=False,
                            api_room_grid=url_for("admin_room_grid"),
                            api_register_class=url_for("admin_register_class"),
+                           api_available_for_slot=url_for("admin_classes_available_for_slot"),
+                           api_assign_room="/admin/classes",
                            api_class_base="/admin/classes",
                            api_export_url=url_for("admin_room_detail_export"))
 
@@ -2983,6 +2985,69 @@ def admin_class_update(class_id):
             )
         )
     return jsonify(ok=True, location=location, max_capacity=max_capacity)
+
+
+@app.route("/admin/classes/available-for-slot")
+@admin_required
+def admin_classes_available_for_slot():
+    """Return unassigned classes (location IS NULL) matching a given slot."""
+    session_type  = request.args.get("session")
+    day_of_week   = request.args.get("day",   type=int)
+    start_session = request.args.get("start", type=int)
+    if not all([session_type, day_of_week, start_session]):
+        return jsonify(ok=False, error="Thiếu tham số.")
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(classes, teachers.c.full_name.label("teacher_name"),
+                   teachers.c.subject_group)
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .where(and_(
+                classes.c.session_type  == session_type,
+                classes.c.day_of_week   == day_of_week,
+                classes.c.start_session == start_session,
+                classes.c.location.is_(None),
+                classes.c.is_published  == 1,
+            ))
+            .order_by(classes.c.grade, teachers.c.subject_group, teachers.c.full_name)
+        ).fetchall()
+    return jsonify(ok=True, classes=[
+        {"id": r.id, "teacher": r.teacher_name,
+         "subject": r.subject_group or r.subject or "",
+         "grade": r.grade}
+        for r in rows
+    ])
+
+
+@app.route("/admin/classes/<int:class_id>/assign-room", methods=["POST"])
+@admin_required
+def admin_class_assign_room(class_id):
+    """Assign an existing (location=NULL) class to a room, with conflict check."""
+    data     = request.get_json(force=True)
+    location = (data.get("location") or "").strip()
+    if not location:
+        return jsonify(ok=False, error="Chưa chọn phòng.")
+    with engine.begin() as conn:
+        cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        if not cls:
+            return jsonify(ok=False, error="Không tìm thấy lớp.")
+        end_session = cls.start_session + cls.duration - 1
+        conflict = conn.execute(
+            select(classes.c.id).where(and_(
+                classes.c.id != class_id,
+                classes.c.day_of_week   == cls.day_of_week,
+                classes.c.session_type  == cls.session_type,
+                classes.c.location      == location,
+                classes.c.start_session <= end_session,
+                (classes.c.start_session + classes.c.duration - 1) >= cls.start_session,
+            ))
+        ).fetchone()
+        if conflict:
+            return jsonify(ok=False, error=f"Phòng {location} đã bị đặt trong khung giờ này.")
+        conn.execute(
+            update(classes).where(classes.c.id == class_id).values(location=location)
+        )
+    _bump(event_type="class", grade=cls.grade)
+    return jsonify(ok=True)
 
 
 @app.route("/admin/classes/add-manual", methods=["POST"])
@@ -3394,6 +3459,8 @@ def op_room_detail():
                            is_operator_session=True,
                            api_room_grid=url_for("op_room_grid"),
                            api_register_class=url_for("op_register_class"),
+                           api_available_for_slot=url_for("admin_classes_available_for_slot"),
+                           api_assign_room="/admin/classes",
                            api_class_base="/op/classes",
                            api_export_url=url_for("op_room_detail_export"))
 

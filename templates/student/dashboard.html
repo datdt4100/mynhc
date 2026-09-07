@@ -203,10 +203,10 @@
                     <div>
                       <div class="stu-subject">{{ cls.subject or cls.subject_group }}</div>
                       <div class="stu-teacher"><i class="bi bi-person-fill" style="font-size:.6rem;"></i> {{ cls.teacher_name }}</div>
-                      <div class="stu-room">{% if cls.location %}<i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> {{ cls.location }}{% endif %}</div>
+                      <div class="stu-room" id="cal-room-{{ cls.id }}">{% if cls.location %}<i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> {{ cls.location }}{% endif %}</div>
                     </div>
                     <div>
-                      <span class="stu-count">{{ cnt }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %} HS</span>
+                      <span class="stu-count" id="cal-count-{{ cls.id }}">{{ cnt }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %} HS</span>
                     </div>
                   </div>
                 </td>
@@ -237,10 +237,10 @@
                     <div>
                       <div class="stu-subject">{{ cls.subject or cls.subject_group }}</div>
                       <div class="stu-teacher"><i class="bi bi-person-fill" style="font-size:.6rem;"></i> {{ cls.teacher_name }}</div>
-                      <div class="stu-room">{% if cls.location %}<i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> {{ cls.location }}{% endif %}</div>
+                      <div class="stu-room" id="cal-room-{{ cls.id }}">{% if cls.location %}<i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> {{ cls.location }}{% endif %}</div>
                     </div>
                     <div>
-                      <span class="stu-count">{{ cnt }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %} HS</span>
+                      <span class="stu-count" id="cal-count-{{ cls.id }}">{{ cnt }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %} HS</span>
                     </div>
                   </div>
                 </td>
@@ -787,8 +787,9 @@ async function refreshStudentSchedule() {
         cfg.maxCapacity = info.max_capacity;
       }
 
-      /* Update location display */
+      /* Update location display — enrollment list + timetable */
       if (info && typeof info === 'object') {
+        /* enrolled-list location box */
         var locBox  = document.querySelector('.location-box-' + id);
         var locText = document.querySelector('.location-text-' + id);
         if (locBox && locText) {
@@ -798,6 +799,21 @@ async function refreshStudentSchedule() {
           } else {
             locBox.style.display = 'none';
           }
+        }
+        /* timetable cal-room cell */
+        var calRoom = document.getElementById('cal-room-' + id);
+        if (calRoom) {
+          if (info.location) {
+            calRoom.innerHTML = '<i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> ' + info.location;
+          } else {
+            calRoom.innerHTML = '';
+          }
+        }
+        /* timetable count */
+        var calCount = document.getElementById('cal-count-' + id);
+        if (calCount && count !== undefined) {
+          var cap = (info.max_capacity !== undefined && info.max_capacity !== null) ? '/' + info.max_capacity : '';
+          calCount.textContent = count + cap + ' HS';
         }
       }
 

@@ -1763,13 +1763,32 @@ async function doImportExcel() {
     const res  = await fetch('{{ url_for("admin_import_classes_excel") }}', { method: 'POST', body: fd });
     const data = await res.json();
     if (!data.ok) { showAlert(data.error || 'Lỗi.', 'error'); return; }
-    let html = `<div class="alert alert-success py-2 px-3 mb-2" style="font-size:.8rem;border-radius:8px;">
-      <strong>Nhập xong!</strong> Đã thêm <strong>${data.imported}</strong> lớp
-      ${data.skipped ? `, bỏ qua ${data.skipped} đã tồn tại` : ''}.
+    const total   = data.total   || 0;
+    const added   = data.imported || 0;
+    const dup     = data.skipped  || 0;
+    const errCnt  = (data.errors  || []).length;
+    let html = `<div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:10px;padding:10px 14px;margin-bottom:8px;">
+      <div style="font-size:.82rem;font-weight:700;color:#15803D;margin-bottom:6px;">
+        <i class="bi bi-check-circle-fill me-1"></i>Nhập hoàn tất
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;">
+        <div style="background:#fff;border-radius:8px;padding:6px 4px;border:1px solid #BBF7D0;">
+          <div style="font-size:1.1rem;font-weight:800;color:#15803D;">${total}</div>
+          <div style="font-size:.68rem;color:#64748B;">Trong file</div>
+        </div>
+        <div style="background:#fff;border-radius:8px;padding:6px 4px;border:1px solid #BBF7D0;">
+          <div style="font-size:1.1rem;font-weight:800;color:#2563EB;">${added}</div>
+          <div style="font-size:.68rem;color:#64748B;">Đã thêm mới</div>
+        </div>
+        <div style="background:#fff;border-radius:8px;padding:6px 4px;border:1px solid ${dup > 0 ? '#FDE68A' : '#BBF7D0'};">
+          <div style="font-size:1.1rem;font-weight:800;color:${dup > 0 ? '#D97706' : '#9CA3AF'};">${dup}</div>
+          <div style="font-size:.68rem;color:#64748B;">Trùng (bỏ qua)</div>
+        </div>
+      </div>
     </div>`;
     if (data.errors && data.errors.length) {
-      html += `<div style="font-size:.75rem;color:#B45309;background:#FFFBEB;border-radius:8px;padding:8px 10px;max-height:140px;overflow-y:auto;">
-        <strong>Cảnh báo (${data.errors.length}):</strong><br>` +
+      html += `<div style="font-size:.75rem;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;max-height:140px;overflow-y:auto;">
+        <strong><i class="bi bi-exclamation-triangle me-1"></i>Lỗi / không tìm thấy GV (${errCnt}):</strong><br>` +
         data.errors.map(e => `<div style="margin-top:3px;">· ${e}</div>`).join('') + '</div>';
     }
     resEl.innerHTML = html;

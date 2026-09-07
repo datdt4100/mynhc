@@ -3092,6 +3092,7 @@ def admin_import_classes_excel():
             for t in conn.execute(select(teachers)).fetchall()
         }
 
+        total_rows = sum(1 for row in rows if any(row))
         for i, row in enumerate(rows, start=2):
             if not any(row):
                 continue
@@ -3153,7 +3154,7 @@ def admin_import_classes_excel():
 
         conn.commit()
 
-    return jsonify(ok=True, imported=imported, skipped=skipped, errors=errors_list)
+    return jsonify(ok=True, total=total_rows, imported=imported, skipped=skipped, errors=errors_list)
 
 
 @app.route("/admin/class-schedule")

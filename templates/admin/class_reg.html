@@ -475,7 +475,7 @@ function _atLoadRooms(sessionType, day, start, duration, grade) {
     .then(r => r.json())
     .then(data => {
       loading.style.display = 'none';
-      const rooms = data.rooms || [];
+      const rooms = Array.isArray(data) ? data : (data.rooms || []);
       if (!rooms.length) { roomEmpty.style.display = ''; return; }
       roomList.innerHTML = rooms.map(r =>
         `<button type="button" onclick="_atSelectRoom(this,'${r}')"

@@ -434,6 +434,23 @@
             <span id="multi-class-label">{% if allow_multi_class %}Bật{% else %}Tắt{% endif %}</span>
           </button>
         </div>
+        <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
+          <div>
+            <span style="font-size:.78rem; font-weight:600; color:#374151;">
+              <i class="bi bi-list-check me-1" style="color:#10B981;"></i>Ràng buộc 5 môn
+            </span>
+            <span id="req5-desc" style="font-size:.72rem; color:#64748B; display:block; margin-top:1px;">
+              {% if require_5_subjects %}Bắt buộc HS đăng ký đủ 5 môn{% else %}HS đăng ký tự do, không giới hạn số môn{% endif %}
+            </span>
+          </div>
+          <button id="btn-toggle-req5"
+                  class="reg-toggle {% if require_5_subjects %}open{% else %}closed{% endif %}"
+                  data-on="{{ 'true' if require_5_subjects else 'false' }}"
+                  onclick="toggleReq5()">
+            <span class="toggle-dot"></span>
+            <span id="req5-label">{% if require_5_subjects %}Bật{% else %}Tắt{% endif %}</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1016,6 +1033,26 @@ function toggleSchedConstraint() {
       label.textContent = on ? 'Bật' : 'Tắt';
       desc.textContent  = on ? 'Kiểm tra ràng buộc khung giờ' : 'Không kiểm tra ràng buộc khung giờ';
       icon.style.color  = on ? '#F59E0B' : '#94A3B8';
+    })
+    .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+    .finally(() => { btn.disabled = false; });
+}
+
+function toggleReq5() {
+  const btn   = document.getElementById('btn-toggle-req5');
+  const label = document.getElementById('req5-label');
+  const desc  = document.getElementById('req5-desc');
+  btn.disabled = true;
+
+  fetch('{{ url_for("admin_require_5_subjects_toggle") }}', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      const on = data.on;
+      btn.dataset.on = on ? 'true' : 'false';
+      btn.classList.toggle('open',   on);
+      btn.classList.toggle('closed', !on);
+      label.textContent = on ? 'Bật' : 'Tắt';
+      desc.textContent  = on ? 'Bắt buộc HS đăng ký đủ 5 môn' : 'HS đăng ký tự do, không giới hạn số môn';
     })
     .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
     .finally(() => { btn.disabled = false; });

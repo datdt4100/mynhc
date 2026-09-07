@@ -64,6 +64,8 @@ if not DATABASE_URL.startswith("sqlite"):
 engine = create_engine(DATABASE_URL, **_engine_kwargs)
 metadata = MetaData()
 
+_UNASSIGNED_CCCD = "__unassigned__"   # sentinel for school-assigned classes
+
 # ---------------------------------------------------------------------------
 # Table definitions
 # ---------------------------------------------------------------------------
@@ -197,6 +199,27 @@ def init_db():
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS rooms (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)"
             ))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+        # Seed placeholder "school-assigned" teacher
+        try:
+            conn.execute(
+                insert(teachers).values(
+                    full_name="Do trường phân công", cccd=_UNASSIGNED_CCCD,
+                    gender="", subject_group="", password_hash="",
+                )
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        # Always update the name in case DB has old value
+        try:
+            conn.execute(
+                update(teachers).where(teachers.c.cccd == _UNASSIGNED_CCCD)
+                .values(full_name="Do trường phân công")
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -2828,22 +2851,28 @@ def admin_register_class():
 def admin_class_reg():
     with engine.connect() as conn:
         all_teachers = conn.execute(
-            select(teachers).order_by(teachers.c.subject_group, teachers.c.full_name)
+            select(teachers)
+            .where(teachers.c.cccd != _UNASSIGNED_CCCD)
+            .order_by(teachers.c.subject_group, teachers.c.full_name)
         ).fetchall()
 
-        all_classes = conn.execute(
+        all_classes_raw = conn.execute(
             select(classes, teachers.c.full_name.label("teacher_name"),
-                   teachers.c.subject_group, teachers.c.email.label("teacher_email"))
+                   teachers.c.subject_group, teachers.c.email.label("teacher_email"),
+                   teachers.c.cccd.label("teacher_cccd"))
             .join(teachers, classes.c.teacher_id == teachers.c.id)
             .order_by(teachers.c.subject_group, teachers.c.full_name, classes.c.start_session)
         ).fetchall()
 
         enrollment_counts = {}
-        for c in all_classes:
+        for c in all_classes_raw:
             cnt = conn.execute(
                 select(func.count()).where(enrollments.c.class_id == c.id)
             ).scalar()
             enrollment_counts[c.id] = cnt
+
+    unassigned_classes = [c for c in all_classes_raw if c.teacher_cccd == _UNASSIGNED_CCCD]
+    all_classes        = [c for c in all_classes_raw if c.teacher_cccd != _UNASSIGNED_CCCD]
 
     conflict_info = {}
     for c in all_classes:
@@ -2853,13 +2882,19 @@ def admin_class_reg():
         conflict_info[c.id] = _class_impact(c.grade, cls_dict)
 
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
+    teachers_json = [
+        {"id": t.id, "full_name": t.full_name, "subject_group": t.subject_group or ""}
+        for t in all_teachers
+    ]
     return render_template(
         "admin/class_reg.html",
         all_teachers=all_teachers,
         all_classes=all_classes,
+        unassigned_classes=unassigned_classes,
         enrollment_counts=enrollment_counts,
         conflict_info=conflict_info,
         teacher_reg_open=teacher_reg_open,
+        teachers_json=teachers_json,
         day_name=day_name,
         session_label=session_label,
     )
@@ -2985,6 +3020,106 @@ def admin_class_update(class_id):
             )
         )
     return jsonify(ok=True, location=location, max_capacity=max_capacity)
+
+
+@app.route("/admin/classes/import-template")
+@admin_required
+def admin_import_classes_template():
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Danh sách lớp"
+    hfill = PatternFill("solid", fgColor="0EA5E9")
+    hfont = Font(bold=True, color="FFFFFF", size=10)
+    thin  = Side(style="thin", color="CBD5E1")
+    bdr   = Border(left=thin, right=thin, top=thin, bottom=thin)
+    HEADERS = ["Tên giáo viên", "Môn (đầy đủ)", "Khối", "Buổi", "Thứ", "Tiết bắt đầu", "Số tiết"]
+    WIDTHS  = [30, 16, 8, 10, 8, 16, 10]
+    NOTES   = [
+        "Để trống nếu do trường phân công",
+        "Tiếng Anh / Ngữ Văn / Vật lý / Hóa học / Toán",
+        "10, 11 hoặc 12",
+        "Sáng hoặc Chiều",
+        "2 đến 7 (Thứ Hai đến Thứ Bảy)",
+        "1 (Tiết 1-2) hoặc 3 (Tiết 3-4)",
+        "Thường là 2",
+    ]
+    for c, (h, w) in enumerate(zip(HEADERS, WIDTHS), 1):
+        cell = ws.cell(row=1, column=c, value=h)
+        cell.font = hfont; cell.fill = hfill; cell.border = bdr
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        ws.column_dimensions[get_column_letter(c)].width = w
+    # Note row
+    note_fill = PatternFill("solid", fgColor="FFFBEB")
+    for c, note in enumerate(NOTES, 1):
+        cell = ws.cell(row=2, column=c, value=note)
+        cell.fill = note_fill; cell.border = bdr
+        cell.font = Font(size=9, color="92400E", italic=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.row_dimensions[1].height = 30
+    ws.row_dimensions[2].height = 40
+    # Sample rows
+    samples = [
+        ("Nguyễn Văn A", "Toán", 10, "Chiều", 3, 1, 2),
+        ("Lê Thị B", "Tiếng Anh", 11, "Chiều", 4, 3, 2),
+        ("", "Ngữ Văn", 12, "Sáng", 7, 1, 2),
+    ]
+    sfill_a = PatternFill("solid", fgColor="F0F9FF")
+    sfill_b = PatternFill("solid", fgColor="FFFFFF")
+    for i, row in enumerate(samples):
+        fill = sfill_a if i % 2 == 0 else sfill_b
+        for c, v in enumerate(row, 1):
+            cell = ws.cell(row=i+3, column=c, value=v)
+            cell.fill = fill; cell.border = bdr
+            cell.font = Font(size=10)
+            cell.alignment = Alignment(horizontal="center" if c >= 3 else "left", vertical="center")
+    ws.freeze_panes = "A3"
+    ws.auto_filter.ref = f"A1:G{len(samples)+2}"
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return send_file(buf, as_attachment=True,
+                     download_name="mau_import_lop.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/admin/classes/<int:class_id>/assign-teacher", methods=["POST"])
+@admin_required
+def admin_class_assign_teacher(class_id):
+    data       = request.get_json(force=True)
+    teacher_id = data.get("teacher_id")
+    location   = (data.get("location") or "").strip() or None
+    if not teacher_id:
+        return jsonify(ok=False, error="Chưa chọn giáo viên.")
+    with engine.begin() as conn:
+        cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        if not cls:
+            return jsonify(ok=False, error="Không tìm thấy lớp.")
+        teacher_row = conn.execute(select(teachers).where(teachers.c.id == teacher_id)).fetchone()
+        if not teacher_row:
+            return jsonify(ok=False, error="Không tìm thấy giáo viên.")
+        if location:
+            end_session = cls.start_session + cls.duration - 1
+            conflict = conn.execute(
+                select(classes.c.id).where(and_(
+                    classes.c.id != class_id,
+                    classes.c.day_of_week   == cls.day_of_week,
+                    classes.c.session_type  == cls.session_type,
+                    classes.c.location      == location,
+                    classes.c.start_session <= end_session,
+                    (classes.c.start_session + classes.c.duration - 1) >= cls.start_session,
+                ))
+            ).fetchone()
+            if conflict:
+                return jsonify(ok=False, error=f"Phòng {location} đã bị đặt trong khung giờ này.")
+        conn.execute(
+            update(classes).where(classes.c.id == class_id).values(
+                teacher_id=teacher_id,
+                subject=teacher_row.subject_group,
+                location=location,
+            )
+        )
+    _bump(event_type="class", grade=cls.grade)
+    return jsonify(ok=True, teacher_name=teacher_row.full_name, subject=teacher_row.subject_group)
 
 
 @app.route("/admin/classes/available-for-slot")
@@ -3160,8 +3295,12 @@ def admin_import_classes_excel():
         # Primary: exact lower match; Secondary: diacritic-stripped match
         teacher_map_exact    = {t.full_name.strip().lower(): t for t in all_teachers}
         teacher_map_stripped = {_strip_diacritics(t.full_name): t for t in all_teachers}
+        placeholder_teacher  = (teacher_map_exact.get("do trường phân công")
+                                or teacher_map_exact.get("trường phân công"))
 
         def _find_teacher(name):
+            if not name.strip():
+                return placeholder_teacher
             return (teacher_map_exact.get(name.strip().lower()) or
                     teacher_map_stripped.get(_strip_diacritics(name)))
 

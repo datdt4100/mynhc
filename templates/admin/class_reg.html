@@ -141,9 +141,9 @@
         <i class="bi bi-trash3 me-1"></i>Xoá tất cả lớp đã đăng ký
       </button>
     </div>
-    <div class="table-responsive-admin">
+    <div class="table-responsive-admin" style="max-height:420px;overflow-y:auto;overflow-x:auto;">
       <table class="table admin-table mb-0" id="teacher-summary-table">
-        <thead>
+        <thead style="position:sticky;top:0;z-index:2;">
           <tr>
             <th style="width:44px;">STT</th>
             <th>Họ tên GV</th>
@@ -310,11 +310,232 @@
     </div>
   </div>
 
+  {# ── Lớp chưa được phân công ── #}
+  {% if unassigned_classes %}
+  <div class="section-card mt-4">
+    <div class="section-card-header">
+      <i class="bi bi-person-dash" style="color:#F59E0B;"></i>
+      <span>Lớp chưa được phân công giáo viên</span>
+      <span class="badge ms-1" style="background:#FEF3C7;color:#92400E;font-size:.72rem;border-radius:8px;">{{ unassigned_classes | length }}</span>
+    </div>
+    <div style="max-height:380px;overflow-y:auto;overflow-x:auto;-webkit-overflow-scrolling:touch;">
+      <table class="table admin-table mb-0" id="unassigned-table">
+        <thead style="position:sticky;top:0;z-index:2;background:#F8FAFC;">
+          <tr>
+            <th style="width:44px;">STT</th>
+            <th>Môn</th>
+            <th>Khối</th>
+            <th>Thời gian</th>
+            <th>Phòng</th>
+            <th>HS đăng ký</th>
+            <th style="width:110px;">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cls in unassigned_classes %}
+          <tr id="ua-row-{{ cls.id }}">
+            <td class="text-muted" style="font-size:.75rem;">{{ loop.index }}</td>
+            <td><span class="badge rounded-pill" style="background:#EFF6FF;color:#0369A1;font-size:.72rem;">{{ cls.subject or '—' }}</span></td>
+            <td><span class="badge bg-light text-dark border" style="font-size:.72rem;">K{{ cls.grade }}</span></td>
+            <td style="font-size:.78rem;white-space:nowrap;">
+              {{ session_label(cls.session_type, cls.start_session, cls.duration) }} – {{ day_name(cls.day_of_week) }}
+            </td>
+            <td style="font-size:.78rem;">{{ cls.location or '<span class="text-muted">—</span>' | safe }}</td>
+            <td style="font-size:.78rem;">{{ enrollment_counts.get(cls.id, 0) }}</td>
+            <td>
+              <div class="d-flex gap-1">
+                <button class="btn btn-sm fw-semibold" style="border-radius:7px;font-size:.72rem;padding:3px 8px;background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;"
+                        onclick="openAssignModal({{ cls.id }}, '{{ cls.subject or '' }}', {{ cls.grade }}, '{{ day_name(cls.day_of_week) }}', '{{ session_label(cls.session_type, cls.start_session, cls.duration) }}', '{{ cls.session_type }}', {{ cls.day_of_week }}, {{ cls.start_session }}, {{ cls.duration }})">
+                  <i class="bi bi-person-check me-1"></i>Phân công
+                </button>
+                <button class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:7px;font-size:.72rem;padding:3px 6px;"
+                        onclick="deleteUnassigned({{ cls.id }})">
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
 </div><!-- /container -->
+
+{# ── Modal: Phân công giáo viên ── #}
+<div class="modal fade" id="assignTeacherModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:500px;">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#92400E,#D97706);border:none;padding:12px 18px;">
+        <div>
+          <h5 class="modal-title fw-bold text-white mb-0" style="font-size:.92rem;">
+            <i class="bi bi-person-check me-2"></i>Phân công giáo viên
+          </h5>
+          <div id="atModalInfo" style="font-size:.75rem;color:rgba(255,255,255,.8);margin-top:2px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:14px 16px;">
+
+        {# Teacher picker #}
+        <div class="mb-3">
+          <label class="form-label fw-semibold" style="font-size:.83rem;">Giáo viên <span class="text-danger">*</span></label>
+          <input type="text" id="atTeacherSearch" class="form-control form-control-sm mb-1"
+                 placeholder="Tìm tên hoặc tổ bộ môn…" autocomplete="off"
+                 oninput="_atFilterTeachers(this.value)">
+          <div id="atTeacherList" style="border:1.5px solid #FDE68A;border-radius:8px;max-height:160px;overflow-y:auto;background:#fff;"></div>
+          <input type="hidden" id="atSelectedTeacherId">
+          <div id="atSelectedTeacherInfo" style="font-size:.75rem;color:#92400E;margin-top:4px;min-height:16px;"></div>
+        </div>
+
+        {# Room picker #}
+        <div class="mb-2">
+          <label class="form-label fw-semibold" style="font-size:.83rem;">Phòng học <span class="text-muted fw-normal">(tuỳ chọn)</span></label>
+          <div id="atRoomLoading" style="font-size:.78rem;color:#94A3B8;padding:4px 0;display:none;">
+            <span class="spinner-border spinner-border-sm me-1"></span>Đang tải phòng trống…
+          </div>
+          <div id="atRoomList" style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px;"></div>
+          <input type="hidden" id="atSelectedRoom">
+          <div id="atRoomEmpty" style="font-size:.75rem;color:#94A3B8;display:none;">Không có phòng trống cho khung giờ này.</div>
+        </div>
+
+        <div id="atModalError" class="alert alert-danger d-none py-2 mt-2" style="font-size:.8rem;border-radius:8px;"></div>
+      </div>
+      <div class="modal-footer" style="border-top:1.5px solid #E2E8F0;padding:10px 18px;gap:8px;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" style="border-radius:8px;font-size:.8rem;">Huỷ</button>
+        <button class="btn btn-sm fw-bold" onclick="submitAssignTeacher()"
+                style="background:#D97706;color:#fff;border-radius:8px;font-size:.8rem;border:none;padding:6px 16px;">
+          <i class="bi bi-check-circle me-1"></i>Phân công
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+/* ── Assign-teacher modal state ── */
+const _AT_TEACHERS = {{ teachers_json | tojson }};
+let _atClassId = null, _atSessionType = null, _atDayOfWeek = null,
+    _atStartSession = null, _atDuration = null;
+
+function openAssignModal(classId, subject, grade, dayLabel, sessionLabel, sessionType, dayOfWeek, startSession, duration) {
+  _atClassId = classId;
+  _atSessionType = sessionType; _atDayOfWeek = dayOfWeek;
+  _atStartSession = startSession; _atDuration = duration;
+  document.getElementById('atModalInfo').textContent =
+    subject + ' · K' + grade + ' · ' + sessionLabel + ' – ' + dayLabel;
+  document.getElementById('atSelectedTeacherId').value = '';
+  document.getElementById('atSelectedTeacherInfo').textContent = '';
+  document.getElementById('atTeacherSearch').value = '';
+  document.getElementById('atModalError').classList.add('d-none');
+  document.getElementById('atSelectedRoom').value = '';
+  document.getElementById('atRoomList').innerHTML = '';
+  document.getElementById('atRoomEmpty').style.display = 'none';
+  _atRenderTeachers(_AT_TEACHERS);
+  _atLoadRooms(sessionType, dayOfWeek, startSession, duration, grade);
+  new bootstrap.Modal(document.getElementById('assignTeacherModal')).show();
+}
+
+function _atRenderTeachers(list) {
+  const el = document.getElementById('atTeacherList');
+  if (!list.length) { el.innerHTML = '<div style="padding:8px 12px;font-size:.78rem;color:#94A3B8;">Không tìm thấy giáo viên.</div>'; return; }
+  el.innerHTML = list.map(t => `
+    <div onclick="_atSelectTeacher(${t.id},'${t.full_name.replace(/'/g,"&#39;")}','${t.subject_group.replace(/'/g,"&#39;")}')"
+         style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #FEF3C7;font-size:.8rem;transition:background .1s;"
+         onmouseenter="this.style.background='#FEF9C3'" onmouseleave="this.style.background='#fff'">
+      <span class="fw-semibold">${t.full_name}</span>
+      ${t.subject_group ? '<span style="margin-left:6px;font-size:.7rem;color:#0369A1;background:#EFF6FF;padding:1px 6px;border-radius:5px;">'+t.subject_group+'</span>' : ''}
+    </div>`).join('');
+}
+
+function _atFilterTeachers(q) {
+  const s = q.toLowerCase();
+  const filtered = _AT_TEACHERS.filter(t =>
+    t.full_name.toLowerCase().includes(s) || t.subject_group.toLowerCase().includes(s));
+  _atRenderTeachers(filtered);
+}
+
+function _atSelectTeacher(id, name, group) {
+  document.getElementById('atSelectedTeacherId').value = id;
+  document.getElementById('atSelectedTeacherInfo').textContent = '✓ ' + name + (group ? ' · ' + group : '');
+  document.getElementById('atTeacherSearch').value = name;
+  _atRenderTeachers([]);
+}
+
+function _atLoadRooms(sessionType, day, start, duration, grade) {
+  const loading = document.getElementById('atRoomLoading');
+  const roomList = document.getElementById('atRoomList');
+  const roomEmpty = document.getElementById('atRoomEmpty');
+  loading.style.display = ''; roomList.innerHTML = ''; roomEmpty.style.display = 'none';
+  fetch(`/api/available-rooms?day_of_week=${day}&session_type=${sessionType}&start_session=${start}&duration=${duration}&grade=${grade}`)
+    .then(r => r.json())
+    .then(data => {
+      loading.style.display = 'none';
+      const rooms = data.rooms || [];
+      if (!rooms.length) { roomEmpty.style.display = ''; return; }
+      roomList.innerHTML = rooms.map(r =>
+        `<button type="button" onclick="_atSelectRoom(this,'${r}')"
+          style="padding:4px 12px;border-radius:7px;border:1.5px solid #E2E8F0;background:#F8FAFC;font-size:.78rem;cursor:pointer;transition:.1s;"
+          onmouseenter="this.style.background='#EFF6FF'" onmouseleave="this.style.background=(this.dataset.sel?'#DBEAFE':'#F8FAFC')">${r}</button>`
+      ).join('');
+    })
+    .catch(() => { loading.style.display = 'none'; });
+}
+
+function _atSelectRoom(btn, room) {
+  document.querySelectorAll('#atRoomList button').forEach(b => {
+    b.style.background = '#F8FAFC'; b.style.borderColor = '#E2E8F0'; delete b.dataset.sel;
+  });
+  btn.style.background = '#DBEAFE'; btn.style.borderColor = '#3B82F6'; btn.dataset.sel = '1';
+  document.getElementById('atSelectedRoom').value = room;
+}
+
+async function submitAssignTeacher() {
+  const errEl = document.getElementById('atModalError');
+  errEl.classList.add('d-none');
+  const teacherId = document.getElementById('atSelectedTeacherId').value;
+  if (!teacherId) { errEl.textContent = 'Vui lòng chọn giáo viên.'; errEl.classList.remove('d-none'); return; }
+  const room = document.getElementById('atSelectedRoom').value;
+  try {
+    const res = await fetch('/admin/classes/' + _atClassId + '/assign-teacher', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({teacher_id: parseInt(teacherId), location: room || null})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('assignTeacherModal')).hide();
+      const row = document.getElementById('ua-row-' + _atClassId);
+      if (row) row.remove();
+      /* Check if table is now empty */
+      const tbody = document.querySelector('#unassigned-table tbody');
+      if (tbody && !tbody.querySelector('tr')) {
+        document.querySelector('.section-card.mt-4')?.remove();
+      }
+    } else {
+      errEl.textContent = data.error || 'Không thể phân công.'; errEl.classList.remove('d-none');
+    }
+  } catch { errEl.textContent = 'Lỗi kết nối.'; errEl.classList.remove('d-none'); }
+}
+
+function deleteUnassigned(classId) {
+  showConfirm('Xoá lớp này?', 'Thao tác không thể hoàn tác.', async function() {
+    try {
+      const res = await fetch('/admin/classes/' + classId, {method:'DELETE'});
+      const data = await res.json();
+      if (data.ok) {
+        const row = document.getElementById('ua-row-' + classId);
+        if (row) row.remove();
+        const tbody = document.querySelector('#unassigned-table tbody');
+        if (tbody && !tbody.querySelector('tr')) document.querySelector('.section-card.mt-4')?.remove();
+      } else { showAlert(data.error || 'Không thể xoá.', 'error'); }
+    } catch { showAlert('Lỗi kết nối.', 'error'); }
+  }, {confirmText:'Xoá', confirmClass:'btn-danger'});
+}
+
 function saveClassRoom(classId, triggerEl) {
   const row = document.getElementById('cls-row-' + classId);
   const locationVal = row.querySelector('.room-input[data-class-id="' + classId + '"]').value.trim();

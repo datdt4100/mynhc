@@ -385,6 +385,10 @@
                   style="background:#F0FDF4;border:1.5px solid #86EFAC;color:#15803D;border-radius:9px;font-size:.78rem;">
             <i class="bi bi-file-earmark-excel me-1" style="color:#16A34A;"></i>Nhập Excel
           </button>
+          <a href="{{ url_for('admin_import_classes_template') }}" class="btn btn-sm fw-semibold"
+             style="background:#F0FDF4;border:1.5px solid #86EFAC;color:#15803D;border-radius:9px;font-size:.78rem;" title="Tải file Excel mẫu để import lớp">
+            <i class="bi bi-download"></i>
+          </a>
           <button onclick="openAddManual()" class="btn btn-sm flex-fill fw-semibold"
                   style="background:#EFF6FF;border:1.5px solid #93C5FD;color:#1D4ED8;border-radius:9px;font-size:.78rem;">
             <i class="bi bi-plus-circle me-1" style="color:#2563EB;"></i>Thêm thủ công
@@ -1048,6 +1052,13 @@
           <div class="col-12">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Tên giáo viên</label>
             <input type="text" id="manTeacher" class="form-control form-control-sm" placeholder="Họ và tên đầy đủ" style="font-size:.82rem;border-radius:8px;">
+            <div class="form-check mt-1">
+              <input class="form-check-input" type="checkbox" id="manSchoolAssigned"
+                     onchange="document.getElementById('manTeacher').disabled=this.checked; if(this.checked){document.getElementById('manTeacher').value='';}">
+              <label class="form-check-label" for="manSchoolAssigned" style="font-size:.76rem;color:#92400E;cursor:pointer;">
+                <i class="bi bi-building me-1"></i>Do trường phân công
+              </label>
+            </div>
           </div>
           <div class="col-4">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Khối</label>
@@ -1818,23 +1829,26 @@ function openAddManual() {
   document.getElementById('manualResult').style.display = 'none';
   ['manTeacher','manGrade','manSession','manDay','manStart'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.value = '';
+    if (el) { el.value = ''; el.disabled = false; }
   });
   document.getElementById('manDuration').value = '2';
+  const cb = document.getElementById('manSchoolAssigned');
+  if (cb) cb.checked = false;
   new bootstrap.Modal(document.getElementById('addManualModal')).show();
 }
 
 async function doAddManual() {
   const resEl = document.getElementById('manualResult');
+  const schoolAssigned = document.getElementById('manSchoolAssigned')?.checked;
   const payload = {
-    teacher_name : document.getElementById('manTeacher').value.trim(),
+    teacher_name : schoolAssigned ? '' : document.getElementById('manTeacher').value.trim(),
     grade        : document.getElementById('manGrade').value,
     session_type : document.getElementById('manSession').value,
     day_of_week  : document.getElementById('manDay').value,
     start_session: document.getElementById('manStart').value,
     duration     : document.getElementById('manDuration').value,
   };
-  if (!payload.teacher_name || !payload.grade || !payload.session_type || !payload.day_of_week || !payload.start_session) {
+  if ((!payload.teacher_name && !schoolAssigned) || !payload.grade || !payload.session_type || !payload.day_of_week || !payload.start_session) {
     resEl.innerHTML = '<div class="alert alert-warning py-2 px-3" style="font-size:.8rem;border-radius:8px;">Vui lòng điền đầy đủ thông tin.</div>';
     resEl.style.display = ''; return;
   }

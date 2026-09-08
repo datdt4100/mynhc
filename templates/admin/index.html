@@ -1528,9 +1528,9 @@ function jumpToTeacherGroup(grp) {
   const container = document.getElementById('teacherTableContainer');
   const target = document.querySelector(`tr[data-group-sep="${CSS.escape(grp)}"]`);
   if (!container || !target) return;
-  const rowTop = target.offsetTop;
   const headerH = container.querySelector('thead')?.offsetHeight || 40;
-  container.scrollTo({ top: rowTop - headerH - 2, behavior: 'smooth' });
+  const rowTop = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+  container.scrollTo({ top: rowTop - headerH, behavior: 'smooth' });
   const navBtn = document.querySelector(`#teacherNav button[data-group="${CSS.escape(grp)}"]`);
   if (navBtn) navBtn.scrollIntoView({ block: 'nearest' });
 }
@@ -1588,16 +1588,13 @@ function jumpToClass(cls) {
     b.classList.toggle('active', b.dataset.class === cls);
   });
 
-  // Scroll the table container to the class separator row
   const container = document.getElementById('studentTableContainer');
   const target = document.querySelector(`tr[data-class-sep="${CSS.escape(cls)}"]`);
   if (!container || !target) return;
-  // offsetTop of row is relative to table; table is child of container
-  const rowTop = target.offsetTop;
   const headerH = container.querySelector('thead')?.offsetHeight || 40;
-  container.scrollTo({ top: rowTop - headerH - 2, behavior: 'smooth' });
+  const rowTop = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+  container.scrollTo({ top: rowTop - headerH, behavior: 'smooth' });
 
-  // Also scroll left nav to keep the active button visible
   const navBtn = document.querySelector(`#classNav button[data-class="${CSS.escape(cls)}"]`);
   if (navBtn) navBtn.scrollIntoView({ block: 'nearest' });
 }

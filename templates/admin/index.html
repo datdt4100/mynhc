@@ -147,7 +147,30 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    background: #F8FAFC;
+    /* background intentionally omitted — inherits gradient from .admin-table thead th */
+  }
+
+  /* ── Grade tabs ── */
+  .grade-tab-btn {
+    border: 1.5px solid #E2E8F0; border-radius: 20px;
+    padding: 4px 14px; font-size: .78rem; font-weight: 600;
+    background: #fff; color: #64748B; cursor: pointer;
+    transition: all .15s; white-space: nowrap;
+    margin-bottom: 8px;
+  }
+  .grade-tab-btn:hover { border-color: #93C5FD; color: #1D4ED8; background: #EFF6FF; }
+  .grade-tab-btn.active { background: #0EA5E9; border-color: #0EA5E9; color: #fff; }
+  .grade-tab-btn[data-grade="10"].active { background: #2563EB; border-color: #2563EB; }
+  .grade-tab-btn[data-grade="11"].active { background: #7C3AED; border-color: #7C3AED; }
+  .grade-tab-btn[data-grade="12"].active { background: #059669; border-color: #059669; }
+
+  /* ── Class separator rows ── */
+  .class-sep-row td {
+    background: #F1F5F9 !important;
+    padding: 5px 10px !important;
+    font-size: .74rem; font-weight: 700; color: #475569;
+    border-top: 2px solid #CBD5E1 !important;
+    position: sticky; top: 40px; z-index: 1;
   }
   @media (max-width: 640px) {
     .table-responsive-admin { max-height: 320px; }
@@ -684,8 +707,9 @@
       <span>Danh sách học sinh</span>
       <span class="badge rounded-pill ms-1" style="background:#F0FDF4; color:#15803D; font-size:.72rem; font-weight:700;">{{ student_list | length }}</span>
     </div>
+
+    {# ── Toolbar ── #}
     <div class="section-toolbar">
-      <!-- Upload -->
       <form id="frmUploadStudent" method="POST" action="{{ url_for('admin_students_upload') }}" enctype="multipart/form-data" class="d-contents">
         <input type="file" id="fileStudent" name="file" accept=".xlsx,.xls" style="display:none;" onchange="document.getElementById('frmUploadStudent').submit()">
       </form>
@@ -694,7 +718,7 @@
         <i class="bi bi-upload me-1"></i>Tải lên
       </button>
       <a href="{{ url_for('admin_students_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px; font-size:.78rem;">
-        <i class="bi bi-download me-1"></i>Tải file mẫu
+        <i class="bi bi-download me-1"></i>File mẫu
       </a>
       <div class="divider"></div>
       <button class="btn btn-sm btn-outline-primary fw-semibold" style="border-radius:8px; font-size:.78rem;"
@@ -703,7 +727,7 @@
       </button>
       <div class="search-box ms-auto">
         <i class="bi bi-search"></i>
-        <input type="search" id="searchStudent" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterTable('student')">
+        <input type="search" id="searchStudent" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterStudents()">
       </div>
       <form method="POST" action="{{ url_for('admin_students_clear') }}" class="mb-0">
         <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
@@ -712,82 +736,93 @@
         </button>
       </form>
     </div>
+
+    {# ── Grade tabs ── #}
+    <div style="padding:10px 16px 2px; background:#FAFBFC; border-bottom:1.5px solid #E2E8F0; display:flex; gap:6px; flex-wrap:wrap;">
+      <button class="grade-tab-btn active" data-grade="all" onclick="setGradeFilter('all', this)">
+        Tất cả <span style="font-size:.68rem;font-weight:700;margin-left:3px;opacity:.8;">{{ student_list | length }}</span>
+      </button>
+      {% for g in [10, 11, 12] %}
+      {% set g_count = student_list | selectattr('grade', 'equalto', g) | list | length %}
+      {% if g_count > 0 %}
+      <button class="grade-tab-btn" data-grade="{{ g }}" onclick="setGradeFilter('{{ g }}', this)">
+        Khối {{ g }} <span style="font-size:.68rem;font-weight:700;margin-left:3px;opacity:.8;">{{ g_count }}</span>
+      </button>
+      {% endif %}
+      {% endfor %}
+    </div>
+
+    {# ── Table ── #}
     <div class="section-card-body p-0">
       <div class="table-responsive-admin">
         <table id="tableStudent" class="table table-hover admin-table mb-0">
           <thead>
             <tr>
-              <th style="width:44px;">STT</th>
+              <th style="width:38px;">STT</th>
               <th>Họ tên</th>
               <th>Mã đăng nhập</th>
               <th>Lớp</th>
-              <th>Khối</th>
-              <th>Email</th>
-              <th>Trạng thái TK</th>
-              <th style="white-space:nowrap;">Thời gian xác thực</th>
-              <th style="width:110px;">Thao tác</th>
+              <th>Trạng thái</th>
+              <th style="width:100px;">Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            {% for s in student_list %}
-            <tr data-search="{{ s.full_name|lower }} {{ s.cccd }}">
-              <td class="text-muted" style="font-size:.75rem;">{{ loop.index }}</td>
-              <td class="fw-semibold">{{ s.full_name }}</td>
-              <td><code style="font-size:.78rem;">{{ s.cccd }}</code></td>
-              <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">{{ s.class_name }}</span></td>
-              <td><span class="badge bg-light text-dark border" style="font-size:.72rem;">{{ s.grade }}</span></td>
-              <td style="font-size:.78rem;">
-                {% if s.email %}
-                  <a href="mailto:{{ s.email }}" class="text-primary text-decoration-none">{{ s.email }}</a>
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
+            {% if student_list %}
+            {% set ns = namespace(prev_class='', idx=0) %}
+            {% for s in student_list | sort(attribute='full_name') | sort(attribute='class_name') | sort(attribute='grade') %}
+            {% if s.class_name != ns.prev_class %}
+            {% set ns.prev_class = s.class_name %}
+            <tr class="class-sep-row" data-grade="{{ s.grade }}" data-class-sep="{{ s.class_name }}">
+              <td colspan="6">
+                <i class="bi bi-collection me-1" style="color:#0EA5E9;"></i>
+                <strong>{{ s.class_name }}</strong>
+                <span class="sep-count" style="margin-left:8px;font-weight:400;color:#94A3B8;font-size:.72rem;"></span>
               </td>
+            </tr>
+            {% endif %}
+            {% set ns.idx = ns.idx + 1 %}
+            <tr data-search="{{ s.full_name|lower }} {{ s.cccd }}" data-grade="{{ s.grade }}" data-class="{{ s.class_name }}">
+              <td class="text-muted" style="font-size:.72rem;">{{ ns.idx }}</td>
+              <td class="fw-semibold" style="font-size:.82rem;">{{ s.full_name }}</td>
+              <td><code style="font-size:.76rem;">{{ s.cccd }}</code></td>
+              <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.7rem;">{{ s.class_name }}</span></td>
               <td>
                 {% if s.is_first_login %}
-                  <span class="badge bg-secondary">Chưa kích hoạt</span>
+                  <span class="badge bg-secondary" style="font-size:.7rem;">Chưa kích hoạt</span>
                 {% else %}
-                  <span class="badge bg-success">Đã kích hoạt</span>
+                  <span class="badge bg-success" style="font-size:.7rem;">Đã kích hoạt</span>
                 {% endif %}
-              </td>
-              <td style="font-size:.75rem; color:#475569; white-space:nowrap;">
-                {{ s.activated_at or '—' }}
               </td>
               <td>
                 <div class="d-flex gap-1 align-items-center">
                   {% if not s.is_first_login %}
                   <button type="button" class="adm-icon-btn btn-outline-info"
                           onclick="resetPassword({{ s.id }}, '{{ s.full_name|e }}', 'student')"
-                          title="Khôi phục mật khẩu">
-                    <i class="bi bi-key"></i>
-                  </button>
+                          title="Khôi phục mật khẩu"><i class="bi bi-key"></i></button>
                   <form method="POST" action="{{ url_for('admin_students_reset', student_id=s.id) }}" class="mb-0">
                     <button type="button" class="adm-icon-btn btn-outline-warning"
                             onclick="showConfirmSubmit(this,{title:'Reset đăng ký môn học?',msg:'Xóa toàn bộ đăng ký môn học của <strong>{{ s.full_name }}</strong>?',confirmText:'Reset',confirmClass:'btn-warning'})"
-                            title="Reset đăng ký môn học">
-                      <i class="bi bi-arrow-counterclockwise"></i>
-                    </button>
+                            title="Reset đăng ký môn học"><i class="bi bi-arrow-counterclockwise"></i></button>
                   </form>
                   {% endif %}
                   <button type="button" class="adm-icon-btn btn-outline-danger"
                           onclick="deleteAccount('student', {{ s.id }}, '{{ s.full_name|e }}')"
-                          title="Xóa học sinh">
-                    <i class="bi bi-trash"></i>
-                  </button>
+                          title="Xóa học sinh"><i class="bi bi-trash"></i></button>
                 </div>
               </td>
             </tr>
+            {% endfor %}
             {% else %}
             <tr>
-              <td colspan="8" class="text-center text-muted py-5">
+              <td colspan="6" class="text-center text-muted py-5">
                 <i class="bi bi-people" style="font-size:2rem; display:block; margin-bottom:8px;"></i>
                 Chưa có học sinh nào
               </td>
             </tr>
-            {% endfor %}
+            {% endif %}
           </tbody>
         </table>
-        <div class="search-empty" id="emptyStudent">
+        <div class="search-empty" id="emptyStudent" style="display:none;">
           <i class="bi bi-search" style="font-size:1.4rem; display:block; margin-bottom:6px;"></i>
           Không tìm thấy học sinh phù hợp
         </div>
@@ -1146,6 +1181,8 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('fileStudent').addEventListener('change', function() {
     if (this.files[0]) showLoading('Đang tải lên danh sách học sinh...');
   });
+  // Init separator row counts on load
+  filterStudents();
 });
 
 function toggleReg(type) {
@@ -1292,17 +1329,60 @@ function resetPassword(userId, userName, userType) {
 }
 
 function filterTable(type) {
-  const q = document.getElementById('search' + (type === 'teacher' ? 'Teacher' : 'Student'))
-              .value.trim().toLowerCase();
-  const tbody = document.querySelector('#table' + (type === 'teacher' ? 'Teacher' : 'Student') + ' tbody');
-  const empty = document.getElementById('empty' + (type === 'teacher' ? 'Teacher' : 'Student'));
+  const q = document.getElementById('searchTeacher').value.trim().toLowerCase();
+  const tbody = document.querySelector('#tableTeacher tbody');
+  const empty = document.getElementById('emptyTeacher');
   let visible = 0;
   tbody.querySelectorAll('tr[data-search]').forEach(tr => {
     const match = !q || tr.dataset.search.includes(q);
     tr.style.display = match ? '' : 'none';
     if (match) visible++;
   });
-  empty.style.display = (q && visible === 0) ? 'block' : 'none';
+  if (empty) empty.style.display = (q && visible === 0) ? 'block' : 'none';
+}
+
+/* ── Student grade tabs + search ── */
+let _activeGrade = 'all';
+
+function setGradeFilter(grade, btn) {
+  _activeGrade = String(grade);
+  document.querySelectorAll('.grade-tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('searchStudent').value = '';
+  filterStudents();
+}
+
+function filterStudents() {
+  const q = document.getElementById('searchStudent').value.trim().toLowerCase();
+  const tbody = document.querySelector('#tableStudent tbody');
+  const visibleByClass = {};
+
+  // First pass: student rows
+  tbody.querySelectorAll('tr[data-search]').forEach(tr => {
+    const grade = tr.dataset.grade;
+    const cls   = tr.dataset.class;
+    const gradeOk  = _activeGrade === 'all' || grade === _activeGrade;
+    const searchOk = !q || tr.dataset.search.includes(q);
+    const show = gradeOk && searchOk;
+    tr.style.display = show ? '' : 'none';
+    if (show) visibleByClass[cls] = (visibleByClass[cls] || 0) + 1;
+  });
+
+  // Second pass: separator rows + update count badge
+  tbody.querySelectorAll('tr.class-sep-row').forEach(tr => {
+    const cls   = tr.dataset.classSep;
+    const grade = tr.dataset.grade;
+    const gradeOk = _activeGrade === 'all' || grade === _activeGrade;
+    const cnt = visibleByClass[cls] || 0;
+    const show = gradeOk && cnt > 0;
+    tr.style.display = show ? '' : 'none';
+    const badge = tr.querySelector('.sep-count');
+    if (badge) badge.textContent = cnt + ' học sinh';
+  });
+
+  const empty = document.getElementById('emptyStudent');
+  const totalVisible = Object.values(visibleByClass).reduce((a, b) => a + b, 0);
+  if (empty) empty.style.display = (totalVisible === 0) ? 'block' : 'none';
 }
 
 function copyTempPw() {

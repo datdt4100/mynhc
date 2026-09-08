@@ -3792,6 +3792,17 @@ def admin_enrollment():
             ).scalar()
             enrollment_counts[c.id] = cnt
 
+        student_list_raw = conn.execute(
+            select(students).order_by(students.c.grade, students.c.class_name, students.c.full_name)
+        ).fetchall()
+
+        enrolled_counts_by_student = {}
+        for row in conn.execute(
+            select(enrollments.c.student_id, func.count().label("cnt"))
+            .group_by(enrollments.c.student_id)
+        ).fetchall():
+            enrolled_counts_by_student[row.student_id] = row.cnt
+
     # Collect extra_data column names across all published classes
     extra_columns = set()
     for c in published_classes:
@@ -3808,6 +3819,8 @@ def admin_enrollment():
         published_classes=published_classes,
         enrollment_counts=enrollment_counts,
         extra_columns=sorted(extra_columns),
+        student_list=student_list_raw,
+        enrolled_counts_by_student=enrolled_counts_by_student,
         student_reg_open=student_reg_open,
         day_name=day_name,
         session_label=session_label,
@@ -3991,6 +4004,62 @@ def admin_enrollment_toggle():
     new_val = "0" if current == "1" else "1"
     set_setting("student_reg_open", new_val)
     return jsonify(ok=True, open=new_val == "1")
+
+
+@app.route("/api/admin/student-schedule/<int:student_id>")
+@admin_required
+def api_admin_student_schedule(student_id):
+    with engine.connect() as conn:
+        st = conn.execute(select(students).where(students.c.id == student_id)).fetchone()
+        if not st:
+            return jsonify(ok=False, error="Không tìm thấy học sinh"), 404
+
+        enrolled = conn.execute(
+            select(
+                classes.c.id.label("class_id"),
+                classes.c.grade,
+                classes.c.day_of_week,
+                classes.c.session_type,
+                classes.c.start_session,
+                classes.c.duration,
+                classes.c.subject,
+                classes.c.location,
+                teachers.c.full_name.label("teacher_name"),
+                teachers.c.subject_group,
+                enrollments.c.enrolled_at,
+            )
+            .join(enrollments, classes.c.id == enrollments.c.class_id)
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .where(enrollments.c.student_id == student_id)
+            .order_by(classes.c.day_of_week, classes.c.session_type, classes.c.start_session)
+        ).fetchall()
+
+    schedule = []
+    for e in enrolled:
+        schedule.append({
+            "class_id": e.class_id,
+            "subject": e.subject or e.subject_group or "—",
+            "teacher": e.teacher_name,
+            "grade": e.grade,
+            "day_of_week": e.day_of_week,
+            "day_label": day_name(e.day_of_week),
+            "session_type": e.session_type,
+            "session_label": "Sáng" if e.session_type == "morning" else "Chiều",
+            "start_session": e.start_session,
+            "end_session": e.start_session + e.duration - 1,
+            "location": e.location or "—",
+            "enrolled_at": e.enrolled_at,
+        })
+
+    log = sorted(schedule, key=lambda x: x["enrolled_at"] or "", reverse=True)
+
+    return jsonify(ok=True, student={
+        "id": st.id,
+        "full_name": st.full_name,
+        "cccd": st.cccd,
+        "class_name": st.class_name,
+        "grade": st.grade,
+    }, schedule=schedule, log=log)
 
 
 @app.route("/admin/enrollment/<int:class_id>/students")

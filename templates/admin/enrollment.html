@@ -16,14 +16,9 @@
 <style>
   body { background: #F0F9FF; }
 
-  /* ── Section cards ── */
   .section-card {
-    background: #fff;
-    border-radius: 16px;
-    border: 1.5px solid #E2E8F0;
-    overflow: hidden;
-    margin-bottom: 24px;
-    box-shadow: 0 1px 6px rgba(0,0,0,.04);
+    background: #fff; border-radius: 16px; border: 1.5px solid #E2E8F0;
+    overflow: hidden; margin-bottom: 24px; box-shadow: 0 1px 6px rgba(0,0,0,.04);
   }
   .section-card-header {
     padding: 13px 20px;
@@ -32,14 +27,30 @@
     display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
     font-size: .9rem; font-weight: 700; color: #065f46;
   }
-  .section-card-body { padding: 20px; }
+
+  /* ── Page tabs ── */
+  .page-tabs {
+    display: flex; gap: 4px; background: #fff;
+    border: 1.5px solid #E2E8F0; border-radius: 12px;
+    padding: 4px; margin-bottom: 20px; width: fit-content;
+  }
+  .page-tab-btn {
+    padding: 8px 20px; border-radius: 9px; border: none;
+    font-size: .84rem; font-weight: 600; cursor: pointer;
+    background: transparent; color: #64748B; transition: all .15s;
+  }
+  .page-tab-btn.active {
+    background: linear-gradient(135deg, #065f46, #10B981);
+    color: #fff; box-shadow: 0 2px 8px rgba(16,185,129,.25);
+  }
 
   /* ── Tables ── */
-  .admin-table { font-size: .82rem; min-width: 680px; }
+  .admin-table { font-size: .82rem; min-width: 600px; }
   .admin-table thead th {
     background: linear-gradient(135deg, #065f46 0%, #10B981 60%, #34D399 100%);
     color: #fff; font-weight: 700; border: none;
     padding: 11px 10px; white-space: nowrap;
+    position: sticky; top: 0; z-index: 2;
   }
   .admin-table tbody tr { transition: background .15s; }
   .admin-table tbody tr:hover { background: rgba(209,250,229,.35); }
@@ -51,21 +62,97 @@
   .count-badge-red    { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
   .count-badge {
     display: inline-block; min-width: 52px; text-align: center;
-    padding: 4px 10px; border-radius: 20px;
-    font-size: .78rem; font-weight: 700;
-    transition: background .3s, color .3s;
+    padding: 4px 10px; border-radius: 20px; font-size: .78rem; font-weight: 700; transition: background .3s, color .3s;
   }
 
-  /* ── Responsive ── */
-  .table-responsive-admin { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-responsive-admin { overflow-x: auto; overflow-y: auto; -webkit-overflow-scrolling: touch; max-height: 540px; }
+
+  /* ── Toolbar search ── */
+  .search-box-sm { position: relative; display: flex; align-items: center; }
+  .search-box-sm i { position: absolute; left: 10px; color: #94A3B8; font-size: .82rem; pointer-events: none; }
+  .search-box-sm input {
+    padding: 6px 10px 6px 30px; border: 1.5px solid #E2E8F0; border-radius: 8px;
+    font-size: .8rem; background: #F8FAFC; width: 200px;
+  }
+  .search-box-sm input:focus { outline: none; border-color: #10B981; background: #fff; }
+
+  /* ── Student pane: grade tabs ── */
+  .enroll-grade-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .enroll-grade-btn {
+    padding: 5px 14px; border-radius: 8px; border: 1.5px solid #E2E8F0;
+    font-size: .78rem; font-weight: 700; cursor: pointer; background: #F8FAFC; color: #64748B;
+    transition: all .12s;
+  }
+  .enroll-grade-btn.active-all,
+  .enroll-grade-btn[data-grade="all"].active { background: #0F172A; border-color: #0F172A; color: #fff; }
+  .enroll-grade-btn[data-grade="10"] { color: #1D4ED8; border-color: #BFDBFE; background: #EFF6FF; }
+  .enroll-grade-btn[data-grade="10"].active { background: #2563EB; border-color: #2563EB; color: #fff; }
+  .enroll-grade-btn[data-grade="11"] { color: #6D28D9; border-color: #DDD6FE; background: #F5F3FF; }
+  .enroll-grade-btn[data-grade="11"].active { background: #7C3AED; border-color: #7C3AED; color: #fff; }
+  .enroll-grade-btn[data-grade="12"] { color: #065F46; border-color: #A7F3D0; background: #ECFDF5; }
+  .enroll-grade-btn[data-grade="12"].active { background: #059669; border-color: #059669; color: #fff; }
+
+  /* ── Student pane: class nav ── */
+  .enr-cls-nav {
+    width: 84px; min-width: 84px; border-right: 1.5px solid #E2E8F0;
+    background: #F8FAFC; overflow-y: auto; max-height: 480px;
+    flex-shrink: 0; padding: 8px 5px;
+  }
+  .enr-cls-grade-label {
+    font-size: .62rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+    padding: 6px 4px 3px; color: #94A3B8; line-height: 1;
+    border-top: 1px solid #E2E8F0; margin-top: 4px; display: block;
+  }
+  .enr-cls-grade-label:first-child { border-top: none; margin-top: 0; }
+  .enr-cls-btn {
+    display: block; width: 100%; text-align: center;
+    padding: 5px 4px; border-radius: 7px; border: 1.5px solid transparent;
+    font-size: .72rem; font-weight: 600; cursor: pointer;
+    transition: all .12s; word-break: break-word; line-height: 1.25; background: transparent;
+  }
+  .enr-cls-btn[data-grade="10"] { color: #1D4ED8; border-color: #BFDBFE; background: #EFF6FF; }
+  .enr-cls-btn[data-grade="10"]:hover, .enr-cls-btn[data-grade="10"].active { background: #2563EB; border-color: #2563EB; color: #fff; }
+  .enr-cls-btn[data-grade="11"] { color: #6D28D9; border-color: #DDD6FE; background: #F5F3FF; }
+  .enr-cls-btn[data-grade="11"]:hover, .enr-cls-btn[data-grade="11"].active { background: #7C3AED; border-color: #7C3AED; color: #fff; }
+  .enr-cls-btn[data-grade="12"] { color: #065F46; border-color: #A7F3D0; background: #ECFDF5; }
+  .enr-cls-btn[data-grade="12"]:hover, .enr-cls-btn[data-grade="12"].active { background: #059669; border-color: #059669; color: #fff; }
+
+  /* ── Student separator rows ── */
+  .enr-cls-sep td {
+    background: #F1F9F6 !important; font-size: .74rem; font-weight: 700;
+    color: #065F46; border-top: 2px solid #A7F3D0 !important;
+    padding: 5px 10px !important; position: sticky; top: 40px; z-index: 1;
+  }
+
+  /* ── Inner modal tabs ── */
+  .detail-tab-btn {
+    padding: 7px 18px; border: none; background: transparent;
+    font-size: .82rem; font-weight: 600; color: #64748B;
+    border-bottom: 2.5px solid transparent; cursor: pointer; transition: all .12s;
+  }
+  .detail-tab-btn.active { color: #065f46; border-bottom-color: #10B981; }
+
+  .sched-table { font-size: .8rem; width: 100%; border-collapse: collapse; }
+  .sched-table th { background: #F8FAFC; padding: 7px 10px; font-weight: 700; color: #475569; border-bottom: 1.5px solid #E2E8F0; white-space: nowrap; }
+  .sched-table td { padding: 8px 10px; border-bottom: 1px solid #F1F5F9; }
+  .sched-table tbody tr:hover { background: #F0FDF4; }
+
+  .adm-icon-btn {
+    width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 7px; border: 1.5px solid; background: transparent; cursor: pointer;
+    font-size: .82rem; transition: all .12s; padding: 0;
+  }
+  .adm-icon-btn.btn-outline-primary { color: #2563EB; border-color: #2563EB; }
+  .adm-icon-btn.btn-outline-primary:hover { background: #2563EB; color: #fff; }
 </style>
 {% endblock %}
 
 {% block content %}
-
 <div class="container pb-5">
+
   <div class="d-flex align-items-center gap-2 mb-4 pt-4">
-    <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary flex-shrink-0" style="border-radius:8px; width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; padding:0;" title="Quay lại">
+    <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+       style="border-radius:8px; width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; padding:0;" title="Quay lại">
       <i class="bi bi-arrow-left"></i>
     </a>
     <h1 style="font-size:1.1rem; font-weight:800; color:#0c4a6e; margin:0;">
@@ -73,7 +160,7 @@
     </h1>
   </div>
 
-  <!-- ── Status badge ── -->
+  <!-- Status badge -->
   <div class="mb-4 d-flex align-items-center gap-3 flex-wrap">
     <div id="enrollment-status-badge">
       {% if student_reg_open %}
@@ -89,109 +176,210 @@
       {% endif %}
     </div>
     <span class="text-muted" style="font-size:.82rem;">
-      <strong>{{ published_classes | length }}</strong> lớp đang mở cho học sinh đăng ký
+      <strong>{{ published_classes | length }}</strong> lớp · <strong>{{ student_list | length }}</strong> học sinh
     </span>
   </div>
 
-  <!-- ── Classes table ── -->
-  <div class="section-card">
-    <div class="section-card-header">
-      <i class="bi bi-table"></i>
-      <span>Danh sách lớp đã publish</span>
-      <span class="badge ms-1" style="background:#DCFCE7; color:#15803D; font-size:.72rem; font-weight:700;">
-        {{ published_classes | length }}
-      </span>
-      <span class="ms-auto text-muted d-none d-md-inline" style="font-size:.75rem; font-weight:400;">
-        <i class="bi bi-arrow-repeat me-1"></i>Cập nhật mỗi 5 giây
-      </span>
-    </div>
-    <!-- toolbar -->
-    <div style="padding:10px 16px; background:#FAFBFC; border-bottom:1.5px solid #E2E8F0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-      <button class="btn btn-sm btn-outline-success fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;"
-              data-bs-toggle="modal" data-bs-target="#modalAddClass">
-        <i class="bi bi-plus-circle"></i><span>Thêm lớp</span>
-      </button>
-      <div style="width:1px; height:20px; background:#E2E8F0;"></div>
-      <a href="{{ url_for('admin_enrollment_export') }}" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;" title="Xuất Excel kết quả">
-        <i class="bi bi-file-earmark-arrow-down"></i><span>Xuất Excel</span>
-      </a>
-      <form id="frmEnrollUpload" method="POST" action="{{ url_for('admin_enrollment_upload') }}" enctype="multipart/form-data" class="m-0">
-        <input type="file" id="uploadInput" name="file" accept=".xlsx,.xls" style="display:none;"
-               onchange="document.getElementById('frmEnrollUpload').submit()">
-      </form>
-      <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;" title="Cột yêu cầu: id, Địa điểm, Sĩ số" onclick="document.getElementById('uploadInput').click()">
-        <i class="bi bi-file-earmark-arrow-up"></i><span>Upload</span>
-      </button>
-    </div>
-    <div class="table-responsive-admin">
-      <table class="table admin-table mb-0" id="classes-table">
-        <thead>
-          <tr>
-            <th>Lớp (ID)</th>
-            <th>Giáo viên</th>
-            <th>Môn / Tổ</th>
-            <th>Khối</th>
-            <th>Thời gian</th>
-            <th>Địa điểm</th>
-            <th class="text-center">Sĩ số</th>
-            {% for col in extra_columns %}
-            <th>{{ col }}</th>
+  <!-- Page tabs -->
+  <div class="page-tabs">
+    <button class="page-tab-btn active" id="tab-classes" onclick="switchTab('classes')">
+      <i class="bi bi-table me-1"></i>Danh sách lớp
+    </button>
+    <button class="page-tab-btn" id="tab-students" onclick="switchTab('students')">
+      <i class="bi bi-people me-1"></i>Danh sách học sinh
+    </button>
+  </div>
+
+  <!-- ═══════════════ TAB: Danh sách lớp ═══════════════ -->
+  <div id="pane-classes">
+    <div class="section-card">
+      <div class="section-card-header">
+        <i class="bi bi-table"></i><span>Danh sách lớp</span>
+        <span class="badge ms-1" style="background:#DCFCE7; color:#15803D; font-size:.72rem; font-weight:700;">{{ published_classes | length }}</span>
+        <span class="ms-auto text-muted d-none d-md-inline" style="font-size:.75rem; font-weight:400;">
+          <i class="bi bi-arrow-repeat me-1"></i>Cập nhật mỗi 5 giây
+        </span>
+      </div>
+      <div style="padding:10px 16px; background:#FAFBFC; border-bottom:1.5px solid #E2E8F0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-sm btn-outline-success fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;"
+                data-bs-toggle="modal" data-bs-target="#modalAddClass">
+          <i class="bi bi-plus-circle"></i><span>Thêm lớp</span>
+        </button>
+        <div style="width:1px; height:20px; background:#E2E8F0;"></div>
+        <a href="{{ url_for('admin_enrollment_export') }}" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;">
+          <i class="bi bi-file-earmark-arrow-down"></i><span>Xuất Excel</span>
+        </a>
+        <form id="frmEnrollUpload" method="POST" action="{{ url_for('admin_enrollment_upload') }}" enctype="multipart/form-data" class="m-0">
+          <input type="file" id="uploadInput" name="file" accept=".xlsx,.xls" style="display:none;"
+                 onchange="document.getElementById('frmEnrollUpload').submit()">
+        </form>
+        <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;"
+                onclick="document.getElementById('uploadInput').click()">
+          <i class="bi bi-file-earmark-arrow-up"></i><span>Upload</span>
+        </button>
+        <div class="ms-auto search-box-sm">
+          <i class="bi bi-search"></i>
+          <input type="search" id="searchClasses" placeholder="Tìm giáo viên, môn, phòng…" oninput="filterClasses()">
+        </div>
+      </div>
+      <div class="table-responsive-admin">
+        <table class="table admin-table mb-0" id="classes-table">
+          <thead>
+            <tr>
+              <th>Lớp (ID)</th>
+              <th>Giáo viên</th>
+              <th>Môn / Tổ</th>
+              <th>Khối</th>
+              <th>Thời gian</th>
+              <th>Địa điểm</th>
+              <th class="text-center">Sĩ số</th>
+              {% for col in extra_columns %}<th>{{ col }}</th>{% endfor %}
+              <th class="text-center" style="width:80px;">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cls in published_classes %}
+            <tr data-search-cls="{{ cls.teacher_name|lower }} {{ cls.subject_group|lower }} {{ cls.location|lower if cls.location else '' }}">
+              <td><code style="font-size:.78rem; background:#F1F5F9; padding:2px 6px; border-radius:4px;">#{{ cls.id }}</code></td>
+              <td class="fw-semibold" style="white-space:nowrap;">{{ cls.teacher_name | name_fmt }}</td>
+              <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">{{ cls.subject_group }}</span></td>
+              <td><span class="badge bg-light text-dark border" style="font-size:.72rem;">Khối {{ cls.grade }}</span></td>
+              <td style="white-space:nowrap; font-size:.78rem;">
+                {{ day_name(cls.day_of_week) }} - {{ "Sáng" if cls.session_type == "morning" else "Chiều" }} - Tiết {{ cls.start_session }}{% if cls.duration > 1 %}–{{ cls.start_session + cls.duration - 1 }}{% endif %}
+              </td>
+              <td style="font-size:.8rem;">{{ cls.location or '—' }}</td>
+              <td class="text-center">
+                {% set cnt = enrollment_counts.get(cls.id, 0) %}
+                {% set mx  = cls.max_capacity or 0 %}
+                {% set full = mx and cnt >= mx %}
+                <span class="count-badge {% if full %}count-badge-red{% elif cnt >= 30 %}count-badge-yellow{% else %}count-badge-green{% endif %}"
+                      data-class-id="{{ cls.id }}" id="count-{{ cls.id }}" data-max="{{ mx or '' }}"
+                      {% if full %}title="Lớp đã đầy"{% elif cnt >= 30 %}title="Lớp đông"{% endif %}>
+                  {% if cnt >= 30 and not full %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>{% endif %}
+                  {{ cnt }}{% if mx %}/{{ mx }}{% endif %}
+                </span>
+              </td>
+              {% for col in extra_columns %}<td style="font-size:.78rem;">{{ (cls.extra_data or {}).get(col, '—') }}</td>{% endfor %}
+              <td class="text-center">
+                <button class="btn btn-sm btn-outline-primary fw-semibold" style="font-size:.72rem; border-radius:6px;" onclick="viewStudents({{ cls.id }})">
+                  <i class="bi bi-people me-1"></i>Xem HS
+                </button>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 8 + (extra_columns | length) }}" class="text-center text-muted py-5">
+              <i class="bi bi-calendar-x" style="font-size:2rem; display:block; margin-bottom:8px;"></i>Chưa có lớp nào được publish
+            </td></tr>
             {% endfor %}
-            <th class="text-center" style="width:80px;">Thao tác</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for cls in published_classes %}
-          <tr>
-            <td>
-              <code style="font-size:.78rem; background:#F1F5F9; padding:2px 6px; border-radius:4px;">#{{ cls.id }}</code>
-            </td>
-            <td class="fw-semibold" style="white-space:nowrap;">{{ cls.teacher_name }}</td>
-            <td>
-              <span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">
-                {{ cls.subject_group }}
-              </span>
-            </td>
-            <td>
-              <span class="badge bg-light text-dark border" style="font-size:.72rem;">Khối {{ cls.grade }}</span>
-            </td>
-            <td style="white-space:nowrap; font-size:.78rem;">
-              {{ day_name(cls.day_of_week) if day_name is callable else cls.day_of_week }} -
-              {{ "Sáng" if cls.session_type == "morning" else "Chiều" }} -
-              Tiết {{ cls.start_session }}{% if cls.duration > 1 %}–{{ cls.start_session + cls.duration - 1 }}{% endif %}
-            </td>
-            <td style="font-size:.8rem;">{{ cls.location or '—' }}</td>
-            <td class="text-center">
-              {% set cnt = enrollment_counts.get(cls.id, 0) %}
-              {% set mx  = cls.max_capacity or 0 %}
-              {% set full = mx and cnt >= mx %}
-              <span class="count-badge {% if full %}count-badge-red{% elif cnt >= 30 %}count-badge-yellow{% else %}count-badge-green{% endif %}"
-                    data-class-id="{{ cls.id }}" id="count-{{ cls.id }}" data-max="{{ mx or '' }}"
-                    {% if full %}title="Lớp đã đầy"{% elif cnt >= 30 %}title="Lớp đông, có thể khó tiếp thu"{% endif %}>
-                {% if cnt >= 30 and not full %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>{% endif %}
-                {{ cnt }}{% if mx %}/{{ mx }}{% endif %}
-              </span>
-            </td>
-            {% for col in extra_columns %}
-            <td style="font-size:.78rem;">{{ (cls.extra_data or {}).get(col, '—') }}</td>
-            {% endfor %}
-            <td class="text-center">
-              <button class="btn btn-sm btn-outline-primary fw-semibold" style="font-size:.72rem; border-radius:6px;"
-                      onclick="viewStudents({{ cls.id }})">
-                <i class="bi bi-people me-1"></i>Xem HS
-              </button>
-            </td>
-          </tr>
-          {% else %}
-          <tr>
-            <td colspan="{{ 8 + (extra_columns | length) }}" class="text-center text-muted py-5">
-              <i class="bi bi-calendar-x" style="font-size:2rem; display:block; margin-bottom:8px;"></i>
-              Chưa có lớp nào được publish
-            </td>
-          </tr>
+          </tbody>
+        </table>
+        <div id="emptyClasses" style="display:none; text-align:center; padding:40px; color:#94A3B8; font-size:.85rem;">
+          <i class="bi bi-search" style="font-size:1.4rem; display:block; margin-bottom:6px;"></i>Không tìm thấy lớp phù hợp
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ TAB: Danh sách học sinh ═══════════════ -->
+  <div id="pane-students" style="display:none;">
+    <div class="section-card">
+      <div class="section-card-header">
+        <i class="bi bi-people"></i><span>Danh sách học sinh</span>
+        <span class="badge ms-1" style="background:#DCFCE7; color:#15803D; font-size:.72rem; font-weight:700;">{{ student_list | length }}</span>
+      </div>
+
+      <!-- Toolbar: grade tabs + search -->
+      <div style="padding:10px 16px; background:#FAFBFC; border-bottom:1.5px solid #E2E8F0; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <div class="enroll-grade-tabs">
+          <button class="enroll-grade-btn active-all" data-grade="all" onclick="setEnrGrade('all', this)">Tất cả</button>
+          {% for g in [10, 11, 12] %}
+          {% if student_list | selectattr('grade', 'equalto', g) | list %}
+          <button class="enroll-grade-btn" data-grade="{{ g }}" onclick="setEnrGrade('{{ g }}', this)">K{{ g }}</button>
+          {% endif %}
           {% endfor %}
-        </tbody>
-      </table>
+        </div>
+        <div class="ms-auto search-box-sm">
+          <i class="bi bi-search"></i>
+          <input type="search" id="searchEnrollStudent" placeholder="Tìm tên, mã đăng nhập…" oninput="filterEnrStudents()">
+        </div>
+      </div>
+
+      <!-- Body: class nav + table -->
+      <div style="display:flex; align-items:stretch;">
+        <!-- Left class nav -->
+        <div id="enrClsNav" class="enr-cls-nav">
+          {% for g in [10, 11, 12] %}
+          {% set g_classes = student_list | selectattr('grade', 'equalto', g) | map(attribute='class_name') | unique | sort | list %}
+          {% if g_classes %}
+          <span class="enr-cls-grade-label" data-grade="{{ g }}">K{{ g }}</span>
+          {% for cls in g_classes %}
+          <button class="enr-cls-btn" data-grade="{{ g }}" data-class="{{ cls }}" onclick="jumpEnrClass('{{ cls }}')">{{ cls }}</button>
+          {% endfor %}
+          {% endif %}
+          {% endfor %}
+        </div>
+
+        <!-- Table -->
+        <div style="flex:1; min-width:0;">
+          <div class="table-responsive-admin" id="enrStudentTableContainer">
+            <table class="table admin-table mb-0" id="enr-student-table" style="min-width:520px;">
+              <thead>
+                <tr>
+                  <th style="width:38px;">STT</th>
+                  <th>Họ tên</th>
+                  <th>Mã đăng nhập</th>
+                  <th>Lớp</th>
+                  <th class="text-center">Số môn ĐK</th>
+                  <th class="text-center">TK</th>
+                  <th class="text-center" style="width:60px;">Chi tiết</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% if student_list %}
+                {% set ns = namespace(prev_class='', idx=0) %}
+                {% for s in student_list | sort(attribute='full_name') | sort(attribute='class_name') | sort(attribute='grade') %}
+                {% if s.class_name != ns.prev_class %}
+                {% set ns.prev_class = s.class_name %}
+                <tr class="enr-cls-sep" data-class-sep="{{ s.class_name }}" data-grade="{{ s.grade }}">
+                  <td colspan="7">
+                    <i class="bi bi-collection me-1" style="color:#059669;"></i>
+                    <strong>{{ s.class_name }}</strong>
+                    <span class="enr-sep-count ms-2" style="font-weight:400; color:#94A3B8; font-size:.72rem;"></span>
+                  </td>
+                </tr>
+                {% endif %}
+                {% set ns.idx = ns.idx + 1 %}
+                <tr data-search="{{ s.full_name|lower }} {{ s.cccd }}" data-grade="{{ s.grade }}" data-class="{{ s.class_name }}">
+                  <td class="text-muted" style="font-size:.72rem;">{{ ns.idx }}</td>
+                  <td class="fw-semibold" style="font-size:.82rem;">{{ s.full_name | name_fmt }}</td>
+                  <td><code style="font-size:.76rem;">{{ s.cccd }}</code></td>
+                  <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.7rem;">{{ s.class_name }}</span></td>
+                  <td class="text-center">
+                    {% set ec = enrolled_counts_by_student.get(s.id, 0) %}
+                    <span class="badge rounded-pill {% if ec == 0 %}bg-light text-muted border{% elif ec >= 5 %}bg-success{% else %}bg-warning text-dark{% endif %}" style="font-size:.7rem; min-width:28px;">{{ ec }}</span>
+                  </td>
+                  <td class="text-center">
+                    {% if s.is_first_login %}<span class="badge bg-secondary" style="font-size:.68rem;">—</span>
+                    {% else %}<span class="badge bg-success" style="font-size:.68rem;">✓</span>{% endif %}
+                  </td>
+                  <td class="text-center">
+                    <button class="adm-icon-btn btn-outline-primary"
+                            onclick="viewStudentDetail({{ s.id }}, '{{ s.full_name | name_fmt | e }}')"
+                            title="Xem chi tiết"><i class="bi bi-eye"></i></button>
+                  </td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr><td colspan="7" class="text-center text-muted py-5">Chưa có học sinh nào</td></tr>
+                {% endif %}
+              </tbody>
+            </table>
+            <div id="emptyEnrStudent" style="display:none; text-align:center; padding:40px; color:#94A3B8; font-size:.85rem;">
+              <i class="bi bi-search" style="font-size:1.4rem; display:block; margin-bottom:6px;"></i>Không tìm thấy học sinh
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -199,24 +387,53 @@
 
 
 <!-- ══════════════════════════════════════════
-     MODAL: Xem học sinh đã đăng ký
+     MODAL: Xem học sinh của lớp
 ══════════════════════════════════════════ -->
-<div class="modal fade" id="modalStudents" tabindex="-1" aria-labelledby="modalStudentsLabel" aria-hidden="true">
+<div class="modal fade" id="modalStudents" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
     <div class="modal-content" style="border-radius:16px; overflow:hidden;">
       <div class="modal-header" style="background:linear-gradient(135deg,#065f46,#10B981); border:none;">
-        <h5 class="modal-title fw-bold text-white" id="modalStudentsLabel">
-          <i class="bi bi-people-fill me-2"></i>Danh sách học sinh đăng ký
-        </h5>
+        <h5 class="modal-title fw-bold text-white"><i class="bi bi-people-fill me-2"></i>Học sinh đăng ký lớp</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body p-0">
         <div id="students-modal-body" class="p-3">
-          <div class="text-center py-4 text-muted">
-            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
-            Đang tải...
-          </div>
+          <div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Đang tải...</div>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     MODAL: Chi tiết học sinh (TKB + Log)
+══════════════════════════════════════════ -->
+<div class="modal fade" id="modalStudentDetail" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#065f46,#10B981); border:none; padding:14px 20px;">
+        <div>
+          <h5 class="modal-title fw-bold text-white mb-0" id="detailModalName">Chi tiết học sinh</h5>
+          <div id="detailModalSub" style="font-size:.78rem; color:rgba(255,255,255,.75); margin-top:2px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <!-- inner tabs -->
+      <div style="background:#fff; border-bottom:1.5px solid #E2E8F0; display:flex; padding:0 16px;">
+        <button class="detail-tab-btn active" id="dtab-sched" onclick="switchDetailTab('sched')">
+          <i class="bi bi-calendar3 me-1"></i>Thời khoá biểu
+        </button>
+        <button class="detail-tab-btn" id="dtab-log" onclick="switchDetailTab('log')">
+          <i class="bi bi-clock-history me-1"></i>Lịch sử đăng ký
+        </button>
+      </div>
+      <div class="modal-body p-0" style="min-height:200px;">
+        <div id="detail-loading" class="text-center py-5 text-muted">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Đang tải...
+        </div>
+        <div id="dpane-sched" style="display:none;"><div id="dpane-sched-body" class="p-3"></div></div>
+        <div id="dpane-log"   style="display:none;"><div id="dpane-log-body"   class="p-3"></div></div>
       </div>
     </div>
   </div>
@@ -226,13 +443,11 @@
 <!-- ══════════════════════════════════════════
      MODAL: Thêm lớp thủ công
 ══════════════════════════════════════════ -->
-<div class="modal fade" id="modalAddClass" tabindex="-1" aria-labelledby="modalAddClassLabel" aria-hidden="true">
+<div class="modal fade" id="modalAddClass" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content" style="border-radius:16px; overflow:hidden;">
       <div class="modal-header" style="background:linear-gradient(135deg,#065f46,#10B981); border:none;">
-        <h5 class="modal-title fw-bold text-white" id="modalAddClassLabel">
-          <i class="bi bi-plus-circle me-2"></i>Thêm lớp thủ công
-        </h5>
+        <h5 class="modal-title fw-bold text-white"><i class="bi bi-plus-circle me-2"></i>Thêm lớp thủ công</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST" action="{{ url_for('admin_enrollment_add') }}" id="add-class-form">
@@ -242,38 +457,28 @@
               <label class="form-label fw-semibold" style="font-size:.85rem;">Giáo viên <span class="text-danger">*</span></label>
               <select name="teacher_id" class="form-select custom-input" required>
                 <option value="">-- Chọn giáo viên --</option>
-                {% for t in all_teachers %}
-                <option value="{{ t.id }}">{{ t.full_name | name_fmt }} ({{ t.subject_group }})</option>
-                {% endfor %}
+                {% for t in all_teachers %}<option value="{{ t.id }}">{{ t.full_name | name_fmt }} ({{ t.subject_group }})</option>{% endfor %}
               </select>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold" style="font-size:.85rem;">Khối <span class="text-danger">*</span></label>
               <select name="grade" class="form-select custom-input" required>
                 <option value="">-- Chọn khối --</option>
-                <option value="10">Khối 10</option>
-                <option value="11">Khối 11</option>
-                <option value="12">Khối 12</option>
+                <option value="10">Khối 10</option><option value="11">Khối 11</option><option value="12">Khối 12</option>
               </select>
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold" style="font-size:.85rem;">Thứ <span class="text-danger">*</span></label>
               <select name="day_of_week" class="form-select custom-input" required>
                 <option value="">-- Chọn --</option>
-                <option value="2">Thứ 2</option>
-                <option value="3">Thứ 3</option>
-                <option value="4">Thứ 4</option>
-                <option value="5">Thứ 5</option>
-                <option value="6">Thứ 6</option>
-                <option value="7">Thứ 7</option>
+                <option value="2">Thứ 2</option><option value="3">Thứ 3</option><option value="4">Thứ 4</option>
+                <option value="5">Thứ 5</option><option value="6">Thứ 6</option><option value="7">Thứ 7</option>
               </select>
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold" style="font-size:.85rem;">Buổi <span class="text-danger">*</span></label>
               <select name="session_type" class="form-select custom-input" required>
-                <option value="">-- Chọn --</option>
-                <option value="morning">Sáng</option>
-                <option value="afternoon">Chiều</option>
+                <option value="">-- Chọn --</option><option value="morning">Sáng</option><option value="afternoon">Chiều</option>
               </select>
             </div>
             <div class="col-md-2">
@@ -293,8 +498,6 @@
               <input type="number" name="max_capacity" class="form-control custom-input" min="1" placeholder="45">
             </div>
           </div>
-
-          <!-- Extra data rows -->
           <div class="mt-3">
             <div class="d-flex align-items-center justify-content-between mb-2">
               <label class="form-label fw-semibold mb-0" style="font-size:.85rem;">Dữ liệu bổ sung</label>
@@ -320,93 +523,208 @@
 
 {% block scripts %}
 <script>
-/* ── Count polling every 5s ── */
-const ALL_CLASS_IDS = {{ published_classes | map(attribute='id') | list | tojson }};
-
-function refreshCounts() {
-  if (!ALL_CLASS_IDS.length) return;
-  fetch('/api/class-counts')
-    .then(r => r.json())
-    .then(data => {
-      ALL_CLASS_IDS.forEach(id => {
-        const el = document.getElementById('count-' + id);
-        if (!el) return;
-        const raw = data[String(id)] ?? data[id] ?? 0;
-        const cnt = (raw && typeof raw === 'object') ? (raw.count ?? 0) : Number(raw);
-        const max = el.dataset.max ? parseInt(el.dataset.max) : null;
-        const full = max && cnt >= max;
-        el.className = 'count-badge ' + (
-          full        ? 'count-badge-red' :
-          cnt >= 30   ? 'count-badge-yellow' :
-                        'count-badge-green'
-        );
-        el.title = full ? 'Lớp đã đầy' : cnt >= 30 ? 'Lớp đông, có thể khó tiếp thu' : '';
-        el.innerHTML = (cnt >= 30 && !full
-          ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>' : '') +
-          (max ? cnt + '/' + max : String(cnt));
-      });
-    })
-    .catch(() => {});
+/* ── Page tabs ── */
+function switchTab(tab) {
+  document.getElementById('pane-classes').style.display  = tab === 'classes'  ? '' : 'none';
+  document.getElementById('pane-students').style.display = tab === 'students' ? '' : 'none';
+  document.getElementById('tab-classes').classList.toggle('active',  tab === 'classes');
+  document.getElementById('tab-students').classList.toggle('active', tab === 'students');
 }
 
+/* ── Class list search ── */
+function filterClasses() {
+  const q = document.getElementById('searchClasses').value.trim().toLowerCase();
+  const rows = document.querySelectorAll('#classes-table tbody tr[data-search-cls]');
+  let visible = 0;
+  rows.forEach(tr => {
+    const match = !q || tr.dataset.searchCls.includes(q);
+    tr.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  document.getElementById('emptyClasses').style.display = (q && visible === 0) ? 'block' : 'none';
+}
+
+/* ── Count polling every 5s ── */
+const ALL_CLASS_IDS = {{ published_classes | map(attribute='id') | list | tojson }};
+function refreshCounts() {
+  if (!ALL_CLASS_IDS.length) return;
+  fetch('/api/class-counts').then(r => r.json()).then(data => {
+    ALL_CLASS_IDS.forEach(id => {
+      const el = document.getElementById('count-' + id);
+      if (!el) return;
+      const raw = data[String(id)] ?? data[id] ?? 0;
+      const cnt = (raw && typeof raw === 'object') ? (raw.count ?? 0) : Number(raw);
+      const max = el.dataset.max ? parseInt(el.dataset.max) : null;
+      const full = max && cnt >= max;
+      el.className = 'count-badge ' + (full ? 'count-badge-red' : cnt >= 30 ? 'count-badge-yellow' : 'count-badge-green');
+      el.title = full ? 'Lớp đã đầy' : cnt >= 30 ? 'Lớp đông' : '';
+      el.innerHTML = (cnt >= 30 && !full ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>' : '') + (max ? cnt + '/' + max : String(cnt));
+    });
+  }).catch(() => {});
+}
 setInterval(refreshCounts, 5000);
 
-/* Store max capacities for polling update */
-document.querySelectorAll('.count-badge[data-class-id]').forEach(el => {
-  const text = el.textContent.trim();
-  if (text.includes('/')) {
-    el.dataset.max = text.split('/')[1].trim();
-  }
+/* ── Student pane: grade filter ── */
+let _enrGrade = 'all';
+function setEnrGrade(grade, btn) {
+  _enrGrade = String(grade);
+  document.querySelectorAll('.enroll-grade-btn').forEach(b => b.classList.remove('active', 'active-all'));
+  if (btn) btn.classList.add(grade === 'all' ? 'active-all' : 'active');
+  document.getElementById('searchEnrollStudent').value = '';
+  filterEnrStudents();
+}
+
+function filterEnrStudents() {
+  const q = document.getElementById('searchEnrollStudent').value.trim().toLowerCase();
+  const tbody = document.querySelector('#enr-student-table tbody');
+  const visibleByClass = {};
+
+  tbody.querySelectorAll('tr[data-search]').forEach(tr => {
+    const gradeOk  = _enrGrade === 'all' || tr.dataset.grade === _enrGrade;
+    const searchOk = !q || tr.dataset.search.includes(q);
+    const show = gradeOk && searchOk;
+    tr.style.display = show ? '' : 'none';
+    if (show) visibleByClass[tr.dataset.class] = (visibleByClass[tr.dataset.class] || 0) + 1;
+  });
+
+  tbody.querySelectorAll('tr.enr-cls-sep').forEach(tr => {
+    const cls = tr.dataset.classSep;
+    const gradeOk = _enrGrade === 'all' || tr.dataset.grade === _enrGrade;
+    const cnt = visibleByClass[cls] || 0;
+    const show = gradeOk && cnt > 0;
+    tr.style.display = show ? '' : 'none';
+    const badge = tr.querySelector('.enr-sep-count');
+    if (badge) badge.textContent = cnt + ' học sinh';
+  });
+
+  document.querySelectorAll('#enrClsNav .enr-cls-btn, #enrClsNav .enr-cls-grade-label').forEach(el => {
+    el.style.display = (_enrGrade === 'all' || el.dataset.grade === _enrGrade) ? '' : 'none';
+  });
+
+  const total = Object.values(visibleByClass).reduce((a, b) => a + b, 0);
+  document.getElementById('emptyEnrStudent').style.display = (total === 0) ? 'block' : 'none';
+}
+
+/* ── Student pane: jump to class ── */
+function jumpEnrClass(cls) {
+  document.querySelectorAll('#enrClsNav .enr-cls-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.class === cls);
+  });
+  const container = document.getElementById('enrStudentTableContainer');
+  const target = document.querySelector(`tr[data-class-sep="${CSS.escape(cls)}"]`);
+  if (!container || !target) return;
+  const headerH = container.querySelector('thead')?.offsetHeight || 40;
+  const rowTop = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+  container.scrollTo({ top: rowTop - headerH, behavior: 'smooth' });
+  const navBtn = document.querySelector(`#enrClsNav button[data-class="${CSS.escape(cls)}"]`);
+  if (navBtn) navBtn.scrollIntoView({ block: 'nearest' });
+}
+
+/* ── Student pane: scrollspy ── */
+document.addEventListener('DOMContentLoaded', () => {
+  filterEnrStudents();
+  const con = document.getElementById('enrStudentTableContainer');
+  if (con) con.addEventListener('scroll', () => {
+    const headerH = (con.querySelector('thead')?.offsetHeight || 40) + 4;
+    const seps = con.querySelectorAll('tr.enr-cls-sep:not([style*="display: none"])');
+    let active = null;
+    seps.forEach(sep => { if (sep.offsetTop - con.scrollTop <= headerH + 8) active = sep.dataset.classSep; });
+    if (active) {
+      document.querySelectorAll('#enrClsNav .enr-cls-btn').forEach(b => b.classList.toggle('active', b.dataset.class === active));
+      const nb = document.querySelector(`#enrClsNav button[data-class="${CSS.escape(active)}"]`);
+      if (nb) nb.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, { passive: true });
 });
 
-/* ── View students modal ── */
+/* ── View students of a class (modal) ── */
 function viewStudents(classId) {
   const body = document.getElementById('students-modal-body');
   body.innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Đang tải...</div>';
-  const modal = new bootstrap.Modal(document.getElementById('modalStudents'));
-  modal.show();
-
+  new bootstrap.Modal(document.getElementById('modalStudents')).show();
   fetch('/admin/enrollment/' + classId + '/students')
-    .then(r => r.json())
-    .then(data => {
+    .then(r => r.json()).then(data => {
       if (!data.students || !data.students.length) {
-        body.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-people" style="font-size:2rem; display:block; margin-bottom:8px;"></i>Chưa có học sinh nào đăng ký lớp này.</div>';
+        body.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-people" style="font-size:2rem;display:block;margin-bottom:8px;"></i>Chưa có học sinh đăng ký.</div>';
         return;
       }
-      let html = `
-        <div class="d-flex align-items-center justify-content-between px-3 pt-3 pb-2">
-          <span class="text-muted" style="font-size:.82rem;">Tổng: <strong>${data.students.length}</strong> học sinh</span>
-        </div>
-        <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
-          <table class="table table-sm mb-0" style="font-size:.82rem;">
-            <thead style="position:sticky; top:0; z-index:2;">
-              <tr style="background:#F1F5F9;">
-                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none; width:44px;">STT</th>
-                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Họ tên</th>
-                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Mã đăng nhập</th>
-                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Khối</th>
-                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none;">Lớp</th>
-                <th style="padding:8px 12px; font-weight:700; color:#475569; border:none; white-space:nowrap;">Truy cập gần nhất</th>
-              </tr>
-            </thead>
-            <tbody>
-      `;
+      let html = `<div class="px-3 pt-3 pb-2 text-muted" style="font-size:.82rem;">Tổng: <strong>${data.students.length}</strong> học sinh</div>
+        <div style="overflow:auto;max-height:420px;"><table class="sched-table">
+        <thead><tr><th style="width:38px;">STT</th><th>Họ tên</th><th>Mã đăng nhập</th><th>Khối</th><th>Lớp</th><th>Truy cập gần nhất</th></tr></thead><tbody>`;
       data.students.forEach((s, i) => {
-        html += `<tr>
-          <td style="padding:8px 12px; color:#94A3B8;">${i+1}</td>
-          <td style="padding:8px 12px; font-weight:600;">${s.full_name.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase())}</td>
-          <td style="padding:8px 12px;"><code style="font-size:.75rem;">${s.cccd}</code></td>
-          <td style="padding:8px 12px;">${s.grade ?? '—'}</td>
-          <td style="padding:8px 12px;">${s.class_name ?? '—'}</td>
-          <td style="padding:8px 12px; font-size:.75rem; color:#64748B; white-space:nowrap;">${s.last_seen_at ?? '—'}</td>
-        </tr>`;
+        const name = s.full_name.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold">${name}</td><td><code style="font-size:.75rem;">${s.cccd}</code></td><td>${s.grade??'—'}</td><td>${s.class_name??'—'}</td><td style="font-size:.75rem;color:#64748B;white-space:nowrap;">${s.last_seen_at??'—'}</td></tr>`;
       });
-      html += '</tbody></table></div>';
-      body.innerHTML = html;
-    })
-    .catch(() => {
-      body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải danh sách học sinh.</div>';
+      body.innerHTML = html + '</tbody></table></div>';
+    }).catch(() => { body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải danh sách.</div>'; });
+}
+
+/* ── Student detail modal ── */
+let _detailData = null;
+function viewStudentDetail(studentId, studentName) {
+  _detailData = null;
+  document.getElementById('detailModalName').textContent = studentName;
+  document.getElementById('detailModalSub').textContent = '';
+  document.getElementById('detail-loading').style.display = 'block';
+  document.getElementById('dpane-sched').style.display = 'none';
+  document.getElementById('dpane-log').style.display = 'none';
+  document.getElementById('dtab-sched').classList.add('active');
+  document.getElementById('dtab-log').classList.remove('active');
+  new bootstrap.Modal(document.getElementById('modalStudentDetail')).show();
+  fetch('/api/admin/student-schedule/' + studentId)
+    .then(r => r.json()).then(data => {
+      document.getElementById('detail-loading').style.display = 'none';
+      if (!data.ok) { showDetailError(); return; }
+      _detailData = data;
+      document.getElementById('detailModalSub').textContent = `Lớp ${data.student.class_name} · Khối ${data.student.grade} · ${data.student.cccd}`;
+      renderDetailPane('sched');
+      document.getElementById('dpane-sched').style.display = 'block';
+    }).catch(() => { document.getElementById('detail-loading').style.display = 'none'; showDetailError(); });
+}
+function showDetailError() {
+  document.getElementById('dpane-sched').style.display = 'block';
+  document.getElementById('dpane-sched-body').innerHTML = '<p class="text-danger p-3">Lỗi tải dữ liệu.</p>';
+}
+function switchDetailTab(tab) {
+  document.getElementById('dtab-sched').classList.toggle('active', tab === 'sched');
+  document.getElementById('dtab-log').classList.toggle('active',   tab === 'log');
+  document.getElementById('dpane-sched').style.display = tab === 'sched' ? 'block' : 'none';
+  document.getElementById('dpane-log').style.display   = tab === 'log'   ? 'block' : 'none';
+  if (_detailData) renderDetailPane(tab);
+}
+function renderDetailPane(tab) {
+  if (!_detailData) return;
+  const items = tab === 'sched' ? _detailData.schedule : _detailData.log;
+  const bodyEl = document.getElementById(tab === 'sched' ? 'dpane-sched-body' : 'dpane-log-body');
+  if (!items.length) {
+    bodyEl.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-calendar-x" style="font-size:1.8rem;display:block;margin-bottom:8px;"></i>' +
+      (tab === 'sched' ? 'Học sinh chưa đăng ký môn nào.' : 'Chưa có lịch sử đăng ký.') + '</div>';
+    return;
+  }
+  let html;
+  if (tab === 'sched') {
+    html = `<p class="text-muted mb-2" style="font-size:.78rem;"><strong>${items.length}</strong> môn đã đăng ký</p>
+      <table class="sched-table"><thead><tr><th>Môn học</th><th>Giáo viên</th><th>Ngày</th><th>Buổi</th><th>Tiết</th><th>Phòng</th></tr></thead><tbody>`;
+    items.forEach(c => {
+      html += `<tr><td class="fw-semibold">${c.subject}</td>
+        <td>${c.teacher.toLowerCase().replace(/\b\w/g,ch=>ch.toUpperCase())}</td>
+        <td style="white-space:nowrap;">${c.day_label}</td>
+        <td><span class="badge ${c.session_type==='morning'?'bg-warning text-dark':'bg-primary'}" style="font-size:.68rem;">${c.session_label}</span></td>
+        <td>${c.start_session}${c.end_session>c.start_session?'–'+c.end_session:''}</td>
+        <td style="color:#64748B;">${c.location}</td></tr>`;
     });
+  } else {
+    html = `<p class="text-muted mb-2" style="font-size:.78rem;"><strong>${items.length}</strong> lượt đăng ký, mới nhất trước</p>
+      <table class="sched-table"><thead><tr><th style="width:34px;">#</th><th>Môn học</th><th>Giáo viên</th><th>Thời gian học</th><th>Phòng</th><th style="white-space:nowrap;">Đăng ký lúc</th></tr></thead><tbody>`;
+    items.forEach((c, i) => {
+      html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold">${c.subject}</td>
+        <td>${c.teacher.toLowerCase().replace(/\b\w/g,ch=>ch.toUpperCase())}</td>
+        <td style="white-space:nowrap;font-size:.78rem;">${c.day_label} ${c.session_label} T${c.start_session}${c.end_session>c.start_session?'–'+c.end_session:''}</td>
+        <td style="color:#64748B;">${c.location}</td>
+        <td style="font-size:.74rem;color:#64748B;white-space:nowrap;">${c.enrolled_at??'—'}</td></tr>`;
+    });
+  }
+  bodyEl.innerHTML = html + '</tbody></table>';
 }
 
 /* ── Toggle student reg ── */
@@ -414,49 +732,28 @@ function toggleStudentReg() {
   const btn   = document.getElementById('btn-toggle-enrollment');
   const badge = document.getElementById('enrollment-status-badge');
   btn.disabled = true;
-
-  fetch('{{ url_for("admin_enrollment_toggle") }}', {
-    method: 'POST',
-    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-  })
-  .then(r => r.json())
-  .then(data => {
+  fetch('{{ url_for("admin_enrollment_toggle") }}', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'} })
+  .then(r => r.json()).then(data => {
     const open = data.open;
-    btn.innerHTML = open
-      ? '<i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng đăng ký</span>'
-      : '<i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở đăng ký</span>';
+    btn.innerHTML = open ? '<i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng đăng ký</span>' : '<i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở đăng ký</span>';
     badge.innerHTML = open
-      ? `<span class="badge fs-6 px-3 py-2" style="background:#10B981; border-radius:10px;">
-           <i class="bi bi-circle-fill me-1" style="font-size:.5rem; vertical-align:middle;"></i>
-           Giai đoạn 2 đang mở — HS đăng ký môn học
-         </span>`
-      : `<span class="badge fs-6 px-3 py-2 bg-secondary" style="border-radius:10px;">
-           <i class="bi bi-lock-fill me-1" style="font-size:.75rem;"></i>
-           Giai đoạn 2 đã đóng — HS chỉ xem
-         </span>`;
+      ? `<span class="badge fs-6 px-3 py-2" style="background:#10B981;border-radius:10px;"><i class="bi bi-circle-fill me-1" style="font-size:.5rem;vertical-align:middle;"></i>Giai đoạn 2 đang mở — HS đăng ký môn học</span>`
+      : `<span class="badge fs-6 px-3 py-2 bg-secondary" style="border-radius:10px;"><i class="bi bi-lock-fill me-1" style="font-size:.75rem;"></i>Giai đoạn 2 đã đóng — HS chỉ xem</span>`;
   })
   .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
   .finally(() => { btn.disabled = false; });
 }
 
-/* ── Extra data rows in add-class modal ── */
+/* ── Extra rows ── */
 let extraRowCount = 0;
 function addExtraRow() {
   extraRowCount++;
-  const container = document.getElementById('extra-rows');
   const row = document.createElement('div');
-  row.className = 'input-group mb-2';
-  row.id = 'extra-row-' + extraRowCount;
-  row.innerHTML = `
-    <input type="text"  name="extra_key[]"   class="form-control form-control-sm" placeholder="Tên cột (VD: Phòng học)" style="border-radius:8px 0 0 8px;">
-    <input type="text"  name="extra_value[]" class="form-control form-control-sm" placeholder="Giá trị">
-    <button type="button" class="btn btn-outline-danger btn-sm" style="border-radius:0 8px 8px 0;"
-            onclick="document.getElementById('extra-row-${extraRowCount}').remove()">
-      <i class="bi bi-x"></i>
-    </button>
-  `;
-  container.appendChild(row);
+  row.className = 'input-group mb-2'; row.id = 'extra-row-' + extraRowCount;
+  row.innerHTML = `<input type="text" name="extra_key[]" class="form-control form-control-sm" placeholder="Tên cột" style="border-radius:8px 0 0 8px;">
+    <input type="text" name="extra_value[]" class="form-control form-control-sm" placeholder="Giá trị">
+    <button type="button" class="btn btn-outline-danger btn-sm" style="border-radius:0 8px 8px 0;" onclick="document.getElementById('extra-row-${extraRowCount}').remove()"><i class="bi bi-x"></i></button>`;
+  document.getElementById('extra-rows').appendChild(row);
 }
-
 </script>
 {% endblock %}

@@ -405,7 +405,9 @@
 
       /* Build greeting */
       const title = data.title || (_role === 'teacher' ? 'Thầy/Cô' : 'Học sinh');
-      greetEl.textContent = title + ' ' + (data.full_name || full_name);
+      const _rawName = (data.full_name || full_name);
+      const _fmtName = _rawName.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+      greetEl.textContent = title + ' ' + _fmtName;
 
       /* Configure step-2 fields */
       const pwRules = document.getElementById('pw-rules');

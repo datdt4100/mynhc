@@ -76,7 +76,7 @@
     <div class="flex-grow-1" style="min-width:0;font-size:.8rem;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
       <i class="bi bi-person-badge me-1" style="color:#7C3AED;"></i>
       <span class="fw-semibold" style="color:#3B0764;">Quản trị lớp học</span>
-      <span class="mx-1">·</span>{{ session['full_name'] }}
+      <span class="mx-1">·</span>{{ session['full_name'] | name_fmt }}
     </div>
     <form method="post" action="{{ url_for('logout') }}" style="display:inline;flex-shrink:0;">
       <button type="submit" class="btn btn-sm btn-outline-danger"
@@ -470,12 +470,13 @@ function _filterTeachers(q) {
   }
   list.innerHTML = matches.map(t => {
     const isSel = String(t.id) === String(selId);
-    return `<div onclick="_selectTeacher(${t.id},'${_gesc(t.full_name)}','${_gesc(t.subject_group||'')}')"
+    const _dn = t.full_name.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
+    return `<div onclick="_selectTeacher(${t.id},'${_gesc(_dn)}','${_gesc(t.subject_group||'')}')"
                  id="topt_${t.id}"
                  style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #E2E8F0;font-size:.8rem;
                         background:${isSel?'#EFF6FF':'#fff'};"
                  onmouseenter="this.style.background='#EFF6FF'" onmouseleave="this.style.background='${isSel?'#EFF6FF':'#fff'}'">
-              <div class="fw-semibold" style="color:${isSel?'#0369A1':'#0c4a6e'};">${_gesc(t.full_name)}${isSel?' <i class="bi bi-check2" style="color:#0EA5E9;"></i>':''}</div>
+              <div class="fw-semibold" style="color:${isSel?'#0369A1':'#0c4a6e'};">${_gesc(_dn)}${isSel?' <i class="bi bi-check2" style="color:#0EA5E9;"></i>':''}</div>
               <div style="font-size:.7rem;color:#64748B;">${_gesc(t.subject_group||'')}</div>
             </div>`;
   }).join('');

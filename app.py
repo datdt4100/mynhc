@@ -426,6 +426,13 @@ _VN_TZ = timezone(timedelta(hours=7))
 def now_vn() -> str:
     return datetime.now(_VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
+@app.template_filter("name_fmt")
+def _name_fmt(s):
+    """Title-case a Vietnamese name for display (lowercase first, then title)."""
+    if not s:
+        return ""
+    return s.strip().lower().title()
+
 # Allowed special chars (excludes ' " ` ; \ which are DB-dangerous)
 _PW_ALLOWED_SPECIALS = r"!@#$%^&*()\-_+=\[\]{}|<>,.?/~"
 _PW_PATTERN = re.compile(r'^[A-Za-z0-9' + _PW_ALLOWED_SPECIALS + r']+$')

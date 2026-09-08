@@ -243,7 +243,7 @@
               <select name="teacher_id" class="form-select custom-input" required>
                 <option value="">-- Chọn giáo viên --</option>
                 {% for t in all_teachers %}
-                <option value="{{ t.id }}">{{ t.full_name }} ({{ t.subject_group }})</option>
+                <option value="{{ t.id }}">{{ t.full_name | name_fmt }} ({{ t.subject_group }})</option>
                 {% endfor %}
               </select>
             </div>
@@ -394,7 +394,7 @@ function viewStudents(classId) {
       data.students.forEach((s, i) => {
         html += `<tr>
           <td style="padding:8px 12px; color:#94A3B8;">${i+1}</td>
-          <td style="padding:8px 12px; font-weight:600;">${s.full_name}</td>
+          <td style="padding:8px 12px; font-weight:600;">${s.full_name.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase())}</td>
           <td style="padding:8px 12px;"><code style="font-size:.75rem;">${s.cccd}</code></td>
           <td style="padding:8px 12px;">${s.grade ?? '—'}</td>
           <td style="padding:8px 12px;">${s.class_name ?? '—'}</td>

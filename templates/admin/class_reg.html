@@ -167,7 +167,7 @@
             <td class="text-muted" style="font-size:.75rem;">{{ loop.index }}</td>
             <td class="fw-semibold">
               <i class="bi bi-chevron-right me-1 expand-icon" id="icon-{{ teacher.id }}" style="font-size:.75rem; color:#94A3B8;"></i>
-              {{ teacher.full_name }}
+              {{ teacher.full_name | name_fmt }}
             </td>
             <td style="font-size:.78rem;">
               {% if teacher.email %}
@@ -448,13 +448,15 @@ function _atRenderTeachers(list) {
     return;
   }
   el.style.border = '1.5px solid #FDE68A';
-  el.innerHTML = list.map(t => `
-    <div onclick="_atSelectTeacher(${t.id},'${t.full_name.replace(/'/g,"&#39;")}','${t.subject_group.replace(/'/g,"&#39;")}')"
+  el.innerHTML = list.map(t => {
+    const disp = t.full_name.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    return `<div onclick="_atSelectTeacher(${t.id},'${disp.replace(/'/g,"&#39;")}','${t.subject_group.replace(/'/g,"&#39;")}')"
          style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #FEF3C7;font-size:.8rem;transition:background .1s;"
          onmouseenter="this.style.background='#FEF9C3'" onmouseleave="this.style.background='#fff'">
-      <span class="fw-semibold">${t.full_name}</span>
+      <span class="fw-semibold">${disp}</span>
       ${t.subject_group ? '<span style="margin-left:6px;font-size:.7rem;color:#0369A1;background:#EFF6FF;padding:1px 6px;border-radius:5px;">'+t.subject_group+'</span>' : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function _atFilterTeachers(q) {

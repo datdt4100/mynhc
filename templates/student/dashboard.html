@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Đăng ký môn học – {{ student.full_name }}{% endblock %}
+{% block title %}Đăng ký môn học – {{ student.full_name | name_fmt }}{% endblock %}
 
 {# ── Top-bar: student identity + logout ─────────────────────── #}
 {% block header_right %}
@@ -8,7 +8,7 @@
   <span class="text-white small fw-semibold d-none d-sm-inline"
         style="background:rgba(255,255,255,.12); padding:5px 12px; border-radius:20px;">
     <i class="bi bi-person-circle me-1"></i>
-    {{ student.full_name }} &ndash; Lớp {{ student.class_name }}
+    {{ student.full_name | name_fmt }} &ndash; Lớp {{ student.class_name }}
   </span>
   <form method="POST" action="{{ url_for('logout') }}" class="m-0">
     <button type="submit" class="btn p-0 border-0"
@@ -25,7 +25,7 @@
   <i class="bi bi-pencil-square me-2" style="font-size:.85em;"></i>Đăng ký môn học
 </h1>
 <p class="hero-sub">
-  {{ student.full_name }} &ndash; Lớp {{ student.class_name }}
+  {{ student.full_name | name_fmt }} &ndash; Lớp {{ student.class_name }}
 </p>
 {% endblock %}
 

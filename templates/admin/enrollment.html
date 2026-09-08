@@ -32,7 +32,7 @@
   .page-tabs {
     display: flex; gap: 4px; background: #fff;
     border: 1.5px solid #E2E8F0; border-radius: 12px;
-    padding: 4px; margin-bottom: 20px; width: fit-content;
+    padding: 4px; width: fit-content;
   }
   .page-tab-btn {
     padding: 8px 20px; border-radius: 9px; border: none;
@@ -181,12 +181,18 @@
   </div>
 
   <!-- Page tabs -->
-  <div class="page-tabs">
-    <button class="page-tab-btn active" id="tab-classes" onclick="switchTab('classes')">
-      <i class="bi bi-table me-1"></i>Danh sách lớp
-    </button>
-    <button class="page-tab-btn" id="tab-students" onclick="switchTab('students')">
-      <i class="bi bi-people me-1"></i>Danh sách học sinh
+  <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+    <div class="page-tabs" style="margin-bottom:0;">
+      <button class="page-tab-btn active" id="tab-classes" onclick="switchTab('classes')">
+        <i class="bi bi-table me-1"></i>Danh sách lớp
+      </button>
+      <button class="page-tab-btn" id="tab-students" onclick="switchTab('students')">
+        <i class="bi bi-people me-1"></i>Danh sách học sinh
+      </button>
+    </div>
+    <button class="btn btn-sm btn-outline-danger fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;"
+            onclick="confirmDeleteAll()">
+      <i class="bi bi-trash3"></i><span>Xóa tất cả đăng ký</span>
     </button>
   </div>
 
@@ -726,6 +732,22 @@ function toggleStudentReg() {
   })
   .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
   .finally(() => { btn.disabled = false; });
+}
+
+/* ── Delete all enrollments ── */
+function confirmDeleteAll() {
+  if (!confirm('Xóa TOÀN BỘ đăng ký của tất cả học sinh?\n\nHành động này không thể hoàn tác.')) return;
+  fetch('{{ url_for("admin_enrollment_delete_all") }}', {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      showToast('Đã xóa toàn bộ đăng ký (' + d.deleted + ' bản ghi).', 'success');
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      showToast('Có lỗi xảy ra.', 'error');
+    }
+  }).catch(() => showToast('Có lỗi xảy ra.', 'error'));
 }
 
 /* ── Extra rows ── */

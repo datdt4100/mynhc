@@ -4104,6 +4104,15 @@ def admin_enrollment_export():
     )
 
 
+@app.route("/admin/enrollment/delete-all", methods=["POST"])
+@admin_required
+def admin_enrollment_delete_all():
+    with engine.begin() as conn:
+        result = conn.execute(delete(enrollments))
+        deleted = result.rowcount
+    return jsonify(ok=True, deleted=deleted)
+
+
 @app.route("/admin/enrollment/toggle", methods=["POST"])
 @admin_required
 def admin_enrollment_toggle():

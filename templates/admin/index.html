@@ -175,6 +175,8 @@
   @media (max-width: 640px) {
     .table-responsive-admin { max-height: 320px; }
     .admin-table td, .admin-table th { padding: 7px 6px; font-size: .73rem; }
+    #classNav { max-height: 320px; width: 72px; min-width: 72px; }
+    #classNav .cls-nav-btn { font-size: .66rem; padding: 3px 5px; }
   }
 
   /* ── Section toolbar ── */
@@ -752,9 +754,31 @@
       {% endfor %}
     </div>
 
-    {# ── Table ── #}
-    <div class="section-card-body p-0">
-      <div class="table-responsive-admin">
+    {# ── Table + Left class nav ── #}
+    <div class="section-card-body p-0" style="display:flex;align-items:stretch;">
+
+      {# Left class nav #}
+      <div id="classNav" style="width:84px;min-width:84px;border-right:1.5px solid #E2E8F0;background:#F8FAFC;overflow-y:auto;max-height:420px;flex-shrink:0;">
+        {% for g in [10, 11, 12] %}
+        {% set g_classes = student_list | selectattr('grade', 'equalto', g) | map(attribute='class_name') | unique | sort | list %}
+        {% if g_classes %}
+        <div class="cls-nav-grade" data-grade="{{ g }}" style="padding:6px 6px 2px;font-size:.6rem;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:.04em;line-height:1;">K{{ g }}</div>
+        {% for cls in g_classes %}
+        <button class="cls-nav-btn" data-grade="{{ g }}" data-class="{{ cls }}"
+                onclick="jumpToClass('{{ cls }}')"
+                style="display:block;width:100%;text-align:left;padding:4px 8px;border:none;background:none;font-size:.74rem;color:#475569;cursor:pointer;border-radius:0;transition:background .12s,color .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                onmouseenter="this.style.background='#EFF6FF';this.style.color='#1D4ED8';"
+                onmouseleave="if(!this.classList.contains('active')){this.style.background='';this.style.color='#475569';}">
+          {{ cls }}
+        </button>
+        {% endfor %}
+        {% endif %}
+        {% endfor %}
+      </div>
+
+      {# Table #}
+      <div style="flex:1;min-width:0;">
+      <div class="table-responsive-admin" id="studentTableContainer">
         <table id="tableStudent" class="table table-hover admin-table mb-0">
           <thead>
             <tr>
@@ -827,6 +851,7 @@
           Không tìm thấy học sinh phù hợp
         </div>
       </div>
+      </div>{# /flex table col #}
     </div>
   </div>
 
@@ -1181,8 +1206,32 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('fileStudent').addEventListener('change', function() {
     if (this.files[0]) showLoading('Đang tải lên danh sách học sinh...');
   });
-  // Init separator row counts on load
+  // Init separator row counts + left nav on load
   filterStudents();
+
+  // Scrollspy: highlight left nav as user scrolls the table
+  const tblCon = document.getElementById('studentTableContainer');
+  if (tblCon) {
+    tblCon.addEventListener('scroll', function() {
+      const headerH = (tblCon.querySelector('thead')?.offsetHeight || 40) + 4;
+      const seps = tblCon.querySelectorAll('tr.class-sep-row:not([style*="display: none"])');
+      let active = null;
+      seps.forEach(sep => {
+        if (sep.offsetTop - tblCon.scrollTop <= headerH + 8) active = sep.dataset.classSep;
+      });
+      if (active) {
+        document.querySelectorAll('#classNav .cls-nav-btn').forEach(b => {
+          const on = b.dataset.class === active;
+          b.classList.toggle('active', on);
+          b.style.background = on ? '#DBEAFE' : '';
+          b.style.color      = on ? '#1D4ED8' : '#475569';
+          b.style.fontWeight = on ? '700' : '';
+        });
+        const navBtn = document.querySelector(`#classNav button[data-class="${CSS.escape(active)}"]`);
+        if (navBtn) navBtn.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }, { passive: true });
+  }
 });
 
 function toggleReg(type) {
@@ -1357,7 +1406,6 @@ function filterStudents() {
   const tbody = document.querySelector('#tableStudent tbody');
   const visibleByClass = {};
 
-  // First pass: student rows
   tbody.querySelectorAll('tr[data-search]').forEach(tr => {
     const grade = tr.dataset.grade;
     const cls   = tr.dataset.class;
@@ -1368,7 +1416,6 @@ function filterStudents() {
     if (show) visibleByClass[cls] = (visibleByClass[cls] || 0) + 1;
   });
 
-  // Second pass: separator rows + update count badge
   tbody.querySelectorAll('tr.class-sep-row').forEach(tr => {
     const cls   = tr.dataset.classSep;
     const grade = tr.dataset.grade;
@@ -1380,9 +1427,43 @@ function filterStudents() {
     if (badge) badge.textContent = cnt + ' học sinh';
   });
 
+  // Sync left nav: show/hide class buttons based on grade filter
+  document.querySelectorAll('#classNav .cls-nav-btn').forEach(btn => {
+    const gradeOk = _activeGrade === 'all' || btn.dataset.grade === _activeGrade;
+    btn.style.display = gradeOk ? 'block' : 'none';
+  });
+  document.querySelectorAll('#classNav .cls-nav-grade').forEach(el => {
+    const gradeOk = _activeGrade === 'all' || el.dataset.grade === _activeGrade;
+    el.style.display = gradeOk ? 'block' : 'none';
+  });
+
   const empty = document.getElementById('emptyStudent');
   const totalVisible = Object.values(visibleByClass).reduce((a, b) => a + b, 0);
   if (empty) empty.style.display = (totalVisible === 0) ? 'block' : 'none';
+}
+
+function jumpToClass(cls) {
+  // Highlight active in left nav
+  document.querySelectorAll('#classNav .cls-nav-btn').forEach(b => {
+    const active = b.dataset.class === cls;
+    b.classList.toggle('active', active);
+    b.style.background = active ? '#DBEAFE' : '';
+    b.style.color      = active ? '#1D4ED8' : '#475569';
+    b.style.fontWeight = active ? '700' : '';
+  });
+
+  // Scroll the table container to the class separator row
+  const container = document.getElementById('studentTableContainer');
+  const target = document.querySelector(`tr[data-class-sep="${CSS.escape(cls)}"]`);
+  if (!container || !target) return;
+  // offsetTop of row is relative to table; table is child of container
+  const rowTop = target.offsetTop;
+  const headerH = container.querySelector('thead')?.offsetHeight || 40;
+  container.scrollTo({ top: rowTop - headerH - 2, behavior: 'smooth' });
+
+  // Also scroll left nav to keep the active button visible
+  const navBtn = document.querySelector(`#classNav button[data-class="${CSS.escape(cls)}"]`);
+  if (navBtn) navBtn.scrollIntoView({ block: 'nearest' });
 }
 
 function copyTempPw() {

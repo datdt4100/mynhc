@@ -45,19 +45,20 @@
   </div>
   {% endblock %}
 
-  <!-- Flash messages -->
+  <!-- Toast notification area -->
+  <div id="toast-area" style="position:fixed;top:16px;right:16px;z-index:10000;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
+  <style>
+    @keyframes toast-in { from { opacity:0; transform:translateX(24px); } to { opacity:1; transform:translateX(0); } }
+  </style>
   {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
-  <div class="container mt-3">
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
     {% for category, message in messages %}
-    <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show flash-alert" role="alert">
-      <i class="bi bi-{{ 'check-circle-fill' if category == 'success' else 'exclamation-triangle-fill' }} me-2"></i>
-      {{ message | safe }}
-      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-      <div class="flash-alert-bar"></div>
-    </div>
+    showToast({{ message | tojson }}, '{{ "error" if category in ("danger","error") else "warning" if category == "warning" else "success" }}');
     {% endfor %}
-  </div>
+  });
+  </script>
   {% endif %}
   {% endwith %}
 
@@ -123,25 +124,28 @@
       _modal.show();
     };
 
-    window.showAlert = function(msg, type) {
+    window.showToast = function(msg, type, duration) {
       const cfg = {
-        error:   { bg:'#FEE2E2', icon:'<i class="bi bi-x-circle-fill" style="color:#EF4444;"></i>', title:'Có lỗi xảy ra',  btn:'btn-danger' },
-        success: { bg:'#DCFCE7', icon:'<i class="bi bi-check-circle-fill" style="color:#16A34A;"></i>', title:'Thành công', btn:'btn-success' },
-        warning: { bg:'#FEF3C7', icon:'<i class="bi bi-exclamation-triangle-fill" style="color:#D97706;"></i>', title:'Cảnh báo', btn:'btn-warning' },
-        info:    { bg:'#EFF6FF', icon:'<i class="bi bi-info-circle-fill" style="color:#0EA5E9;"></i>', title:'Thông báo', btn:'btn-primary' },
+        success: { icon:'bi-check-circle-fill', color:'#16A34A', bg:'#F0FDF4', border:'#86EFAC' },
+        error:   { icon:'bi-x-circle-fill',     color:'#EF4444', bg:'#FEF2F2', border:'#FCA5A5' },
+        warning: { icon:'bi-exclamation-triangle-fill', color:'#D97706', bg:'#FFFBEB', border:'#FCD34D' },
+        info:    { icon:'bi-info-circle-fill',   color:'#0EA5E9', bg:'#F0F9FF', border:'#BAE6FD' },
       };
-      const c = cfg[type] || cfg.info;
-      _title.textContent = c.title;
-      _msg.innerHTML = msg;
-      _icon.style.background = c.bg;
-      _icon.innerHTML = c.icon;
-      _confirm.textContent = 'Đóng';
-      _confirm.className = 'btn fw-semibold px-4 ' + c.btn;
-      _confirm.style.borderRadius = '10px';
-      _cancel.style.display = 'none';
-      _cb = null;
-      _modal.show();
+      const c = cfg[type] || cfg.success;
+      const ms = duration || (type === 'error' ? 6000 : 4000);
+      const t = document.createElement('div');
+      t.style.cssText = `background:${c.bg};border:1px solid ${c.border};border-left:4px solid ${c.color};border-radius:10px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px;max-width:340px;min-width:220px;box-shadow:0 4px 20px rgba(0,0,0,.12);pointer-events:auto;font-size:.82rem;color:#1E293B;font-weight:500;line-height:1.45;animation:toast-in .2s ease;`;
+      t.innerHTML = `<i class="bi ${c.icon}" style="color:${c.color};font-size:.95rem;flex-shrink:0;margin-top:1px;"></i><span style="flex:1;">${msg}</span><button onclick="this.closest('[data-toast]').remove()" style="background:none;border:none;cursor:pointer;color:#94A3B8;font-size:1.1rem;line-height:1;padding:0 0 0 8px;flex-shrink:0;">×</button>`;
+      t.setAttribute('data-toast','1');
+      document.getElementById('toast-area').appendChild(t);
+      setTimeout(() => {
+        t.style.transition = 'opacity .3s,transform .3s';
+        t.style.opacity = '0'; t.style.transform = 'translateX(24px)';
+        setTimeout(() => t.remove(), 300);
+      }, ms);
     };
+
+    window.showAlert = function(msg, type) { showToast(msg, type); };
 
     /* Helper for form-submit confirms */
     window.showConfirmSubmit = function(btn, opts) {
@@ -180,13 +184,6 @@
       onScroll();
     })();
 
-    /* Auto-dismiss flash alerts after 5 s */
-    document.querySelectorAll('.flash-alert').forEach(el => {
-      setTimeout(() => {
-        const bsAlert = bootstrap.Alert.getOrCreateInstance(el);
-        if (bsAlert) bsAlert.close();
-      }, 5000);
-    });
   </script>
 </body>
 </html>

@@ -1453,7 +1453,7 @@ def admin_login():
     if password == admin_pw:
         session["is_admin"] = True
         return redirect(url_for("admin_index"))
-    flash("Sai mật khẩu.")
+    flash("Sai mật khẩu.", "error")
     return redirect(url_for("admin_login_page"))
 
 
@@ -2132,7 +2132,7 @@ def admin_index():
 def admin_teachers_upload():
     file = request.files.get("file")
     if not file:
-        flash("Chưa chọn file.")
+        flash("Chưa chọn file.", "warning")
         return redirect(url_for("admin_index"))
 
     wb = openpyxl.load_workbook(file)
@@ -2142,7 +2142,7 @@ def admin_teachers_upload():
     required = ["Họ và tên", "Mã đăng nhập", "Giới tính", "Tổ bộ môn"]
     for r in required:
         if r not in headers:
-            flash(f"Thiếu cột: {r}")
+            flash(f"Thiếu cột: {r}", "error")
             return redirect(url_for("admin_index"))
 
     idx = {h: headers.index(h) for h in required}
@@ -2184,7 +2184,7 @@ def admin_teachers_upload():
             count += 1
         conn.commit()
 
-    flash(f"Đã nhập {count} giáo viên.")
+    flash(f"Đã nhập {count} giáo viên.", "success")
     return redirect(url_for("admin_index"))
 
 
@@ -2251,7 +2251,7 @@ def admin_teachers_add():
     subject_group = request.form.get("subject_group", "").strip()
 
     if not full_name or not cccd:
-        flash("Vui lòng nhập đầy đủ thông tin.")
+        flash("Vui lòng nhập đầy đủ thông tin.", "warning")
         return redirect(url_for("admin_index"))
 
     with engine.connect() as conn:
@@ -2266,7 +2266,7 @@ def admin_teachers_add():
                     subject_group=subject_group,
                 )
             )
-            flash("Đã cập nhật giáo viên.")
+            flash("Đã cập nhật giáo viên.", "success")
         else:
             conn.execute(
                 insert(teachers).values(
@@ -2279,7 +2279,7 @@ def admin_teachers_add():
                     is_first_login=1,
                 )
             )
-            flash("Đã thêm giáo viên.")
+            flash("Đã thêm giáo viên.", "success")
         conn.commit()
 
     return redirect(url_for("admin_index"))
@@ -2314,7 +2314,7 @@ def admin_teachers_reset(teacher_id):
         )
         conn.commit()
 
-    flash("Đã reset tài khoản giáo viên.")
+    flash("Đã reset tài khoản giáo viên.", "success")
     return redirect(url_for("admin_index"))
 
 
@@ -2384,7 +2384,7 @@ def admin_teachers_clear():
 def admin_students_upload():
     file = request.files.get("file")
     if not file:
-        flash("Chưa chọn file.")
+        flash("Chưa chọn file.", "warning")
         return redirect(url_for("admin_index"))
 
     wb = openpyxl.load_workbook(file)
@@ -2394,7 +2394,7 @@ def admin_students_upload():
     required = ["Họ và tên", "Mã đăng nhập", "Lớp", "Khối"]
     for r in required:
         if r not in headers:
-            flash(f"Thiếu cột: {r}")
+            flash(f"Thiếu cột: {r}", "error")
             return redirect(url_for("admin_index"))
 
     idx = {h: headers.index(h) for h in required}
@@ -2454,7 +2454,7 @@ def admin_students_upload():
             count += 1
         conn.commit()
 
-    flash(f"Đã nhập {count} học sinh.")
+    flash(f"Đã nhập {count} học sinh.", "success")
     return redirect(url_for("admin_index"))
 
 
@@ -2490,7 +2490,7 @@ def admin_students_add():
         grade = 0
 
     if not full_name or not cccd:
-        flash("Vui lòng nhập đầy đủ thông tin.")
+        flash("Vui lòng nhập đầy đủ thông tin.", "warning")
         return redirect(url_for("admin_index"))
 
     with engine.connect() as conn:
@@ -2505,7 +2505,7 @@ def admin_students_add():
                     grade=grade,
                 )
             )
-            flash("Đã cập nhật học sinh.")
+            flash("Đã cập nhật học sinh.", "success")
         else:
             conn.execute(
                 insert(students).values(
@@ -2515,7 +2515,7 @@ def admin_students_add():
                     grade=grade,
                 )
             )
-            flash("Đã thêm học sinh.")
+            flash("Đã thêm học sinh.", "success")
         conn.commit()
 
     return redirect(url_for("admin_index"))
@@ -2569,6 +2569,24 @@ def admin_students_delete(student_id):
         conn.execute(delete(students).where(students.c.id == student_id))
         conn.commit()
     return jsonify(ok=True)
+
+
+@app.route("/admin/students/reset-all", methods=["POST"])
+@admin_required
+def admin_students_reset_all():
+    with engine.begin() as conn:
+        conn.execute(delete(enrollments))
+        conn.execute(
+            update(students).values(
+                is_first_login=1,
+                must_change_password=0,
+                password_hash=None,
+                activated_at=None,
+                last_seen_at=None,
+            )
+        )
+    flash("Đã reset toàn bộ tài khoản học sinh.", "success")
+    return redirect(url_for("admin_index"))
 
 
 @app.route("/admin/students/clear", methods=["POST"])
@@ -3000,13 +3018,13 @@ def admin_class_reg_export():
 def admin_classes_import_rooms():
     file = request.files.get("file")
     if not file:
-        flash("Chưa chọn file.")
+        flash("Chưa chọn file.", "warning")
         return redirect(url_for("admin_class_reg"))
     wb = openpyxl.load_workbook(file)
     ws = wb.active
     headers = [str(cell.value).strip() if cell.value else "" for cell in ws[1]]
     if "id" not in headers or "Địa điểm" not in headers or "Sĩ số" not in headers:
-        flash("File thiếu cột: cần có 'id', 'Địa điểm', 'Sĩ số'.")
+        flash("File thiếu cột: cần có 'id', 'Địa điểm', 'Sĩ số'.", "error")
         return redirect(url_for("admin_class_reg"))
     count = 0
     with engine.connect() as conn:
@@ -3029,7 +3047,7 @@ def admin_classes_import_rooms():
             )
             count += 1
         conn.commit()
-    flash(f"Đã cập nhật phòng học cho {count} lớp.")
+    flash(f"Đã cập nhật phòng học cho {count} lớp.", "success")
     return redirect(url_for("admin_class_reg"))
 
 
@@ -3801,7 +3819,7 @@ def admin_enrollment():
 def admin_enrollment_upload():
     file = request.files.get("file")
     if not file:
-        flash("Chưa chọn file.")
+        flash("Chưa chọn file.", "warning")
         return redirect(url_for("admin_enrollment"))
 
     wb = openpyxl.load_workbook(file)
@@ -3811,7 +3829,7 @@ def admin_enrollment_upload():
     required = ["id", "Địa điểm", "Sĩ số"]
     for r in required:
         if r not in headers:
-            flash(f"Thiếu cột: {r}")
+            flash(f"Thiếu cột: {r}", "error")
             return redirect(url_for("admin_enrollment"))
 
     extra_cols = [h for h in headers if h not in required and h]
@@ -3849,7 +3867,7 @@ def admin_enrollment_upload():
             count += 1
         conn.commit()
 
-    flash(f"Đã cập nhật {count} lớp và mở đăng ký cho học sinh.")
+    flash(f"Đã cập nhật {count} lớp và mở đăng ký cho học sinh.", "success")
     return redirect(url_for("admin_enrollment"))
 
 

@@ -807,6 +807,12 @@
         <i class="bi bi-search"></i>
         <input type="search" id="searchStudent" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterStudents()">
       </div>
+      <form method="POST" action="{{ url_for('admin_students_reset_all') }}" class="mb-0">
+        <button type="button" class="btn btn-sm btn-outline-warning fw-semibold" style="border-radius:8px; font-size:.78rem;"
+                onclick="showConfirmSubmit(this,{title:'Reset tất cả tài khoản học sinh?',msg:'Toàn bộ học sinh sẽ về trạng thái <strong>chưa kích hoạt</strong> và mất đăng ký môn học.',confirmText:'Reset tất cả',confirmClass:'btn-warning'})">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Reset tất cả
+        </button>
+      </form>
       <form method="POST" action="{{ url_for('admin_students_clear') }}" class="mb-0">
         <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
                 onclick="showConfirmSubmit(this,{title:'Xóa toàn bộ học sinh?',msg:'Hành động này sẽ xóa <strong>toàn bộ danh sách học sinh</strong> và không thể hoàn tác.',confirmText:'Xóa tất cả',confirmClass:'btn-danger'})">

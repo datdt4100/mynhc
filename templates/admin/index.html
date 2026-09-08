@@ -191,8 +191,8 @@
     padding: 5px 4px; border-radius: 7px;
     border: 1.5px solid transparent;
     font-size: .72rem; font-weight: 600; cursor: pointer;
-    transition: all .12s; white-space: nowrap;
-    overflow: hidden; text-overflow: ellipsis;
+    transition: all .12s; white-space: normal;
+    word-break: break-word; line-height: 1.25;
     background: transparent;
   }
   /* K10 = blue */
@@ -218,6 +218,12 @@
   .cls-nav-btn[data-grade="12"]:hover,
   .cls-nav-btn[data-grade="12"].active {
     background: #059669; border-color: #059669; color: #fff;
+  }
+
+  /* teacher subject-group nav active state */
+  .tcn-btn.active {
+    box-shadow: 0 0 0 2.5px currentColor;
+    font-weight: 800;
   }
 
   @media (max-width: 640px) {
@@ -627,14 +633,23 @@
   <!-- ════════════════════════════════════════
        TEACHER SECTION
   ════════════════════════════════════════ -->
+  {% set teacher_groups = teacher_list | map(attribute='subject_group') | unique | sort | list %}
+  {% set _tc_palette = [
+    ('2563EB','EFF6FF','BFDBFE'),
+    ('059669','ECFDF5','A7F3D0'),
+    ('D97706','FFFBEB','FDE68A'),
+    ('7C3AED','F5F3FF','DDD6FE'),
+    ('DC2626','FEF2F2','FCA5A5'),
+    ('0369A1','E0F2FE','BAE6FD'),
+  ] %}
   <div class="section-card">
     <div class="section-card-header">
       <i class="bi bi-person-badge"></i>
       <span>Danh sách giáo viên</span>
       <span class="badge rounded-pill ms-1" style="background:#EFF6FF; color:#0369A1; font-size:.72rem; font-weight:700;">{{ teacher_list | length }}</span>
     </div>
+
     <div class="section-toolbar">
-      <!-- Upload -->
       <form id="frmUploadTeacher" method="POST" action="{{ url_for('admin_teachers_upload') }}" enctype="multipart/form-data" class="d-contents">
         <input type="file" id="fileTeacher" name="file" accept=".xlsx,.xls" style="display:none;" onchange="document.getElementById('frmUploadTeacher').submit()">
       </form>
@@ -643,7 +658,7 @@
         <i class="bi bi-upload me-1"></i>Tải lên
       </button>
       <a href="{{ url_for('admin_teachers_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px; font-size:.78rem;">
-        <i class="bi bi-download me-1"></i>Tải file mẫu
+        <i class="bi bi-download me-1"></i>File mẫu
       </a>
       <a href="{{ url_for('admin_teachers_export') }}" class="btn btn-sm fw-semibold"
          style="border-radius:8px; font-size:.78rem; background:#F0FDF4; border:1px solid #86EFAC; color:#15803D;">
@@ -656,7 +671,7 @@
       </button>
       <div class="search-box ms-auto">
         <i class="bi bi-search"></i>
-        <input type="search" id="searchTeacher" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterTable('teacher')">
+        <input type="search" id="searchTeacher" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterTeachers()">
       </div>
       <form method="POST" action="{{ url_for('admin_teachers_clear') }}" class="mb-0">
         <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
@@ -665,85 +680,105 @@
         </button>
       </form>
     </div>
-    <div class="section-card-body p-0">
-      <div class="table-responsive-admin">
+
+    <div class="section-card-body p-0" style="display:flex;align-items:stretch;">
+
+      {# Left subject-group nav #}
+      <div id="teacherNav" style="width:100px;min-width:100px;border-right:1.5px solid #E2E8F0;background:#F8FAFC;overflow-y:auto;max-height:420px;flex-shrink:0;padding:8px 6px;display:flex;flex-direction:column;gap:4px;">
+        {% for grp in teacher_groups %}
+        {% set col = _tc_palette[loop.index0 % (_tc_palette | length)] %}
+        <button class="tcn-btn" data-group="{{ grp }}" onclick="jumpToTeacherGroup('{{ grp | e }}')"
+                style="display:block;width:100%;text-align:center;padding:6px 4px;
+                       border-radius:8px;border:1.5px solid #{{ col[2] }};
+                       background:#{{ col[1] }};color:#{{ col[0] }};
+                       font-size:.72rem;font-weight:700;cursor:pointer;
+                       line-height:1.3;transition:all .12s;word-break:break-word;">
+          {{ grp }}
+        </button>
+        {% endfor %}
+      </div>
+
+      {# Table #}
+      <div style="flex:1;min-width:0;">
+      <div class="table-responsive-admin" id="teacherTableContainer">
         <table id="tableTeacher" class="table table-hover admin-table mb-0">
           <thead>
             <tr>
-              <th style="width:44px;">STT</th>
+              <th style="width:38px;">STT</th>
               <th>Họ tên</th>
               <th>Mã đăng nhập</th>
-              <th>Giới tính</th>
-              <th>Tổ bộ môn</th>
               <th>Email</th>
-              <th>Trạng thái TK</th>
-              <th style="white-space:nowrap;">Thời gian xác thực</th>
-              <th style="width:110px;">Thao tác</th>
+              <th>Trạng thái</th>
+              <th style="width:100px;">Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            {% for t in teacher_list %}
-            <tr data-search="{{ t.full_name|lower }} {{ t.cccd }}">
-              <td class="text-muted" style="font-size:.75rem;">{{ loop.index }}</td>
-              <td class="fw-semibold">{{ t.full_name | name_fmt }}</td>
-              <td><code style="font-size:.78rem;">{{ t.cccd }}</code></td>
-              <td>{{ t.gender }}</td>
-              <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">{{ t.subject_group }}</span></td>
+            {% if teacher_list %}
+            {% set ns = namespace(prev_group='', idx=0) %}
+            {% for t in teacher_list | sort(attribute='full_name') | sort(attribute='subject_group') %}
+            {% if t.subject_group != ns.prev_group %}
+            {% set ns.prev_group = t.subject_group %}
+            {% set col = _tc_palette[(teacher_groups.index(t.subject_group)) % (_tc_palette | length)] %}
+            <tr class="tcn-sep-row" data-group-sep="{{ t.subject_group }}"
+                style="background:#{{ col[1] }} !important; position:sticky; top:40px; z-index:1;">
+              <td colspan="6" style="padding:5px 10px !important; font-size:.74rem; font-weight:700;
+                                     color:#{{ col[0] }}; border-top:2px solid #{{ col[2] }} !important;">
+                <i class="bi bi-collection me-1"></i>Tổ {{ t.subject_group }}
+                <span class="tcn-sep-count ms-2" style="font-weight:400;color:#94A3B8;font-size:.7rem;"></span>
+              </td>
+            </tr>
+            {% endif %}
+            {% set ns.idx = ns.idx + 1 %}
+            <tr data-search="{{ t.full_name|lower }} {{ t.cccd }}" data-group="{{ t.subject_group }}">
+              <td class="text-muted" style="font-size:.72rem;">{{ ns.idx }}</td>
+              <td class="fw-semibold" style="font-size:.82rem;">{{ t.full_name | name_fmt }}</td>
+              <td><code style="font-size:.76rem;">{{ t.cccd }}</code></td>
               <td style="font-size:.78rem;">
                 {% if t.email %}
-                  <a href="mailto:{{ t.email }}" class="text-primary text-decoration-none">{{ t.email }}</a>
-                {% else %}
-                  <span class="text-muted">—</span>
-                {% endif %}
+                  <a href="mailto:{{ t.email }}" class="text-primary text-decoration-none" style="font-size:.77rem;">{{ t.email }}</a>
+                {% else %}<span class="text-muted">—</span>{% endif %}
               </td>
               <td>
                 {% if t.is_first_login %}
-                  <span class="badge bg-secondary">Chưa kích hoạt</span>
+                  <span class="badge bg-secondary" style="font-size:.7rem;">Chưa kích hoạt</span>
                 {% else %}
-                  <span class="badge bg-success">Đã kích hoạt</span>
+                  <span class="badge bg-success" style="font-size:.7rem;">Đã kích hoạt</span>
                 {% endif %}
-              </td>
-              <td style="font-size:.75rem; color:#475569; white-space:nowrap;">
-                {{ t.activated_at or '—' }}
               </td>
               <td>
                 <div class="d-flex gap-1 align-items-center">
                   {% if not t.is_first_login %}
                   <button type="button" class="adm-icon-btn btn-outline-info"
                           onclick="resetPassword({{ t.id }}, '{{ t.full_name | name_fmt | e }}', 'teacher')"
-                          title="Khôi phục mật khẩu">
-                    <i class="bi bi-key"></i>
-                  </button>
+                          title="Khôi phục mật khẩu"><i class="bi bi-key"></i></button>
                   <form method="POST" action="{{ url_for('admin_teachers_reset', teacher_id=t.id) }}" class="mb-0">
                     <button type="button" class="adm-icon-btn btn-outline-warning"
                             onclick="showConfirmSubmit(this,{title:'Reset tài khoản?',msg:'Reset tài khoản giáo viên <strong>{{ t.full_name | name_fmt }}</strong>? Tài khoản sẽ về trạng thái chưa kích hoạt.',confirmText:'Reset',confirmClass:'btn-warning'})"
-                            title="Reset tài khoản">
-                      <i class="bi bi-arrow-counterclockwise"></i>
-                    </button>
+                            title="Reset tài khoản"><i class="bi bi-arrow-counterclockwise"></i></button>
                   </form>
                   {% endif %}
                   <button type="button" class="adm-icon-btn btn-outline-danger"
                           onclick="deleteAccount('teacher', {{ t.id }}, '{{ t.full_name | name_fmt | e }}')"
-                          title="Xóa giáo viên">
-                    <i class="bi bi-trash"></i>
-                  </button>
+                          title="Xóa giáo viên"><i class="bi bi-trash"></i></button>
                 </div>
               </td>
             </tr>
+            {% endfor %}
             {% else %}
             <tr>
-              <td colspan="8" class="text-center text-muted py-5">
+              <td colspan="6" class="text-center text-muted py-5">
                 <i class="bi bi-person-x" style="font-size:2rem; display:block; margin-bottom:8px;"></i>
                 Chưa có giáo viên nào
               </td>
             </tr>
-            {% endfor %}
+            {% endif %}
           </tbody>
         </table>
-        <div class="search-empty" id="emptyTeacher">
+        <div class="search-empty" id="emptyTeacher" style="display:none;">
           <i class="bi bi-search" style="font-size:1.4rem; display:block; margin-bottom:6px;"></i>
           Không tìm thấy giáo viên phù hợp
         </div>
+      </div>
       </div>
     </div>
   </div>
@@ -831,6 +866,9 @@
               <th>Họ tên</th>
               <th>Mã đăng nhập</th>
               <th>Lớp</th>
+              <th>Giới tính</th>
+              <th>Ngày sinh</th>
+              <th>Email</th>
               <th>Trạng thái</th>
               <th style="width:100px;">Thao tác</th>
             </tr>
@@ -842,7 +880,7 @@
             {% if s.class_name != ns.prev_class %}
             {% set ns.prev_class = s.class_name %}
             <tr class="class-sep-row" data-grade="{{ s.grade }}" data-class-sep="{{ s.class_name }}">
-              <td colspan="6">
+              <td colspan="9">
                 <i class="bi bi-collection me-1" style="color:#0EA5E9;"></i>
                 <strong>{{ s.class_name }}</strong>
                 <span class="sep-count" style="margin-left:8px;font-weight:400;color:#94A3B8;font-size:.72rem;"></span>
@@ -855,6 +893,19 @@
               <td class="fw-semibold" style="font-size:.82rem;">{{ s.full_name | name_fmt }}</td>
               <td><code style="font-size:.76rem;">{{ s.cccd }}</code></td>
               <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.7rem;">{{ s.class_name }}</span></td>
+              <td style="font-size:.78rem;">
+                {% if s.gender == 'Nữ' %}
+                  <span style="color:#BE185D;">Nữ</span>
+                {% elif s.gender %}
+                  <span style="color:#1E40AF;">Nam</span>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td style="font-size:.77rem; white-space:nowrap;">{{ s.dob or '—' }}</td>
+              <td style="font-size:.77rem;">
+                {% if s.email %}
+                  <a href="mailto:{{ s.email }}" class="text-primary text-decoration-none">{{ s.email }}</a>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
               <td>
                 {% if s.is_first_login %}
                   <span class="badge bg-secondary" style="font-size:.7rem;">Chưa kích hoạt</span>
@@ -883,7 +934,7 @@
             {% endfor %}
             {% else %}
             <tr>
-              <td colspan="6" class="text-center text-muted py-5">
+              <td colspan="9" class="text-center text-muted py-5">
                 <i class="bi bi-people" style="font-size:2rem; display:block; margin-bottom:8px;"></i>
                 Chưa có học sinh nào
               </td>
@@ -1253,8 +1304,9 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   // Init separator row counts + left nav on load
   filterStudents();
+  filterTeachers();
 
-  // Scrollspy: highlight left nav as user scrolls the table
+  // Scrollspy: student table
   const tblCon = document.getElementById('studentTableContainer');
   if (tblCon) {
     tblCon.addEventListener('scroll', function() {
@@ -1269,6 +1321,26 @@ document.addEventListener('DOMContentLoaded', function() {
           b.classList.toggle('active', b.dataset.class === active);
         });
         const navBtn = document.querySelector(`#classNav button[data-class="${CSS.escape(active)}"]`);
+        if (navBtn) navBtn.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }, { passive: true });
+  }
+
+  // Scrollspy: teacher table
+  const tchCon = document.getElementById('teacherTableContainer');
+  if (tchCon) {
+    tchCon.addEventListener('scroll', function() {
+      const headerH = (tchCon.querySelector('thead')?.offsetHeight || 40) + 4;
+      const seps = tchCon.querySelectorAll('tr.tcn-sep-row:not([style*="display: none"])');
+      let active = null;
+      seps.forEach(sep => {
+        if (sep.offsetTop - tchCon.scrollTop <= headerH + 8) active = sep.dataset.groupSep;
+      });
+      if (active) {
+        document.querySelectorAll('#teacherNav .tcn-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.group === active);
+        });
+        const navBtn = document.querySelector(`#teacherNav button[data-group="${CSS.escape(active)}"]`);
         if (navBtn) navBtn.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
     }, { passive: true });
@@ -1418,17 +1490,50 @@ function resetPassword(userId, userName, userType) {
   );
 }
 
-function filterTable(type) {
+function filterTeachers() {
   const q = document.getElementById('searchTeacher').value.trim().toLowerCase();
   const tbody = document.querySelector('#tableTeacher tbody');
   const empty = document.getElementById('emptyTeacher');
-  let visible = 0;
+  const visibleByGroup = {};
+
   tbody.querySelectorAll('tr[data-search]').forEach(tr => {
     const match = !q || tr.dataset.search.includes(q);
     tr.style.display = match ? '' : 'none';
-    if (match) visible++;
+    if (match) {
+      const grp = tr.dataset.group || '';
+      visibleByGroup[grp] = (visibleByGroup[grp] || 0) + 1;
+    }
   });
-  if (empty) empty.style.display = (q && visible === 0) ? 'block' : 'none';
+
+  tbody.querySelectorAll('tr.tcn-sep-row').forEach(tr => {
+    const grp = tr.dataset.groupSep || '';
+    const cnt = visibleByGroup[grp] || 0;
+    tr.style.display = cnt > 0 ? '' : 'none';
+    const badge = tr.querySelector('.tcn-sep-count');
+    if (badge) badge.textContent = cnt > 0 ? cnt + ' giáo viên' : '';
+  });
+
+  document.querySelectorAll('#teacherNav .tcn-btn').forEach(btn => {
+    const grp = btn.dataset.group || '';
+    btn.style.display = (visibleByGroup[grp] || 0) > 0 || !q ? '' : 'none';
+  });
+
+  const totalVisible = Object.values(visibleByGroup).reduce((a, b) => a + b, 0);
+  if (empty) empty.style.display = (q && totalVisible === 0) ? 'block' : 'none';
+}
+
+function jumpToTeacherGroup(grp) {
+  document.querySelectorAll('#teacherNav .tcn-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.group === grp);
+  });
+  const container = document.getElementById('teacherTableContainer');
+  const target = document.querySelector(`tr[data-group-sep="${CSS.escape(grp)}"]`);
+  if (!container || !target) return;
+  const rowTop = target.offsetTop;
+  const headerH = container.querySelector('thead')?.offsetHeight || 40;
+  container.scrollTo({ top: rowTop - headerH - 2, behavior: 'smooth' });
+  const navBtn = document.querySelector(`#teacherNav button[data-group="${CSS.escape(grp)}"]`);
+  if (navBtn) navBtn.scrollIntoView({ block: 'nearest' });
 }
 
 /* ── Student grade tabs + search ── */

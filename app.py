@@ -91,6 +91,8 @@ students = Table(
     Column("cccd", Text, unique=True, nullable=False),
     Column("class_name", Text, nullable=False),
     Column("grade", Integer, nullable=False),         # 10 / 11 / 12
+    Column("gender", Text, nullable=True),            # Nam / Nữ
+    Column("dob", Text, nullable=True),               # DD/MM/YYYY
     Column("email", Text, nullable=True),
     Column("password_hash", Text, nullable=True),
     Column("is_first_login", Integer, default=1),
@@ -175,6 +177,8 @@ def init_db():
             "ALTER TABLE teachers ADD COLUMN must_change_password INTEGER DEFAULT 0",
             "ALTER TABLE students ADD COLUMN must_change_password INTEGER DEFAULT 0",
             "ALTER TABLE students ADD COLUMN email TEXT",
+            "ALTER TABLE students ADD COLUMN gender TEXT",
+            "ALTER TABLE students ADD COLUMN dob TEXT",
             "ALTER TABLE teachers ADD COLUMN activated_at TEXT",
             "ALTER TABLE students ADD COLUMN activated_at TEXT",
             "ALTER TABLE students ADD COLUMN last_seen_at TEXT",
@@ -2394,6 +2398,11 @@ def admin_students_upload():
             return redirect(url_for("admin_index"))
 
     idx = {h: headers.index(h) for h in required}
+    opt_idx = {}
+    for opt in ["Giới tính", "Ngày sinh", "Email"]:
+        if opt in headers:
+            opt_idx[opt] = headers.index(opt)
+
     count = 0
     with engine.connect() as conn:
         for row in ws.iter_rows(min_row=2, values_only=True):
@@ -2409,6 +2418,13 @@ def admin_students_upload():
             if not full_name or not cccd:
                 continue
 
+            gender = str(row[opt_idx["Giới tính"]] or "").strip() if "Giới tính" in opt_idx else None
+            dob = str(row[opt_idx["Ngày sinh"]] or "").strip() if "Ngày sinh" in opt_idx else None
+            email = str(row[opt_idx["Email"]] or "").strip() if "Email" in opt_idx else None
+            dob = dob if dob else None
+            email = email if email else None
+            gender = gender if gender else None
+
             existing = conn.execute(
                 select(students).where(students.c.cccd == cccd)
             ).fetchone()
@@ -2418,6 +2434,9 @@ def admin_students_upload():
                         full_name=full_name,
                         class_name=class_name,
                         grade=grade,
+                        **({'gender': gender} if gender is not None else {}),
+                        **({'dob': dob} if dob is not None else {}),
+                        **({'email': email} if email is not None else {}),
                     )
                 )
             else:
@@ -2427,6 +2446,9 @@ def admin_students_upload():
                         cccd=cccd,
                         class_name=class_name,
                         grade=grade,
+                        gender=gender,
+                        dob=dob,
+                        email=email,
                     )
                 )
             count += 1
@@ -2442,8 +2464,8 @@ def admin_students_template():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Học sinh"
-    ws.append(["Họ và tên", "Mã đăng nhập", "Lớp", "Khối"])
-    ws.append(["Trần Thị B", "098765432109", "10A1", 10])
+    ws.append(["Họ và tên", "Mã đăng nhập", "Lớp", "Khối", "Giới tính", "Ngày sinh"])
+    ws.append(["Trần Thị B", "098765432109", "10A1", 10, "Nữ", "06/02/2011"])
 
     buf = io.BytesIO()
     wb.save(buf)

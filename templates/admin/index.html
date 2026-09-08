@@ -220,10 +220,16 @@
     background: #059669; border-color: #059669; color: #fff;
   }
 
-  /* teacher subject-group nav active state */
-  .tcn-btn.active {
-    box-shadow: 0 0 0 2.5px currentColor;
-    font-weight: 800;
+  /* teacher subject-group nav */
+  .tcn-btn {
+    display: block; width: 100%; text-align: center;
+    padding: 6px 4px; border-radius: 8px;
+    border: 1.5px solid #BFDBFE; background: #EFF6FF; color: #1D4ED8;
+    font-size: .72rem; font-weight: 700; cursor: pointer;
+    line-height: 1.3; transition: all .12s; word-break: break-word;
+  }
+  .tcn-btn:hover, .tcn-btn.active {
+    background: #2563EB; border-color: #2563EB; color: #fff;
   }
 
   @media (max-width: 640px) {
@@ -633,15 +639,7 @@
   <!-- ════════════════════════════════════════
        TEACHER SECTION
   ════════════════════════════════════════ -->
-  {% set teacher_groups = teacher_list | map(attribute='subject_group') | unique | sort | list %}
-  {% set _tc_palette = [
-    ('2563EB','EFF6FF','BFDBFE'),
-    ('059669','ECFDF5','A7F3D0'),
-    ('D97706','FFFBEB','FDE68A'),
-    ('7C3AED','F5F3FF','DDD6FE'),
-    ('DC2626','FEF2F2','FCA5A5'),
-    ('0369A1','E0F2FE','BAE6FD'),
-  ] %}
+  {% set teacher_groups = teacher_list | rejectattr('subject_group', 'equalto', '') | map(attribute='subject_group') | unique | sort | list %}
   <div class="section-card">
     <div class="section-card-header">
       <i class="bi bi-person-badge"></i>
@@ -686,13 +684,7 @@
       {# Left subject-group nav #}
       <div id="teacherNav" style="width:100px;min-width:100px;border-right:1.5px solid #E2E8F0;background:#F8FAFC;overflow-y:auto;max-height:420px;flex-shrink:0;padding:8px 6px;display:flex;flex-direction:column;gap:4px;">
         {% for grp in teacher_groups %}
-        {% set col = _tc_palette[loop.index0 % (_tc_palette | length)] %}
-        <button class="tcn-btn" data-group="{{ grp }}" onclick="jumpToTeacherGroup('{{ grp | e }}')"
-                style="display:block;width:100%;text-align:center;padding:6px 4px;
-                       border-radius:8px;border:1.5px solid #{{ col[2] }};
-                       background:#{{ col[1] }};color:#{{ col[0] }};
-                       font-size:.72rem;font-weight:700;cursor:pointer;
-                       line-height:1.3;transition:all .12s;word-break:break-word;">
+        <button class="tcn-btn" data-group="{{ grp }}" onclick="jumpToTeacherGroup('{{ grp | e }}')">
           {{ grp }}
         </button>
         {% endfor %}
@@ -718,15 +710,16 @@
             {% for t in teacher_list | sort(attribute='full_name') | sort(attribute='subject_group') %}
             {% if t.subject_group != ns.prev_group %}
             {% set ns.prev_group = t.subject_group %}
-            {% set col = _tc_palette[(teacher_groups.index(t.subject_group)) % (_tc_palette | length)] %}
+            {% if t.subject_group %}
             <tr class="tcn-sep-row" data-group-sep="{{ t.subject_group }}"
-                style="background:#{{ col[1] }} !important; position:sticky; top:40px; z-index:1;">
+                style="background:#EFF6FF !important; position:sticky; top:40px; z-index:1;">
               <td colspan="6" style="padding:5px 10px !important; font-size:.74rem; font-weight:700;
-                                     color:#{{ col[0] }}; border-top:2px solid #{{ col[2] }} !important;">
+                                     color:#1E40AF; border-top:2px solid #BFDBFE !important;">
                 <i class="bi bi-collection me-1"></i>Tổ {{ t.subject_group }}
                 <span class="tcn-sep-count ms-2" style="font-weight:400;color:#94A3B8;font-size:.7rem;"></span>
               </td>
             </tr>
+            {% endif %}
             {% endif %}
             {% set ns.idx = ns.idx + 1 %}
             <tr data-search="{{ t.full_name|lower }} {{ t.cccd }}" data-group="{{ t.subject_group }}">

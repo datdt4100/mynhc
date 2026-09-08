@@ -201,25 +201,14 @@
         </span>
       </div>
       <div style="padding:10px 16px; background:#FAFBFC; border-bottom:1.5px solid #E2E8F0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <button class="btn btn-sm btn-outline-success fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;"
-                data-bs-toggle="modal" data-bs-target="#modalAddClass">
-          <i class="bi bi-plus-circle"></i><span>Thêm lớp</span>
-        </button>
-        <div style="width:1px; height:20px; background:#E2E8F0;"></div>
-        <a href="{{ url_for('admin_enrollment_export') }}" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;">
-          <i class="bi bi-file-earmark-arrow-down"></i><span>Xuất Excel</span>
-        </a>
-        <form id="frmEnrollUpload" method="POST" action="{{ url_for('admin_enrollment_upload') }}" enctype="multipart/form-data" class="m-0">
-          <input type="file" id="uploadInput" name="file" accept=".xlsx,.xls" style="display:none;"
-                 onchange="document.getElementById('frmEnrollUpload').submit()">
-        </form>
-        <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;"
-                onclick="document.getElementById('uploadInput').click()">
-          <i class="bi bi-file-earmark-arrow-up"></i><span>Upload</span>
-        </button>
-        <div class="ms-auto search-box-sm">
-          <i class="bi bi-search"></i>
-          <input type="search" id="searchClasses" placeholder="Tìm giáo viên, môn, phòng…" oninput="filterClasses()">
+        <div class="ms-auto d-flex align-items-center gap-2">
+          <div class="search-box-sm">
+            <i class="bi bi-search"></i>
+            <input type="search" id="searchClasses" placeholder="Tìm giáo viên, môn, phòng…" oninput="filterClasses()">
+          </div>
+          <a href="{{ url_for('admin_enrollment_export') }}" class="btn btn-sm btn-outline-success fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem; white-space:nowrap;">
+            <i class="bi bi-file-earmark-excel"></i><span>Xuất Excel</span>
+          </a>
         </div>
       </div>
       <div class="table-responsive-admin">

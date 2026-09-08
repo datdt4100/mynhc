@@ -3935,6 +3935,29 @@ def admin_enrollment_add():
 @app.route("/admin/enrollment/export")
 @admin_required
 def admin_enrollment_export():
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    thin = Side(style="thin", color="CBD5E1")
+    bdr  = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    def hdr_cell(ws, row, col, val, bg="065F46", fg="FFFFFF", sz=10, bold=True, align="center"):
+        c = ws.cell(row=row, column=col, value=val)
+        c.font      = Font(bold=bold, color=fg, size=sz)
+        c.fill      = PatternFill("solid", fgColor=bg)
+        c.alignment = Alignment(horizontal=align, vertical="center", wrap_text=True)
+        c.border    = bdr
+        return c
+
+    def data_cell(ws, row, col, val, align="left", bold=False, color="000000", sz=10, fill_color=None):
+        c = ws.cell(row=row, column=col, value=val)
+        c.font      = Font(bold=bold, color=color, size=sz)
+        c.alignment = Alignment(horizontal=align, vertical="center")
+        c.border    = bdr
+        if fill_color:
+            c.fill = PatternFill("solid", fgColor=fill_color)
+        return c
+
     with engine.connect() as conn:
         published_classes = conn.execute(
             select(classes, teachers.c.full_name.label("teacher_name"),
@@ -3946,20 +3969,15 @@ def admin_enrollment_export():
         ).fetchall()
 
     wb = openpyxl.Workbook()
-    # Remove default sheet
-    default_sheet = wb.active
-    wb.remove(default_sheet)
+    wb.remove(wb.active)
 
     summary_rows = []
 
     with engine.connect() as conn:
         for cls in published_classes:
-            sheet_name = f"Lớp {cls.id}: {cls.subject or 'N/A'} K{cls.grade}"
-            # Excel sheet names max 31 chars
-            if len(sheet_name) > 31:
-                sheet_name = sheet_name[:31]
-            ws = wb.create_sheet(title=sheet_name)
-            ws.append(["STT", "Họ tên", "Lớp", "Khối"])
+            buoi = "Sáng" if cls.session_type == "morning" else "Chiều"
+            tiet_end = cls.start_session + (cls.duration or 1) - 1
+            tiet_str = f"Tiết {cls.start_session}" if tiet_end == cls.start_session else f"Tiết {cls.start_session}–{tiet_end}"
 
             enrolled_students = conn.execute(
                 select(students, enrollments.c.enrolled_at)
@@ -3968,30 +3986,112 @@ def admin_enrollment_export():
                 .order_by(students.c.class_name, students.c.full_name)
             ).fetchall()
 
-            for i, s in enumerate(enrolled_students, 1):
-                ws.append([i, s.full_name, s.class_name, s.grade])
-
             enrolled_count = len(enrolled_students)
-            buoi = "Sáng" if cls.session_type == "morning" else "Chiều"
             summary_rows.append([
-                f"Lớp {cls.id}",
+                cls.id,
                 cls.teacher_name,
-                cls.subject or "",
+                cls.subject_group or "",
                 cls.grade,
                 day_name(cls.day_of_week),
                 buoi,
-                cls.start_session,
+                tiet_str,
                 cls.location or "",
                 enrolled_count,
                 cls.max_capacity or "",
             ])
 
-    # Summary sheet
+            # ── Detail sheet ──────────────────────────────────────────
+            raw_name = f"{cls.id}_{cls.subject_group or 'lop'}_K{cls.grade}"
+            sheet_name = raw_name[:31]
+            ws = wb.create_sheet(title=sheet_name)
+
+            # Title row (merged A1:E1)
+            ws.merge_cells("A1:E1")
+            c = ws["A1"]
+            c.value = f"DANH SÁCH HỌC SINH ĐĂNG KÝ — {cls.subject_group or ''} Khối {cls.grade}"
+            c.font      = Font(bold=True, size=13, color="FFFFFF")
+            c.fill      = PatternFill("solid", fgColor="065F46")
+            c.alignment = Alignment(horizontal="center", vertical="center")
+            ws.row_dimensions[1].height = 30
+
+            # Info block (rows 2-6)
+            info_bg   = "ECFDF5"
+            info_data = [
+                ("Giáo viên",  cls.teacher_name),
+                ("Tổ bộ môn", cls.subject_group or "—"),
+                ("Thời gian",  f"{day_name(cls.day_of_week)}, {buoi}, {tiet_str}"),
+                ("Địa điểm",   cls.location or "—"),
+                ("Sĩ số",      f"{enrolled_count} / {cls.max_capacity or '—'}"),
+            ]
+            for offset, (label, val) in enumerate(info_data):
+                r = 2 + offset
+                lc = ws.cell(row=r, column=1, value=label)
+                lc.font      = Font(bold=True, size=10, color="065F46")
+                lc.fill      = PatternFill("solid", fgColor=info_bg)
+                lc.alignment = Alignment(horizontal="right", vertical="center")
+                lc.border    = bdr
+                ws.merge_cells(f"B{r}:E{r}")
+                vc = ws.cell(row=r, column=2, value=val)
+                vc.font      = Font(size=10)
+                vc.alignment = Alignment(horizontal="left", vertical="center")
+                vc.border    = bdr
+
+            # Blank separator row
+            sep_row = 2 + len(info_data) + 1   # row 8
+
+            # Student table header (row 8)
+            tbl_cols = ["STT", "Họ tên", "Lớp", "Khối", "Thời gian đăng ký"]
+            for ci, col_label in enumerate(tbl_cols, 1):
+                hdr_cell(ws, sep_row, ci, col_label, bg="10B981")
+            ws.row_dimensions[sep_row].height = 22
+
+            # Student data rows
+            for i, s in enumerate(enrolled_students, 1):
+                r = sep_row + i
+                row_bg = "F0FDF4" if i % 2 == 0 else "FFFFFF"
+                enrolled_at = str(s.enrolled_at)[:16] if s.enrolled_at else "—"
+                vals = [i, s.full_name, s.class_name, s.grade, enrolled_at]
+                aligns = ["center", "left", "center", "center", "center"]
+                for ci, (v, al) in enumerate(zip(vals, aligns), 1):
+                    data_cell(ws, r, ci, v, align=al, fill_color=row_bg)
+
+            # Column widths
+            ws.column_dimensions["A"].width = 6
+            ws.column_dimensions["B"].width = 30
+            ws.column_dimensions["C"].width = 10
+            ws.column_dimensions["D"].width = 8
+            ws.column_dimensions["E"].width = 20
+            ws.freeze_panes = f"A{sep_row + 1}"
+
+    # ── Summary sheet (index 0) ────────────────────────────────────────
     ws_sum = wb.create_sheet(title="Tổng hợp", index=0)
-    ws_sum.append(["Lớp", "GV", "Môn", "Khối", "Thứ", "Buổi", "Tiết",
-                   "Địa điểm", "Sĩ số đã đăng ký", "Sĩ số tối đa"])
-    for row in summary_rows:
-        ws_sum.append(row)
+
+    # Title
+    ws_sum.merge_cells("A1:J1")
+    tc = ws_sum["A1"]
+    tc.value     = "TỔNG HỢP ĐĂNG KÝ MÔN HỌC"
+    tc.font      = Font(bold=True, size=14, color="FFFFFF")
+    tc.fill      = PatternFill("solid", fgColor="065F46")
+    tc.alignment = Alignment(horizontal="center", vertical="center")
+    ws_sum.row_dimensions[1].height = 32
+
+    sum_headers = ["ID Lớp", "Giáo viên", "Tổ bộ môn", "Khối", "Thứ", "Buổi",
+                   "Tiết", "Địa điểm", "Sĩ số ĐK", "Sĩ số tối đa"]
+    sum_widths  = [9, 28, 16, 8, 8, 8, 14, 20, 12, 14]
+    for ci, (h, w) in enumerate(zip(sum_headers, sum_widths), 1):
+        hdr_cell(ws_sum, 2, ci, h, bg="10B981")
+        ws_sum.column_dimensions[get_column_letter(ci)].width = w
+    ws_sum.row_dimensions[2].height = 22
+
+    for ri, row in enumerate(summary_rows, 3):
+        fill_bg = "F0FDF4" if ri % 2 == 0 else "FFFFFF"
+        aligns  = ["center", "left", "center", "center", "center", "center",
+                   "center", "left", "center", "center"]
+        for ci, (v, al) in enumerate(zip(row, aligns), 1):
+            data_cell(ws_sum, ri, ci, v, align=al, fill_color=fill_bg)
+
+    ws_sum.freeze_panes = "A3"
+    ws_sum.auto_filter.ref = f"A2:J{1 + len(summary_rows) + 1}"
 
     buf = io.BytesIO()
     wb.save(buf)

@@ -578,6 +578,16 @@ function saveClassRoom(classId, triggerEl) {
       const warnIcon = document.querySelector('.warn-indicator-' + classId);
       if (warnIcon) warnIcon.style.display = (locVal && capVal) ? 'none' : '';
       if (row) row.classList.toggle('cls-row-warn', !(locVal && capVal));
+      // Update the HS đăng ký badge to reflect new max_capacity
+      const countBadge = row?.querySelector('.badge[data-class-id="' + classId + '"]') ||
+                         document.querySelector('.badge[data-class-id="' + classId + '"]');
+      if (countBadge && capVal) {
+        const cur = countBadge.textContent.trim().split('/')[0].replace(/\D/g,'');
+        const cnt = parseInt(cur) || 0;
+        const cap = parseInt(capVal);
+        countBadge.className = 'badge ' + (cnt >= cap ? 'bg-danger' : cnt > 0 ? 'bg-warning text-dark' : 'bg-light text-muted border');
+        countBadge.textContent = cnt + '/' + cap;
+      }
     } else {
       triggerEl.style.borderColor = '#ef4444';
       setTimeout(() => { triggerEl.style.borderColor = ''; }, 2000);

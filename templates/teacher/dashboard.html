@@ -1153,11 +1153,13 @@ setInterval(updateCounts, 5000);
     try {
       const ev = JSON.parse(e.data);
       if (ev.type === 'class') {
-        // Another teacher registered a class — refresh slot grid if same grade
+        updateCounts();
         const curGrade = parseInt(document.getElementById('regGrade')?.value);
         if (curGrade && ev.grade == curGrade) {
           loadSlotGrid();
         }
+      } else if (ev.type === 'class_update') {
+        updateCounts();
       } else if (ev.type === 'schedule') {
         _invalidateRoomSched();
         loadSlotGrid().then(() => {

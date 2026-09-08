@@ -330,7 +330,6 @@
                   <th>Mã đăng nhập</th>
                   <th>Lớp</th>
                   <th class="text-center">Số môn ĐK</th>
-                  <th class="text-center">TK</th>
                   <th class="text-center" style="width:60px;">Chi tiết</th>
                 </tr>
               </thead>
@@ -341,7 +340,7 @@
                 {% if s.class_name != ns.prev_class %}
                 {% set ns.prev_class = s.class_name %}
                 <tr class="enr-cls-sep" data-class-sep="{{ s.class_name }}" data-grade="{{ s.grade }}">
-                  <td colspan="7">
+                  <td colspan="6">
                     <i class="bi bi-collection me-1" style="color:#059669;"></i>
                     <strong>{{ s.class_name }}</strong>
                     <span class="enr-sep-count ms-2" style="font-weight:400; color:#94A3B8; font-size:.72rem;"></span>
@@ -359,10 +358,6 @@
                     <span class="badge rounded-pill {% if ec == 0 %}bg-light text-muted border{% elif ec >= 5 %}bg-success{% else %}bg-warning text-dark{% endif %}" style="font-size:.7rem; min-width:28px;">{{ ec }}</span>
                   </td>
                   <td class="text-center">
-                    {% if s.is_first_login %}<span class="badge bg-secondary" style="font-size:.68rem;">—</span>
-                    {% else %}<span class="badge bg-success" style="font-size:.68rem;">✓</span>{% endif %}
-                  </td>
-                  <td class="text-center">
                     <button class="adm-icon-btn btn-outline-primary"
                             onclick="viewStudentDetail({{ s.id }}, '{{ s.full_name | name_fmt | e }}')"
                             title="Xem chi tiết"><i class="bi bi-eye"></i></button>
@@ -370,7 +365,7 @@
                 </tr>
                 {% endfor %}
                 {% else %}
-                <tr><td colspan="7" class="text-center text-muted py-5">Chưa có học sinh nào</td></tr>
+                <tr><td colspan="6" class="text-center text-muted py-5">Chưa có học sinh nào</td></tr>
                 {% endif %}
               </tbody>
             </table>

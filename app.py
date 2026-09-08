@@ -3061,11 +3061,14 @@ def admin_class_update(class_id):
     except (ValueError, TypeError):
         max_capacity = None
     with engine.begin() as conn:
+        row = conn.execute(select(classes.c.grade).where(classes.c.id == class_id)).fetchone()
         conn.execute(
             update(classes).where(classes.c.id == class_id).values(
                 location=location, max_capacity=max_capacity
             )
         )
+    grade = row.grade if row else None
+    _bump(event_type="class_update", grade=grade)
     return jsonify(ok=True, location=location, max_capacity=max_capacity)
 
 
@@ -3309,6 +3312,10 @@ def admin_add_class_manual():
                       f" trùng khung giờ tiết {start_session}–{start_session+duration-1}.")
 
         subject = subject_input or teacher_row.subject_group or ""
+        try:
+            max_capacity = int(data.get("max_capacity") or 50) or 50
+        except (ValueError, TypeError):
+            max_capacity = 50
         conn.execute(insert(classes).values(
             teacher_id    = teacher_row.id,
             grade         = grade,
@@ -3318,7 +3325,7 @@ def admin_add_class_manual():
             start_session = start_session,
             duration      = duration,
             location      = None,
-            max_capacity  = None,
+            max_capacity  = max_capacity,
             is_published  = 1,
             created_at    = now_vn(),
         ))

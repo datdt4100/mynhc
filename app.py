@@ -32,8 +32,11 @@ from openpyxl.utils import get_column_letter
 # App setup
 # ---------------------------------------------------------------------------
 
+from flask_compress import Compress
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+Compress(app)  # gzip HTML/JSON/CSS/JS responses automatically
 
 # ── Concurrency & real-time ──
 _class_locks: dict = {}           # per-class lock: class_id → Lock

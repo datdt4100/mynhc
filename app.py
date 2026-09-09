@@ -36,7 +36,16 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 
 # ── Concurrency & real-time ──
-_reg_lock    = threading.Lock()   # serialise class registration writes
+_class_locks: dict = {}           # per-class lock: class_id → Lock
+_class_locks_meta = threading.Lock()
+
+def _get_class_lock(class_id: int) -> threading.Lock:
+    """Return (creating if needed) a lock for a specific class_id."""
+    with _class_locks_meta:
+        if class_id not in _class_locks:
+            _class_locks[class_id] = threading.Lock()
+        return _class_locks[class_id]
+
 _change_ts   = [0.0]              # bumped on any schedule/class change
 _change_lock = threading.Lock()
 
@@ -55,10 +64,10 @@ if DATABASE_URL.startswith("postgres://"):
 _engine_kwargs = {"future": True, "pool_pre_ping": True}
 if not DATABASE_URL.startswith("sqlite"):
     _engine_kwargs.update({
-        "pool_size": 5,
-        "max_overflow": 2,
+        "pool_size": 8,        # workers(2) × threads(4)
+        "max_overflow": 4,     # burst headroom
         "pool_recycle": 300,
-        "pool_timeout": 30,
+        "pool_timeout": 10,    # fail fast instead of long queue
         "connect_args": {"sslmode": "require"},
     })
 engine = create_engine(DATABASE_URL, **_engine_kwargs)
@@ -455,12 +464,16 @@ def _cls_slot(row) -> str:
     s = 'S' if getattr(row, 'session_type', '') == 'morning' else 'C'
     return f"T{row.day_of_week}{s}{row.start_session}x{row.duration}"
 
+def _norm_name(s: str) -> str:
+    """Normalize a name for comparison: collapse whitespace, lowercase."""
+    return " ".join(s.strip().split()).lower()
+
 @app.template_filter("name_fmt")
 def _name_fmt(s):
     """Title-case a Vietnamese name for display (lowercase first, then title)."""
     if not s:
         return ""
-    return s.strip().lower().title()
+    return " ".join(s.strip().split()).lower().title()
 
 # Allowed special chars (excludes ' " ` ; \ which are DB-dangerous)
 _PW_ALLOWED_SPECIALS = r"!@#$%^&*()\-_+=\[\]{}|<>,.?/~"
@@ -744,14 +757,14 @@ def login_step1():
     if not full_name or not cccd:
         return jsonify(ok=False, error="Vui lòng nhập đầy đủ thông tin.")
 
-    full_name_lower = full_name.lower()
+    full_name_lower = _norm_name(full_name)
 
     with engine.connect() as conn:
         # Lookup by CCCD (unique), compare name case-insensitively in Python
         teacher = conn.execute(
             select(teachers).where(teachers.c.cccd == cccd)
         ).fetchone()
-        if teacher and teacher.full_name.strip().lower() == full_name_lower:
+        if teacher and _norm_name(teacher.full_name) == full_name_lower:
             title = "Cô" if teacher.gender == "Nữ" else "Thầy"
             return jsonify(
                 ok=True,
@@ -765,7 +778,7 @@ def login_step1():
         student = conn.execute(
             select(students).where(students.c.cccd == cccd)
         ).fetchone()
-        if student and student.full_name.strip().lower() == full_name_lower:
+        if student and _norm_name(student.full_name) == full_name_lower:
             return jsonify(
                 ok=True,
                 user_type="student",
@@ -778,7 +791,7 @@ def login_step1():
         operator = conn.execute(
             select(operators).where(operators.c.login_code == cccd)
         ).fetchone()
-        if operator and operator.full_name.strip().lower() == full_name_lower:
+        if operator and _norm_name(operator.full_name) == full_name_lower:
             return jsonify(
                 ok=True,
                 user_type="operator",
@@ -802,14 +815,14 @@ def login_step2():
     password = normalize_password(data.get("password") or "")
     email = (data.get("email") or "").strip()
 
-    full_name_lower = full_name.lower()
+    full_name_lower = _norm_name(full_name)
 
     if user_type == "teacher":
         with engine.connect() as conn:
             teacher = conn.execute(
                 select(teachers).where(teachers.c.cccd == cccd)
             ).fetchone()
-        if teacher and teacher.full_name.strip().lower() != full_name_lower:
+        if teacher and _norm_name(teacher.full_name) != full_name_lower:
             teacher = None
 
         if not teacher:
@@ -857,7 +870,7 @@ def login_step2():
             student = conn.execute(
                 select(students).where(students.c.cccd == cccd)
             ).fetchone()
-        if student and student.full_name.strip().lower() != full_name_lower:
+        if student and _norm_name(student.full_name) != full_name_lower:
             student = None
 
         if not student:
@@ -909,7 +922,7 @@ def login_step2():
             op = conn.execute(
                 select(operators).where(operators.c.login_code == cccd)
             ).fetchone()
-        if op and op.full_name.strip().lower() != full_name_lower:
+        if op and _norm_name(op.full_name) != full_name_lower:
             op = None
         if not op:
             return jsonify(ok=False, error="Không tìm thấy tài khoản.")
@@ -1065,8 +1078,8 @@ def teacher_register_class():
                 error=f"Học sinh khối {grade} chọn lớp này sẽ không thể ghép đủ các môn khác "
                       f"(0 tổ hợp hợp lệ). Vui lòng chọn thứ/tiết khác.")
 
-    # Acquire write lock — serialise concurrent registrations
-    with _reg_lock:
+    # Serialise teacher class creation writes (low concurrency, global lock is fine)
+    with _class_locks_meta:
         with engine.begin() as conn:
             # Check teacher schedule conflict (same teacher, overlapping slot)
             teacher_conflict = conn.execute(
@@ -1602,7 +1615,7 @@ def student_enroll():
             if cnt >= cls.max_capacity:
                 return jsonify(ok=False, error="Lớp đã đầy.")
 
-    # Check time conflict
+    # Check time conflict (outside lock — read-only, OK to be slightly stale)
     conflict = _time_conflict(student_id, {
         "day_of_week": cls.day_of_week,
         "session_type": cls.session_type,
@@ -1638,20 +1651,38 @@ def student_enroll():
             ) + f" – {day_name(conflict_info.day_of_week)}" if conflict_info else "",
         )
 
-    with engine.connect() as conn:
-        ts = now_vn()
-        conn.execute(
-            insert(enrollments).values(
-                student_id=student_id,
-                class_id=class_id,
-                enrolled_at=ts,
+    # Per-class lock: prevent race condition on capacity check + insert
+    with _get_class_lock(class_id):
+        with engine.begin() as conn:
+            # Re-check capacity inside lock to avoid over-enrollment
+            if cls.max_capacity is not None:
+                cnt = conn.execute(
+                    select(func.count()).where(enrollments.c.class_id == class_id)
+                ).scalar()
+                if cnt >= cls.max_capacity:
+                    return jsonify(ok=False, error="Lớp đã đầy.")
+            # Re-check already enrolled (guard against double-submit)
+            already = conn.execute(
+                select(enrollments.c.id).where(
+                    and_(enrollments.c.student_id == student_id,
+                         enrollments.c.class_id == class_id)
+                )
+            ).fetchone()
+            if already:
+                return jsonify(ok=False, error="Bạn đã đăng ký lớp này rồi.")
+            ts = now_vn()
+            conn.execute(
+                insert(enrollments).values(
+                    student_id=student_id,
+                    class_id=class_id,
+                    enrolled_at=ts,
+                )
             )
-        )
-        conn.execute(insert(student_enroll_log).values(
-            student_id=student_id, class_id=class_id, action='A', ts=ts
-        ))
-        conn.commit()
-        covered = _student_covered_subjects(conn, student_id, student_grade)
+            conn.execute(insert(student_enroll_log).values(
+                student_id=student_id, class_id=class_id, action='A', ts=ts
+            ))
+        with engine.connect() as conn:
+            covered = _student_covered_subjects(conn, student_id, student_grade)
 
     return jsonify(ok=True, covered_subjects=covered)
 

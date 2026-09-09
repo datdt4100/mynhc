@@ -532,6 +532,11 @@ window.showTab = function(tab) {
   var btn = document.getElementById('btn-' + tab);
   if (btn) btn.classList.add('active');
   if (tab === 'schedule') refreshStudentSchedule();
+  /* Force reveal for elements in the newly shown tab (IntersectionObserver misses display:none elements) */
+  var pane = document.getElementById('tab-' + tab);
+  if (pane) pane.querySelectorAll('.reveal:not(.visible)').forEach(function(el) {
+    el.classList.add('visible');
+  });
   try { localStorage.setItem('student_tab', tab); } catch(e) {}
 };
 
@@ -557,6 +562,9 @@ async function refreshStudentSchedule() {
     var btn = document.getElementById('btn-' + saved);
     document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
     if (btn) btn.classList.add('active');
+    /* Force reveal for elements now visible */
+    var pane = document.getElementById('tab-' + saved);
+    if (pane) pane.querySelectorAll('.reveal').forEach(function(el) { el.classList.add('visible'); });
   }
 })();
 

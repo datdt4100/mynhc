@@ -49,6 +49,26 @@ def _get_class_lock(class_id: int) -> threading.Lock:
 _change_ts   = [0.0]              # bumped on any schedule/class change
 _change_lock = threading.Lock()
 
+# Cache for /api/class-counts: {cache_key: (expires_at, data)}
+_counts_cache: dict = {}
+_counts_cache_lock = threading.Lock()
+_COUNTS_TTL = 8  # seconds
+
+def _counts_cache_get(key: str):
+    with _counts_cache_lock:
+        entry = _counts_cache.get(key)
+        if entry and time.time() < entry[0]:
+            return entry[1]
+    return None
+
+def _counts_cache_set(key: str, data: dict):
+    with _counts_cache_lock:
+        _counts_cache[key] = (time.time() + _COUNTS_TTL, data)
+
+def _counts_cache_invalidate():
+    with _counts_cache_lock:
+        _counts_cache.clear()
+
 def _bump(event_type="class", grade=None):
     """Increment change timestamp and payload for SSE clients."""
     with _change_lock:
@@ -56,6 +76,7 @@ def _bump(event_type="class", grade=None):
         _change_ts.append({"type": event_type, "grade": grade, "ts": _change_ts[0]})
         if len(_change_ts) > 2:          # keep only latest payload
             _change_ts[1:] = [_change_ts[-1]]
+    _counts_cache_invalidate()  # flush stale cache on any change
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///classreg.db")
 if DATABASE_URL.startswith("postgres://"):
@@ -1734,35 +1755,52 @@ def api_class_counts():
     if not is_admin and not user_type:
         return jsonify({}), 401
 
+    if is_admin:
+        cache_key = "admin"
+    elif user_type == "student":
+        cache_key = f"student:{session.get('grade')}"
+    elif user_type == "teacher":
+        cache_key = f"teacher:{session.get('user_id')}"
+    else:
+        return jsonify({})
+
+    cached = _counts_cache_get(cache_key)
+    if cached is not None:
+        return jsonify(cached)
+
     with engine.connect() as conn:
         if is_admin:
             where_clause = classes.c.is_published == 1
         elif user_type == "student":
-            student_grade = session.get("grade")
             where_clause = and_(
                 classes.c.is_published == 1,
-                classes.c.grade == student_grade,
+                classes.c.grade == session.get("grade"),
             )
-        elif user_type == "teacher":
-            teacher_id = session.get("user_id")
-            where_clause = classes.c.teacher_id == teacher_id
         else:
-            return jsonify({})
+            where_clause = classes.c.teacher_id == session.get("user_id")
 
-        pub_classes = conn.execute(
-            select(classes.c.id, classes.c.location, classes.c.max_capacity)
+        # Single query: join enrollments and GROUP BY to avoid N+1
+        rows = conn.execute(
+            select(
+                classes.c.id,
+                classes.c.location,
+                classes.c.max_capacity,
+                func.count(enrollments.c.id).label("cnt"),
+            )
+            .outerjoin(enrollments, classes.c.id == enrollments.c.class_id)
             .where(where_clause)
+            .group_by(classes.c.id, classes.c.location, classes.c.max_capacity)
         ).fetchall()
-        counts = {}
-        for row in pub_classes:
-            cnt = conn.execute(
-                select(func.count()).where(enrollments.c.class_id == row.id)
-            ).scalar()
-            counts[str(row.id)] = {
-                "count": cnt,
-                "location": row.location or "",
-                "max_capacity": row.max_capacity,
-            }
+
+    counts = {
+        str(r.id): {
+            "count": r.cnt,
+            "location": r.location or "",
+            "max_capacity": r.max_capacity,
+        }
+        for r in rows
+    }
+    _counts_cache_set(cache_key, counts)
     return jsonify(counts)
 
 # ---------------------------------------------------------------------------

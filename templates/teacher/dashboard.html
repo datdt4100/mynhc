@@ -1157,36 +1157,22 @@ function updateCounts() {
     })
     .catch(() => {});
 }
-setInterval(updateCounts, 5000);
+setInterval(updateCounts, 15000);
 
-// ── Real-time updates via SSE ──
-(function() {
-  const es = new EventSource('/stream/changes');
-  es.onmessage = function(e) {
-    try {
-      const ev = JSON.parse(e.data);
-      if (ev.type === 'class') {
-        updateCounts();
-        const curGrade = parseInt(document.getElementById('regGrade')?.value);
-        if (curGrade && ev.grade == curGrade) {
-          loadSlotGrid();
-        }
-      } else if (ev.type === 'class_update') {
-        updateCounts();
-      } else if (ev.type === 'schedule') {
-        _invalidateRoomSched();
-        loadSlotGrid().then(() => {
-          // After fresh _rsData arrives, re-render the room schedule tab if visible
-          const modal = document.getElementById('roomSchedModal');
-          if (modal && modal.classList.contains('show')) showRoomDay(_rsDay);
-          const day = document.getElementById('regDay')?.value;
-          if (day) _highlightAndBadge(parseInt(day), document.getElementById('regSession').value, parseInt(document.getElementById('regStart').value), _gridData);
-        });
-      }
-    } catch (_) {}
-  };
-  es.onerror = function() { es.close(); };
-})();
+// ── Poll slot grid every 30s (only when reg is open) ──
+const _TEACHER_REG_OPEN = {{ teacher_reg_open | tojson }};
+setInterval(function() {
+  if (!_TEACHER_REG_OPEN) return;
+  _invalidateRoomSched();
+  const day = document.getElementById('regDay')?.value;
+  if (day) {
+    loadSlotGrid().then(() => {
+      if (day) _highlightAndBadge(parseInt(day), document.getElementById('regSession').value, parseInt(document.getElementById('regStart').value), _gridData);
+      const modal = document.getElementById('roomSchedModal');
+      if (modal && modal.classList.contains('show')) showRoomDay(_rsDay);
+    });
+  }
+}, 30000);
 
 /* ── Export TKB teacher ── */
 async function exportTKBTeacher(fmt) {

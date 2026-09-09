@@ -908,7 +908,7 @@ async function refreshStudentSchedule() {
     });
   }
 
-  /* ── Poll /api/class-counts every 5 seconds ─────────────────── */
+  /* ── Poll /api/class-counts every 20 seconds ────────────────── */
   setInterval(async function () {
     try {
       var res = await fetch('/api/class-counts');
@@ -917,7 +917,7 @@ async function refreshStudentSchedule() {
         updateCounts(counts);
       }
     } catch (e) { /* silent fail — next poll will retry */ }
-  }, 5000);
+  }, 20000);
 
 })();
 

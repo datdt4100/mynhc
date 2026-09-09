@@ -406,7 +406,7 @@
       /* Build greeting */
       const title = data.title || (_role === 'teacher' ? 'Thầy/Cô' : 'Học sinh');
       const _rawName = (data.full_name || full_name);
-      const _fmtName = _rawName.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+      const _fmtName = _rawName.toLowerCase().replace(/(^|\s)(\S)/g, (_, sp, ch) => sp + ch.toUpperCase());
       greetEl.textContent = title + ' ' + _fmtName;
 
       /* Configure step-2 fields */

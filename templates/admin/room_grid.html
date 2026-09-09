@@ -470,7 +470,7 @@ function _filterTeachers(q) {
   }
   list.innerHTML = matches.map(t => {
     const isSel = String(t.id) === String(selId);
-    const _dn = t.full_name.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
+    const _dn = t.full_name.toLowerCase().replace(/(^|\s)(\S)/g,(_, sp, ch) => sp + ch.toUpperCase());
     return `<div onclick="_selectTeacher(${t.id},'${_gesc(_dn)}','${_gesc(t.subject_group||'')}')"
                  id="topt_${t.id}"
                  style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #E2E8F0;font-size:.8rem;

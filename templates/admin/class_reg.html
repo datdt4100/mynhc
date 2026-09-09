@@ -449,7 +449,7 @@ function _atRenderTeachers(list) {
   }
   el.style.border = '1.5px solid #FDE68A';
   el.innerHTML = list.map(t => {
-    const disp = t.full_name.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    const disp = t.full_name.toLowerCase().replace(/(^|\s)(\S)/g, (_, sp, ch) => sp + ch.toUpperCase());
     return `<div onclick="_atSelectTeacher(${t.id},'${disp.replace(/'/g,"&#39;")}','${t.subject_group.replace(/'/g,"&#39;")}')"
          style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #FEF3C7;font-size:.8rem;transition:background .1s;"
          onmouseenter="this.style.background='#FEF9C3'" onmouseleave="this.style.background='#fff'">

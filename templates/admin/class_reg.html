@@ -136,9 +136,17 @@
       <a href="{{ url_for('admin_class_reg_export') }}" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;" title="Tải Excel danh sách lớp đã đăng ký">
         <i class="bi bi-file-earmark-arrow-down"></i><span>Tải Excel</span>
       </a>
+      <div class="d-flex align-items-center gap-1 ms-2" style="font-size:.78rem;">
+        <label class="text-muted fw-semibold mb-0" style="white-space:nowrap;">Sĩ số chung:</label>
+        <input type="number" id="bulk-cap-input" min="1" max="99" placeholder="VD: 30"
+               style="width:72px;border-radius:7px;border:1.5px solid #CBD5E1;padding:3px 7px;font-size:.78rem;"
+               onkeydown="if(event.key==='Enter'){setBulkCapacity();}">
+        <button class="btn btn-sm btn-outline-primary fw-semibold" style="border-radius:7px;font-size:.78rem;padding:3px 10px;white-space:nowrap;"
+                onclick="setBulkCapacity()">Áp dụng tất cả</button>
+      </div>
       <button class="btn btn-sm btn-outline-danger fw-semibold ms-auto" style="border-radius:8px; font-size:.78rem;"
               onclick="clearAllRegisteredClasses()">
-        <i class="bi bi-trash3 me-1"></i>Xoá tất cả lớp đã đăng ký
+        <i class="bi bi-trash3 me-1"></i>Xoá tất cả
       </button>
     </div>
     <div class="table-responsive-admin" style="max-height:420px;overflow-y:auto;overflow-x:auto;">
@@ -263,8 +271,9 @@
                                  onkeydown="if(event.key==='Enter'){this.blur();}">
                         </td>
                         <td class="text-center">
-                          <span class="badge {{ 'bg-danger' if cls.max_capacity and ec >= cls.max_capacity else ('bg-warning text-dark' if ec > 0 else 'bg-light text-muted border') }}"
-                                style="font-size:.78rem; border-radius:8px;">
+                          <span class="enroll-badge-{{ cls.id }} badge {% if cls.max_capacity and ec >= cls.max_capacity %}bg-danger{% elif cls.max_capacity and ec * 5 >= cls.max_capacity * 3 %}bg-warning text-dark{% elif ec > 0 %}bg-success{% else %}bg-light text-muted border{% endif %}"
+                                style="font-size:.78rem; border-radius:8px;"
+                                {% if cls.max_capacity and ec * 5 >= cls.max_capacity * 3 and ec < cls.max_capacity %}title="Lớp đông, khó tiếp thu"{% endif %}>
                             {{ ec }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}
                           </span>
                         </td>
@@ -382,13 +391,14 @@
                      style="font-size:.75rem;width:70px;transition:border-color .2s;"
                      placeholder="Sĩ số" min="1"
                      value="{{ cls.max_capacity or '' }}"
-                     data-class-id="{{ cls.id }}"
+                     data-class-id="{{ cls.id }}" data-field="max_capacity"
                      onchange="saveUAField({{ cls.id }}, this, 'max_capacity')"
                      onkeydown="if(event.key==='Enter'){this.blur();}">
             </td>
             <td class="text-center">
-              <span class="ua-enroll-badge-{{ cls.id }} badge {{ 'bg-danger' if cls.max_capacity and ec >= cls.max_capacity else ('bg-warning text-dark' if ec > 0 else 'bg-light text-muted border') }}"
-                    style="font-size:.78rem;border-radius:8px;">
+              <span class="enroll-badge-{{ cls.id }} ua-enroll-badge-{{ cls.id }} badge {% if cls.max_capacity and ec >= cls.max_capacity %}bg-danger{% elif cls.max_capacity and ec * 5 >= cls.max_capacity * 3 %}bg-warning text-dark{% elif ec > 0 %}bg-success{% else %}bg-light text-muted border{% endif %}"
+                    style="font-size:.78rem;border-radius:8px;"
+                    {% if cls.max_capacity and ec * 5 >= cls.max_capacity * 3 and ec < cls.max_capacity %}title="Lớp đông, khó tiếp thu"{% endif %}>
                 {{ ec }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}
               </span>
             </td>
@@ -601,6 +611,20 @@ async function loadUARooms(sel) {
   } catch {}
 }
 
+function _enrollBadgeClass(ec, cap) {
+  if (cap && ec >= cap) return 'bg-danger';
+  if (cap && ec * 5 >= cap * 3) return 'bg-warning text-dark';
+  if (ec > 0) return 'bg-success';
+  return 'bg-light text-muted border';
+}
+function _updateEnrollBadge(classId, ec, cap) {
+  const badge = document.querySelector('.enroll-badge-' + classId);
+  if (!badge) return;
+  badge.textContent = ec + (cap ? '/' + cap : '');
+  badge.className = 'enroll-badge-' + classId + ' ua-enroll-badge-' + classId + ' badge ' + _enrollBadgeClass(ec, cap);
+  badge.title = (cap && ec * 5 >= cap * 3 && ec < cap) ? 'Lớp đông, khó tiếp thu' : '';
+}
+
 async function saveUAField(classId, el, field) {
   const val = el.value.trim();
   const body = field === 'location'
@@ -616,19 +640,41 @@ async function saveUAField(classId, el, field) {
     if (data.ok) {
       el.style.borderColor = '#22c55e';
       setTimeout(() => { el.style.borderColor = ''; }, 1500);
-      // Update HS đăng ký badge when max_capacity changes
       if (field === 'max_capacity') {
-        const badge = document.querySelector('.ua-enroll-badge-' + classId);
-        if (badge) {
-          const cur = parseInt(badge.textContent.split('/')[0].replace(/\D/g, '')) || 0;
-          const cap = parseInt(val) || null;
-          badge.textContent = cur + (cap ? '/' + cap : '');
-          badge.className = 'ua-enroll-badge-' + classId + ' badge '
-            + (cap && cur >= cap ? 'bg-danger' : cur > 0 ? 'bg-warning text-dark' : 'bg-light text-muted border');
-        }
+        const badge = document.querySelector('.enroll-badge-' + classId);
+        const ec = badge ? (parseInt(badge.textContent.split('/')[0]) || 0) : 0;
+        _updateEnrollBadge(classId, ec, parseInt(val) || null);
       }
     } else {
       showAlert(data.error || 'Không thể lưu.', 'error');
+    }
+  } catch { showAlert('Lỗi kết nối.', 'error'); }
+}
+
+async function setBulkCapacity() {
+  const inp = document.getElementById('bulk-cap-input');
+  const cap = parseInt(inp.value);
+  if (!cap || cap <= 0) { showAlert('Vui lòng nhập sĩ số hợp lệ.', 'error'); return; }
+  try {
+    const res = await fetch('/admin/classes/bulk-capacity', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({capacity: cap})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      // Update all sĩ số inputs on the page
+      document.querySelectorAll('input[data-field="max_capacity"], .cap-input').forEach(el => { el.value = cap; });
+      // Update all enrollment badges
+      document.querySelectorAll('[class*="enroll-badge-"]').forEach(badge => {
+        const m = badge.className.match(/enroll-badge-(\d+)/);
+        if (!m) return;
+        const ec = parseInt(badge.textContent.split('/')[0]) || 0;
+        _updateEnrollBadge(m[1], ec, cap);
+      });
+      showAlert('Đã đặt sĩ số ' + cap + ' cho tất cả lớp.', 'success');
+    } else {
+      showAlert(data.error || 'Có lỗi xảy ra.', 'error');
     }
   } catch { showAlert('Lỗi kết nối.', 'error'); }
 }
@@ -675,14 +721,10 @@ function saveClassRoom(classId, triggerEl) {
       if (warnIcon) warnIcon.style.display = (locVal && capVal) ? 'none' : '';
       if (row) row.classList.toggle('cls-row-warn', !(locVal && capVal));
       // Update the HS đăng ký badge to reflect new max_capacity
-      const countBadge = row?.querySelector('.badge[data-class-id="' + classId + '"]') ||
-                         document.querySelector('.badge[data-class-id="' + classId + '"]');
-      if (countBadge && capVal) {
-        const cur = countBadge.textContent.trim().split('/')[0].replace(/\D/g,'');
-        const cnt = parseInt(cur) || 0;
-        const cap = parseInt(capVal);
-        countBadge.className = 'badge ' + (cnt >= cap ? 'bg-danger' : cnt > 0 ? 'bg-warning text-dark' : 'bg-light text-muted border');
-        countBadge.textContent = cnt + '/' + cap;
+      const enrollBadge = document.querySelector('.enroll-badge-' + classId);
+      if (enrollBadge) {
+        const cnt = parseInt(enrollBadge.textContent.split('/')[0]) || 0;
+        _updateEnrollBadge(classId, cnt, capVal ? parseInt(capVal) : null);
       }
     } else {
       triggerEl.style.borderColor = '#ef4444';

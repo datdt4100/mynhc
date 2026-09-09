@@ -3388,6 +3388,22 @@ def admin_classes_import_rooms():
     return redirect(url_for("admin_class_reg"))
 
 
+@app.route("/admin/classes/bulk-capacity", methods=["POST"])
+@admin_required
+def admin_bulk_capacity():
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        cap = int(data.get("capacity") or 0)
+    except (TypeError, ValueError):
+        cap = 0
+    if cap <= 0:
+        return jsonify(ok=False, error="Sĩ số phải lớn hơn 0.")
+    with engine.begin() as conn:
+        conn.execute(update(classes).values(max_capacity=cap))
+    _bump(event_type="class_update")
+    return jsonify(ok=True, capacity=cap)
+
+
 @app.route("/admin/classes/<int:class_id>", methods=["PATCH"])
 @admin_required
 def admin_class_update(class_id):

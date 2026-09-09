@@ -372,7 +372,7 @@
       {% set count = enrollment_counts.get(cls.id, 0) %}
       {% set enrolled = cls.id in my_class_ids %}
       {% set is_full = cls.max_capacity is not none and count >= cls.max_capacity %}
-      {% set near_full = count >= 30 and not is_full and not enrolled %}
+      {% set near_full = cls.max_capacity is not none and count * 5 >= cls.max_capacity * 3 and not is_full and not enrolled %}
 
       {# Card accent color #}
       {% if enrolled %}
@@ -486,7 +486,7 @@
           <div class="warning-box-{{ cls.id }} mt-2 d-flex align-items-start gap-1"
                style="font-size:.73rem; color:#92400E; line-height:1.4;">
             <i class="bi bi-exclamation-triangle-fill flex-shrink-0" style="margin-top:1px;"></i>
-            <span>Số lượng học sinh lớp này hiện đã vượt quá 30 học sinh, bạn cần cân nhắc có nên tiếp tục lựa chọn lớp này không vì lớp đông học sinh, khó tiếp thu.</span>
+            <span>Lớp này đã đăng ký từ 3/5 sĩ số trở lên, lớp đông học sinh, khó tiếp thu — bạn nên cân nhắc trước khi chọn.</span>
           </div>
           {% elif is_full %}
           <div class="warning-box-{{ cls.id }} mt-2 d-flex align-items-start gap-1"
@@ -839,7 +839,7 @@ async function refreshStudentSchedule() {
       }
 
       var isFull   = cfg.maxCapacity !== null && count >= cfg.maxCapacity;
-      var nearFull = count >= 30 && !isFull && !cfg.enrolled;
+      var nearFull = cfg.maxCapacity !== null && count * 5 >= cfg.maxCapacity * 3 && !isFull && !cfg.enrolled;
 
       /* Badge color + text (count/sĩ số) */
       var badgeEl = document.querySelector('.count-badge-' + id);
@@ -893,8 +893,7 @@ async function refreshStudentSchedule() {
           warn.className = 'warning-box-' + id + ' mt-2 d-flex align-items-start gap-1';
           warn.style.cssText = 'font-size:.73rem;color:#92400E;line-height:1.4;';
           warn.innerHTML = '<i class="bi bi-exclamation-triangle-fill flex-shrink-0" style="margin-top:1px;"></i>'
-            + '<span>Số lượng học sinh lớp này hiện đã vượt quá 30 học sinh, bạn cần cân nhắc '
-            + 'có nên tiếp tục lựa chọn lớp này không vì lớp đông học sinh, khó tiếp thu.</span>';
+            + '<span>Lớp này đã đăng ký từ 3/5 sĩ số trở lên, lớp đông học sinh, khó tiếp thu — bạn nên cân nhắc trước khi chọn.</span>';
         } else if (isFull) {
           warn.className = 'warning-box-' + id + ' mt-2 d-flex align-items-start gap-1';
           warn.style.cssText = 'font-size:.73rem;color:#991B1B;line-height:1.4;';

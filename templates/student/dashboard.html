@@ -937,17 +937,6 @@ async function refreshStudentSchedule() {
     });
   }
 
-  /* ── Poll /api/class-counts every 60 seconds ────────────────── */
-  setInterval(async function () {
-    try {
-      var res = await fetch('/api/class-counts');
-      if (res.ok) {
-        var counts = await res.json();
-        updateCounts(counts);
-      }
-    } catch (e) { /* silent fail — next poll will retry */ }
-  }, 60000);
-
 })();
 
 /* ── Export TKB ── */

@@ -1157,7 +1157,7 @@ function updateCounts() {
     })
     .catch(() => {});
 }
-setInterval(updateCounts, 60000);
+setInterval(updateCounts, 300000);
 
 // ── Poll slot grid every 30s (only when reg is open) ──
 const _TEACHER_REG_OPEN = {{ teacher_reg_open | tojson }};

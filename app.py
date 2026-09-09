@@ -88,8 +88,8 @@ if DATABASE_URL.startswith("postgres://"):
 _engine_kwargs = {"future": True, "pool_pre_ping": True}
 if not DATABASE_URL.startswith("sqlite"):
     _engine_kwargs.update({
-        "pool_size": 8,        # workers(2) × threads(4)
-        "max_overflow": 4,     # burst headroom
+        "pool_size": 5,        # safe for free-tier DB (max ~5 connections)
+        "max_overflow": 2,     # burst headroom
         "pool_recycle": 300,
         "pool_timeout": 10,    # fail fast instead of long queue
         "connect_args": {"sslmode": "require"},

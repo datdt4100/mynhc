@@ -247,10 +247,11 @@
                 {% set cnt = enrollment_counts.get(cls.id, 0) %}
                 {% set mx  = cls.max_capacity or 0 %}
                 {% set full = mx and cnt >= mx %}
-                <span class="count-badge {% if full %}count-badge-red{% elif cnt >= 30 %}count-badge-yellow{% else %}count-badge-green{% endif %}"
+                {% set crowded = mx and not full and cnt * 5 >= mx * 3 %}
+                <span class="count-badge {% if full %}count-badge-red{% elif crowded %}count-badge-yellow{% else %}count-badge-green{% endif %}"
                       data-class-id="{{ cls.id }}" id="count-{{ cls.id }}" data-max="{{ mx or '' }}"
-                      {% if full %}title="Lớp đã đầy"{% elif cnt >= 30 %}title="Lớp đông"{% endif %}>
-                  {% if cnt >= 30 and not full %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>{% endif %}
+                      {% if full %}title="Lớp đã đầy"{% elif crowded %}title="Lớp đông"{% endif %}>
+                  {% if crowded %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>{% endif %}
                   {{ cnt }}{% if mx %}/{{ mx }}{% endif %}
                 </span>
               </td>
@@ -599,12 +600,16 @@ function refreshCounts() {
       const el = document.getElementById('count-' + id);
       if (!el) return;
       const raw = data[String(id)] ?? data[id] ?? 0;
-      const cnt = (raw && typeof raw === 'object') ? (raw.count ?? 0) : Number(raw);
-      const max = el.dataset.max ? parseInt(el.dataset.max) : null;
-      const full = max && cnt >= max;
-      el.className = 'count-badge ' + (full ? 'count-badge-red' : cnt >= 30 ? 'count-badge-yellow' : 'count-badge-green');
-      el.title = full ? 'Lớp đã đầy' : cnt >= 30 ? 'Lớp đông' : '';
-      el.innerHTML = (cnt >= 30 && !full ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>' : '') + (max ? cnt + '/' + max : String(cnt));
+      const info = (raw && typeof raw === 'object') ? raw : {count: Number(raw)};
+      const cnt = info.count ?? 0;
+      // Sync max_capacity from API so bulk-capacity changes reflect immediately
+      if (info.max_capacity !== undefined && info.max_capacity !== null) el.dataset.max = info.max_capacity;
+      const cap = el.dataset.max ? parseInt(el.dataset.max) : null;
+      const full = cap && cnt >= cap;
+      const crowded = !full && cap && cnt * 5 >= cap * 3;
+      el.className = 'count-badge ' + (full ? 'count-badge-red' : crowded ? 'count-badge-yellow' : 'count-badge-green');
+      el.title = full ? 'Lớp đã đầy' : crowded ? 'Lớp đông' : '';
+      el.innerHTML = (crowded ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>' : '') + (cap ? cnt + '/' + cap : String(cnt));
     });
   }).catch(() => {});
 }

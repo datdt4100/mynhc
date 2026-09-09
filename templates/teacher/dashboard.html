@@ -375,9 +375,9 @@
                         </div>
                       </div>
                       <div class="cal-bottom">
-                        <span class="cal-count count-badge{% if cls.max_capacity and cnt >= cls.max_capacity %} warn-red{% elif cnt >= 30 %} warn-yellow{% endif %}"
-                              data-class-id="{{ cls.id }}"
-                              {% if cls.max_capacity and cnt >= cls.max_capacity %}title="Lớp đã đầy"{% elif cnt >= 30 %}title="Lớp đông, có thể khó tiếp thu"{% endif %}>{% if cnt >= 30 and not (cls.max_capacity and cnt >= cls.max_capacity) %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.6rem;"></i>{% endif %}{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
+                        <span class="cal-count count-badge{% if cls.max_capacity and cnt >= cls.max_capacity %} warn-red{% elif cls.max_capacity and cnt * 5 >= cls.max_capacity * 3 %} warn-yellow{% endif %}"
+                              data-class-id="{{ cls.id }}" data-max="{{ cls.max_capacity or '' }}"
+                              {% if cls.max_capacity and cnt >= cls.max_capacity %}title="Lớp đã đầy"{% elif cls.max_capacity and cnt * 5 >= cls.max_capacity * 3 %}title="Lớp đông, có thể khó tiếp thu"{% endif %}>{% if cls.max_capacity and cnt * 5 >= cls.max_capacity * 3 and cnt < cls.max_capacity %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.6rem;"></i>{% endif %}{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
                         <span class="cal-status-dot"></span>
                       </div>
                     </div>
@@ -420,9 +420,9 @@
                         </div>
                       </div>
                       <div class="cal-bottom">
-                        <span class="cal-count count-badge{% if cls.max_capacity and cnt >= cls.max_capacity %} warn-red{% elif cnt >= 30 %} warn-yellow{% endif %}"
-                              data-class-id="{{ cls.id }}"
-                              {% if cls.max_capacity and cnt >= cls.max_capacity %}title="Lớp đã đầy"{% elif cnt >= 30 %}title="Lớp đông, có thể khó tiếp thu"{% endif %}>{% if cnt >= 30 and not (cls.max_capacity and cnt >= cls.max_capacity) %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.6rem;"></i>{% endif %}{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
+                        <span class="cal-count count-badge{% if cls.max_capacity and cnt >= cls.max_capacity %} warn-red{% elif cls.max_capacity and cnt * 5 >= cls.max_capacity * 3 %} warn-yellow{% endif %}"
+                              data-class-id="{{ cls.id }}" data-max="{{ cls.max_capacity or '' }}"
+                              {% if cls.max_capacity and cnt >= cls.max_capacity %}title="Lớp đã đầy"{% elif cls.max_capacity and cnt * 5 >= cls.max_capacity * 3 %}title="Lớp đông, có thể khó tiếp thu"{% endif %}>{% if cls.max_capacity and cnt * 5 >= cls.max_capacity * 3 and cnt < cls.max_capacity %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.6rem;"></i>{% endif %}{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
                         <span class="cal-status-dot"></span>
                       </div>
                     </div>
@@ -1139,11 +1139,14 @@ function updateCounts() {
         if (badge) {
           const cnt  = info.count;
           const cap  = info.max_capacity;
-          const full = cap && cnt >= cap;
-          badge.className = 'cal-count count-badge' + (full ? ' warn-red' : cnt >= 30 ? ' warn-yellow' : '');
-          badge.title = full ? 'Lớp đã đầy' : cnt >= 30 ? 'Lớp đông, có thể khó tiếp thu' : '';
-          const icon = (cnt >= 30 && !full) ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.6rem;"></i>' : '';
-          badge.innerHTML = icon + cnt + ' HS' + (cap ? '/' + cap : '');
+          if (cap !== undefined && cap !== null) badge.dataset.max = cap;
+          const effCap = cap ?? (badge.dataset.max ? parseInt(badge.dataset.max) : null);
+          const full = effCap && cnt >= effCap;
+          const crowded = !full && effCap && cnt * 5 >= effCap * 3;
+          badge.className = 'cal-count count-badge' + (full ? ' warn-red' : crowded ? ' warn-yellow' : '');
+          badge.title = full ? 'Lớp đã đầy' : crowded ? 'Lớp đông, có thể khó tiếp thu' : '';
+          const icon = crowded ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.6rem;"></i>' : '';
+          badge.innerHTML = icon + cnt + ' HS' + (effCap ? '/' + effCap : '');
         }
         // Room badge
         const room = document.querySelector('.room-badge[data-class-id="' + id + '"]');

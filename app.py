@@ -285,7 +285,8 @@ def init_db():
                            ("maintenance_mode", "0"),
                            ("schedule_constraint", "1"),
                            ("allow_multi_class", "1"),
-                           ("require_5_subjects", "1")]:
+                           ("require_5_subjects", "1"),
+                           ("require_email_check", "0")]:
             try:
                 conn.execute(
                     insert(settings_table).values(key=key, value=value)
@@ -1304,6 +1305,10 @@ def student_dashboard():
 
     student_reg_open = get_setting("student_reg_open", "0") == "1"
     require_5_subjects = get_setting("require_5_subjects", "1") == "1"
+    needs_email = (
+        get_setting("require_email_check", "0") == "1"
+        and not (student_row.email or "").strip()
+    )
     # Required = all distinct subjects available for this grade
     required_subjects = sorted({
         c.subject_group or c.subject or ""
@@ -1324,6 +1329,7 @@ def student_dashboard():
         student_schedule=student_schedule,
         student_reg_open=student_reg_open,
         require_5_subjects=require_5_subjects,
+        needs_email=needs_email,
         required_subjects=required_subjects,
         covered_subjects=list(covered_subjects),
         day_name=day_name,
@@ -2477,6 +2483,7 @@ def admin_index():
     schedule_constraint = get_setting("schedule_constraint", "1") == "1"
     allow_multi_class = get_setting("allow_multi_class", "1") == "1"
     require_5_subjects = get_setting("require_5_subjects", "1") == "1"
+    require_email_check = get_setting("require_email_check", "0") == "1"
     with engine.connect() as conn2:
         busy_room_count = conn2.execute(
             select(func.count()).select_from(room_external_busy)
@@ -2503,6 +2510,7 @@ def admin_index():
         schedule_constraint=schedule_constraint,
         allow_multi_class=allow_multi_class,
         require_5_subjects=require_5_subjects,
+        require_email_check=require_email_check,
         room_list=room_list,
         room_count=room_count,
         busy_room_count=busy_room_count,
@@ -4180,6 +4188,32 @@ def admin_require_5_subjects_toggle():
     new_val = "0" if current == "1" else "1"
     set_setting("require_5_subjects", new_val)
     return jsonify(ok=True, on=new_val == "1")
+
+
+@app.route("/admin/require-email-check/toggle", methods=["POST"])
+@admin_required
+def admin_require_email_check_toggle():
+    current = get_setting("require_email_check", "0")
+    new_val = "0" if current == "1" else "1"
+    set_setting("require_email_check", new_val)
+    return jsonify(ok=True, on=new_val == "1")
+
+
+@app.route("/student/set-email", methods=["POST"])
+@student_required
+def student_set_email():
+    data = request.get_json(force=True, silent=True) or {}
+    email = (data.get("email") or "").strip()
+    if not email:
+        return jsonify(ok=False, error="Vui lòng nhập email.")
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return jsonify(ok=False, error="Email không hợp lệ.")
+    student_id = session["user_id"]
+    with engine.begin() as conn:
+        conn.execute(
+            update(students).where(students.c.id == student_id).values(email=email)
+        )
+    return jsonify(ok=True)
 
 
 @app.route("/admin/classes/<int:class_id>/publish", methods=["POST"])

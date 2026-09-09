@@ -509,6 +509,35 @@
 
 </div>{# container #}
 
+{# ── Email collection modal (shown when require_email_check is ON and student has no email) #}
+{% if needs_email %}
+<div class="modal fade" id="emailModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+    <div class="modal-content" style="border-radius:var(--r);border:none;box-shadow:var(--sh-lg);">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold d-flex align-items-center gap-2">
+          <span class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                style="width:36px;height:36px;background:rgba(139,92,246,.12);">
+            <i class="bi bi-envelope-fill" style="color:#8B5CF6;"></i>
+          </span>
+          Bổ sung email
+        </h5>
+      </div>
+      <div class="modal-body" style="font-size:.9rem;color:#334155;">
+        <p class="mb-3">Hệ thống yêu cầu bạn cung cấp địa chỉ email để liên hệ khi cần.</p>
+        <input type="email" id="emailModalInput" class="form-control" placeholder="email@example.com" autocomplete="email">
+        <div id="emailModalError" style="color:#EF4444;font-size:.8rem;margin-top:6px;display:none;"></div>
+      </div>
+      <div class="modal-footer border-0 pt-0 gap-2">
+        <button type="button" class="btn btn-primary fw-semibold px-4" style="border-radius:10px;" onclick="submitEmail()">
+          <i class="bi bi-check-lg me-1"></i>Xác nhận
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {# ── Time conflict modal ─────────────────────────────────────── #}
 <div class="modal fade" id="conflictModal" tabindex="-1" aria-labelledby="conflictModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
@@ -950,5 +979,36 @@ async function exportTKB(fmt) {
     }
   }
 }
+
+{% if needs_email %}
+/* ── Email collection modal ── */
+document.addEventListener('DOMContentLoaded', function() {
+  var m = new bootstrap.Modal(document.getElementById('emailModal'));
+  m.show();
+  document.getElementById('emailModalInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') submitEmail();
+  });
+});
+
+async function submitEmail() {
+  var input = document.getElementById('emailModalInput');
+  var errEl = document.getElementById('emailModalError');
+  var email = input.value.trim();
+  errEl.style.display = 'none';
+  if (!email) { errEl.textContent = 'Vui lòng nhập email.'; errEl.style.display = ''; return; }
+  try {
+    var res = await fetch('/student/set-email', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email: email})
+    });
+    var d = await res.json();
+    if (!d.ok) { errEl.textContent = d.error || 'Có lỗi xảy ra.'; errEl.style.display = ''; return; }
+    bootstrap.Modal.getInstance(document.getElementById('emailModal')).hide();
+  } catch(e) {
+    errEl.textContent = 'Không thể kết nối máy chủ.'; errEl.style.display = '';
+  }
+}
+{% endif %}
 </script>
 {% endblock %}

@@ -569,6 +569,23 @@
             <span id="req5-label">{% if require_5_subjects %}Bật{% else %}Tắt{% endif %}</span>
           </button>
         </div>
+        <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
+          <div>
+            <span style="font-size:.78rem; font-weight:600; color:#374151;">
+              <i class="bi bi-envelope-check me-1" style="color:#8B5CF6;"></i>Kiểm tra email HS
+            </span>
+            <span id="email-check-desc" style="font-size:.72rem; color:#64748B; display:block; margin-top:1px;">
+              {% if require_email_check %}Hiện popup yêu cầu HS bổ sung email khi đăng nhập{% else %}Không yêu cầu bổ sung email{% endif %}
+            </span>
+          </div>
+          <button id="btn-toggle-email-check"
+                  class="reg-toggle {% if require_email_check %}open{% else %}closed{% endif %}"
+                  data-on="{{ 'true' if require_email_check else 'false' }}"
+                  onclick="toggleEmailCheck()">
+            <span class="toggle-dot"></span>
+            <span id="email-check-label">{% if require_email_check %}Bật{% else %}Tắt{% endif %}</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1443,6 +1460,26 @@ function toggleMultiClass() {
       btn.classList.toggle('closed', !on);
       label.textContent = on ? 'Bật' : 'Tắt';
       desc.textContent  = on ? 'Cho phép HS đăng ký nhiều lớp cùng môn' : 'Mỗi môn chỉ được đăng ký 1 lớp';
+    })
+    .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+    .finally(() => { btn.disabled = false; });
+}
+
+function toggleEmailCheck() {
+  const btn   = document.getElementById('btn-toggle-email-check');
+  const label = document.getElementById('email-check-label');
+  const desc  = document.getElementById('email-check-desc');
+  btn.disabled = true;
+
+  fetch('{{ url_for("admin_require_email_check_toggle") }}', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      const on = data.on;
+      btn.dataset.on = on ? 'true' : 'false';
+      btn.classList.toggle('open',   on);
+      btn.classList.toggle('closed', !on);
+      label.textContent = on ? 'Bật' : 'Tắt';
+      desc.textContent  = on ? 'Hiện popup yêu cầu HS bổ sung email khi đăng nhập' : 'Không yêu cầu bổ sung email';
     })
     .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
     .finally(() => { btn.disabled = false; });

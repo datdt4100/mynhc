@@ -4155,7 +4155,7 @@ def api_admin_student_schedule(student_id):
         schedule.append({
             "class_id": e.class_id,
             "subject": e.subject or e.subject_group or "—",
-            "teacher": e.teacher_name,
+            "teacher": _name_fmt(e.teacher_name),
             "grade": e.grade,
             "day_of_week": e.day_of_week,
             "day_label": day_name(e.day_of_week),
@@ -4171,7 +4171,7 @@ def api_admin_student_schedule(student_id):
 
     return jsonify(ok=True, student={
         "id": st.id,
-        "full_name": st.full_name,
+        "full_name": _name_fmt(st.full_name),
         "cccd": st.cccd,
         "class_name": st.class_name,
         "grade": st.grade,
@@ -4192,7 +4192,7 @@ def admin_enrollment_students(class_id):
     return jsonify(ok=True, students=[
         {
             "id": s.id,
-            "full_name": s.full_name,
+            "full_name": _name_fmt(s.full_name),
             "cccd": s.cccd,
             "class_name": s.class_name,
             "grade": s.grade,

@@ -642,8 +642,7 @@ function viewStudents(classId) {
         <div style="overflow:auto;max-height:420px;"><table class="sched-table">
         <thead><tr><th style="width:38px;">STT</th><th>Họ tên</th><th>Mã đăng nhập</th><th>Khối</th><th>Lớp</th><th>Truy cập gần nhất</th></tr></thead><tbody>`;
       data.students.forEach((s, i) => {
-        const name = s.full_name.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-        html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold">${name}</td><td><code style="font-size:.75rem;">${s.cccd}</code></td><td>${s.grade??'—'}</td><td>${s.class_name??'—'}</td><td style="font-size:.75rem;color:#64748B;white-space:nowrap;">${s.last_seen_at??'—'}</td></tr>`;
+        html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold">${s.full_name}</td><td><code style="font-size:.75rem;">${s.cccd}</code></td><td>${s.grade??'—'}</td><td>${s.class_name??'—'}</td><td style="font-size:.75rem;color:#64748B;white-space:nowrap;">${s.last_seen_at??'—'}</td></tr>`;
       });
       body.innerHTML = html + '</tbody></table></div>';
     }).catch(() => { body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải danh sách.</div>'; });
@@ -697,7 +696,7 @@ function renderDetailPane(tab) {
       <table class="sched-table"><thead><tr><th>Môn học</th><th>Giáo viên</th><th>Ngày</th><th>Buổi</th><th>Tiết</th><th>Phòng</th></tr></thead><tbody>`;
     items.forEach(c => {
       html += `<tr><td class="fw-semibold">${c.subject}</td>
-        <td>${c.teacher.toLowerCase().replace(/\b\w/g,ch=>ch.toUpperCase())}</td>
+        <td>${c.teacher}</td>
         <td style="white-space:nowrap;">${c.day_label}</td>
         <td><span class="badge ${c.session_type==='morning'?'bg-warning text-dark':'bg-primary'}" style="font-size:.68rem;">${c.session_label}</span></td>
         <td>${c.start_session}${c.end_session>c.start_session?'–'+c.end_session:''}</td>
@@ -708,7 +707,7 @@ function renderDetailPane(tab) {
       <table class="sched-table"><thead><tr><th style="width:34px;">#</th><th>Môn học</th><th>Giáo viên</th><th>Thời gian học</th><th>Phòng</th><th style="white-space:nowrap;">Đăng ký lúc</th></tr></thead><tbody>`;
     items.forEach((c, i) => {
       html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold">${c.subject}</td>
-        <td>${c.teacher.toLowerCase().replace(/\b\w/g,ch=>ch.toUpperCase())}</td>
+        <td>${c.teacher}</td>
         <td style="white-space:nowrap;font-size:.78rem;">${c.day_label} ${c.session_label} T${c.start_session}${c.end_session>c.start_session?'–'+c.end_session:''}</td>
         <td style="color:#64748B;">${c.location}</td>
         <td style="font-size:.74rem;color:#64748B;white-space:nowrap;">${c.enrolled_at??'—'}</td></tr>`;

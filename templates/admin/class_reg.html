@@ -443,9 +443,10 @@
         <div class="mb-3">
           <label class="form-label fw-semibold" style="font-size:.83rem;">Giáo viên <span class="text-danger">*</span></label>
           <input type="text" id="atTeacherSearch" class="form-control form-control-sm mb-1"
-                 placeholder="Tìm tên hoặc tổ bộ môn…" autocomplete="off"
+                 placeholder="Nhấn vào đây để xem danh sách…" autocomplete="off"
+                 onfocus="_atOnFocus(this)"
                  oninput="_atFilterTeachers(this.value)">
-          <div id="atTeacherList" style="border:1.5px solid #FDE68A;border-radius:8px;max-height:160px;overflow-y:auto;background:#fff;"></div>
+          <div id="atTeacherList" style="border-radius:8px;max-height:160px;overflow-y:auto;background:#fff;"></div>
           <input type="hidden" id="atSelectedTeacherId">
           <div id="atSelectedTeacherInfo" style="font-size:.75rem;color:#92400E;margin-top:4px;min-height:16px;"></div>
         </div>
@@ -453,10 +454,14 @@
         {# Room picker #}
         <div class="mb-2">
           <label class="form-label fw-semibold" style="font-size:.83rem;">Phòng học <span class="text-muted fw-normal">(tuỳ chọn)</span></label>
+          <button type="button" id="atRoomLoadBtn" onclick="_atLoadRoomsModal()"
+                  style="font-size:.78rem;padding:5px 14px;border-radius:8px;border:1.5px solid #E2E8F0;background:#F8FAFC;color:#475569;cursor:pointer;display:block;">
+            <i class="bi bi-search me-1"></i>Xem phòng trống cho khung giờ này
+          </button>
           <div id="atRoomLoading" style="font-size:.78rem;color:#94A3B8;padding:4px 0;display:none;">
             <span class="spinner-border spinner-border-sm me-1"></span>Đang tải phòng trống…
           </div>
-          <div id="atRoomList" style="display:flex;flex-wrap:wrap;gap:6px;min-height:28px;"></div>
+          <div id="atRoomList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
           <input type="hidden" id="atSelectedRoom">
           <div id="atRoomEmpty" style="font-size:.75rem;color:#94A3B8;display:none;">Không có phòng trống cho khung giờ này.</div>
         </div>
@@ -501,32 +506,47 @@
 <script>
 /* ── Assign-teacher modal state ── */
 const _AT_TEACHERS = {{ teachers_json | tojson }};
-let _atClassId = null, _atSessionType = null, _atDayOfWeek = null,
+let _atClassId = null, _atSubject = null, _atGrade = null,
+    _atSessionType = null, _atDayOfWeek = null,
     _atStartSession = null, _atDuration = null;
 
 function openAssignModal(classId, subject, grade, dayLabel, sessionLabel, sessionType, dayOfWeek, startSession, duration) {
-  _atClassId = classId;
+  _atClassId = classId; _atSubject = subject; _atGrade = grade;
   _atSessionType = sessionType; _atDayOfWeek = dayOfWeek;
   _atStartSession = startSession; _atDuration = duration;
   document.getElementById('atModalInfo').textContent =
     subject + ' · K' + grade + ' · ' + sessionLabel + ' – ' + dayLabel;
+  // Reset teacher picker
+  const searchEl = document.getElementById('atTeacherSearch');
+  searchEl.value = '';
+  searchEl.placeholder = subject ? 'Nhấn vào đây để xem GV tổ ' + subject + '…' : 'Nhấn vào đây để xem danh sách…';
+  delete searchEl.dataset.loaded;
+  document.getElementById('atTeacherList').innerHTML = '';
+  document.getElementById('atTeacherList').style.border = 'none';
   document.getElementById('atSelectedTeacherId').value = '';
   document.getElementById('atSelectedTeacherInfo').textContent = '';
   document.getElementById('atModalError').classList.add('d-none');
+  // Reset room picker
   document.getElementById('atSelectedRoom').value = '';
   document.getElementById('atRoomList').innerHTML = '';
   document.getElementById('atRoomEmpty').style.display = 'none';
-  /* Pre-filter by subject_group if class has a subject */
-  const searchEl = document.getElementById('atTeacherSearch');
-  if (subject) {
-    searchEl.value = subject;
-    _atFilterTeachers(subject);
-  } else {
-    searchEl.value = '';
-    _atRenderTeachers(_AT_TEACHERS);
-  }
-  _atLoadRooms(sessionType, dayOfWeek, startSession, duration, grade);
+  document.getElementById('atRoomLoading').style.display = 'none';
+  document.getElementById('atRoomLoadBtn').style.display = '';
   new bootstrap.Modal(document.getElementById('assignTeacherModal')).show();
+}
+
+function _atOnFocus(input) {
+  if (input.dataset.loaded) return;
+  input.dataset.loaded = '1';
+  input.placeholder = 'Tìm tên hoặc tổ bộ môn…';
+  // Show teachers filtered by subject if available, else all
+  _atFilterTeachers(_atSubject || '');
+  if (_atSubject) input.value = _atSubject;
+}
+
+function _atLoadRoomsModal() {
+  document.getElementById('atRoomLoadBtn').style.display = 'none';
+  _atLoadRooms(_atSessionType, _atDayOfWeek, _atStartSession, _atDuration, _atGrade);
 }
 
 function _atRenderTeachers(list) {

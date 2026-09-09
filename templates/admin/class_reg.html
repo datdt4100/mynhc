@@ -442,28 +442,20 @@
         {# Teacher picker #}
         <div class="mb-3">
           <label class="form-label fw-semibold" style="font-size:.83rem;">Giáo viên <span class="text-danger">*</span></label>
-          <input type="text" id="atTeacherSearch" class="form-control form-control-sm mb-1"
-                 placeholder="Nhấn vào đây để xem danh sách…" autocomplete="off"
-                 onfocus="_atOnFocus(this)"
-                 oninput="_atFilterTeachers(this.value)">
-          <div id="atTeacherList" style="border-radius:8px;max-height:160px;overflow-y:auto;background:#fff;"></div>
-          <input type="hidden" id="atSelectedTeacherId">
-          <div id="atSelectedTeacherInfo" style="font-size:.75rem;color:#92400E;margin-top:4px;min-height:16px;"></div>
+          <select id="atTeacherSelect" class="form-select form-select-sm"
+                  onfocus="_atLoadTeacherOptions(this)"
+                  onchange="_atOnSelectTeacher(this)">
+            <option value="">— Nhấn để xem danh sách —</option>
+          </select>
         </div>
 
         {# Room picker #}
         <div class="mb-2">
           <label class="form-label fw-semibold" style="font-size:.83rem;">Phòng học <span class="text-muted fw-normal">(tuỳ chọn)</span></label>
-          <button type="button" id="atRoomLoadBtn" onclick="_atLoadRoomsModal()"
-                  style="font-size:.78rem;padding:5px 14px;border-radius:8px;border:1.5px solid #E2E8F0;background:#F8FAFC;color:#475569;cursor:pointer;display:block;">
-            <i class="bi bi-search me-1"></i>Xem phòng trống cho khung giờ này
-          </button>
-          <div id="atRoomLoading" style="font-size:.78rem;color:#94A3B8;padding:4px 0;display:none;">
-            <span class="spinner-border spinner-border-sm me-1"></span>Đang tải phòng trống…
-          </div>
-          <div id="atRoomList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
-          <input type="hidden" id="atSelectedRoom">
-          <div id="atRoomEmpty" style="font-size:.75rem;color:#94A3B8;display:none;">Không có phòng trống cho khung giờ này.</div>
+          <select id="atRoomSelect" class="form-select form-select-sm"
+                  onfocus="_atLoadRoomOptions(this)">
+            <option value="">— Nhấn để xem phòng trống —</option>
+          </select>
         </div>
 
         <div id="atModalError" class="alert alert-danger d-none py-2 mt-2" style="font-size:.8rem;border-radius:8px;"></div>
@@ -515,115 +507,57 @@ function openAssignModal(classId, subject, grade, dayLabel, sessionLabel, sessio
   _atStartSession = startSession; _atDuration = duration;
   document.getElementById('atModalInfo').textContent =
     subject + ' · K' + grade + ' · ' + sessionLabel + ' – ' + dayLabel;
-  // Reset teacher picker
-  const searchEl = document.getElementById('atTeacherSearch');
-  searchEl.value = '';
-  searchEl.placeholder = subject ? 'Nhấn vào đây để xem GV tổ ' + subject + '…' : 'Nhấn vào đây để xem danh sách…';
-  delete searchEl.dataset.loaded;
-  document.getElementById('atTeacherList').innerHTML = '';
-  document.getElementById('atTeacherList').style.border = 'none';
-  document.getElementById('atSelectedTeacherId').value = '';
-  document.getElementById('atSelectedTeacherInfo').textContent = '';
+  // Reset teacher select
+  const tSel = document.getElementById('atTeacherSelect');
+  tSel.innerHTML = '<option value="">— Nhấn để xem danh sách —</option>';
+  delete tSel.dataset.loaded;
+  // Reset room select
+  const rSel = document.getElementById('atRoomSelect');
+  rSel.innerHTML = '<option value="">— Nhấn để xem phòng trống —</option>';
+  delete rSel.dataset.loaded;
   document.getElementById('atModalError').classList.add('d-none');
-  // Reset room picker
-  document.getElementById('atSelectedRoom').value = '';
-  document.getElementById('atRoomList').innerHTML = '';
-  document.getElementById('atRoomEmpty').style.display = 'none';
-  document.getElementById('atRoomLoading').style.display = 'none';
-  document.getElementById('atRoomLoadBtn').style.display = '';
   new bootstrap.Modal(document.getElementById('assignTeacherModal')).show();
 }
 
-function _atOnFocus(input) {
-  if (input.dataset.loaded) return;
-  input.dataset.loaded = '1';
-  input.placeholder = 'Tìm tên hoặc tổ bộ môn…';
-  // Show teachers filtered by subject if available, else all
-  _atFilterTeachers(_atSubject || '');
-  if (_atSubject) input.value = _atSubject;
-}
-
-function _atLoadRoomsModal() {
-  document.getElementById('atRoomLoadBtn').style.display = 'none';
-  _atLoadRooms(_atSessionType, _atDayOfWeek, _atStartSession, _atDuration, _atGrade);
-}
-
-function _atRenderTeachers(list) {
-  const el = document.getElementById('atTeacherList');
-  if (!list.length) {
-    el.innerHTML = '';
-    el.style.border = 'none';
-    return;
-  }
-  el.style.border = '1.5px solid #FDE68A';
-  el.innerHTML = list.map(t => {
-    const disp = t.full_name.toLowerCase().replace(/(^|\s)(\S)/g, (_, sp, ch) => sp + ch.toUpperCase());
-    return `<div onclick="_atSelectTeacher(${t.id},'${disp.replace(/'/g,"&#39;")}','${t.subject_group.replace(/'/g,"&#39;")}')"
-         style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #FEF3C7;font-size:.8rem;transition:background .1s;"
-         onmouseenter="this.style.background='#FEF9C3'" onmouseleave="this.style.background='#fff'">
-      <span class="fw-semibold">${disp}</span>
-      ${t.subject_group ? '<span style="margin-left:6px;font-size:.7rem;color:#0369A1;background:#EFF6FF;padding:1px 6px;border-radius:5px;">'+t.subject_group+'</span>' : ''}
-    </div>`;
-  }).join('');
-}
-
-function _atFilterTeachers(q) {
-  document.getElementById('atSelectedTeacherId').value = '';
-  document.getElementById('atSelectedTeacherInfo').textContent = '';
-  const s = q.toLowerCase().trim();
-  if (!s) { _atRenderTeachers(_AT_TEACHERS); return; }
-  const filtered = _AT_TEACHERS.filter(t =>
-    t.full_name.toLowerCase().includes(s) || t.subject_group.toLowerCase().includes(s));
-  if (!filtered.length) {
-    const el = document.getElementById('atTeacherList');
-    el.innerHTML = '<div style="padding:8px 12px;font-size:.78rem;color:#94A3B8;">Không tìm thấy giáo viên.</div>';
-    el.style.border = '1.5px solid #FDE68A';
-    return;
-  }
-  _atRenderTeachers(filtered);
-}
-
-function _atSelectTeacher(id, name, group) {
-  document.getElementById('atSelectedTeacherId').value = id;
-  document.getElementById('atSelectedTeacherInfo').textContent = '✓ ' + name + (group ? ' · ' + group : '');
-  document.getElementById('atTeacherSearch').value = name;
-  document.getElementById('atTeacherList').innerHTML = '';
-}
-
-function _atLoadRooms(sessionType, day, start, duration, grade) {
-  const loading = document.getElementById('atRoomLoading');
-  const roomList = document.getElementById('atRoomList');
-  const roomEmpty = document.getElementById('atRoomEmpty');
-  loading.style.display = ''; roomList.innerHTML = ''; roomEmpty.style.display = 'none';
-  fetch(`/api/available-rooms?day_of_week=${day}&session_type=${sessionType}&start_session=${start}&duration=${duration}&grade=${grade}`)
-    .then(r => r.json())
-    .then(data => {
-      loading.style.display = 'none';
-      const rooms = Array.isArray(data) ? data : (data.rooms || []);
-      if (!rooms.length) { roomEmpty.style.display = ''; return; }
-      roomList.innerHTML = rooms.map(r =>
-        `<button type="button" onclick="_atSelectRoom(this,'${r}')"
-          style="padding:4px 12px;border-radius:7px;border:1.5px solid #E2E8F0;background:#F8FAFC;font-size:.78rem;cursor:pointer;transition:.1s;"
-          onmouseenter="this.style.background='#EFF6FF'" onmouseleave="this.style.background=(this.dataset.sel?'#DBEAFE':'#F8FAFC')">${r}</button>`
-      ).join('');
-    })
-    .catch(() => { loading.style.display = 'none'; });
-}
-
-function _atSelectRoom(btn, room) {
-  document.querySelectorAll('#atRoomList button').forEach(b => {
-    b.style.background = '#F8FAFC'; b.style.borderColor = '#E2E8F0'; delete b.dataset.sel;
+function _atLoadTeacherOptions(sel) {
+  if (sel.dataset.loaded) return;
+  sel.dataset.loaded = '1';
+  const subject = _atSubject ? _atSubject.toLowerCase() : '';
+  const list = subject
+    ? _AT_TEACHERS.filter(t => t.subject_group.toLowerCase() === subject)
+    : _AT_TEACHERS;
+  sel.innerHTML = '<option value="">— Chọn giáo viên —</option>';
+  list.forEach(t => {
+    const opt = new Option(t.full_name + (t.subject_group ? ' · ' + t.subject_group : ''), t.id);
+    sel.add(opt);
   });
-  btn.style.background = '#DBEAFE'; btn.style.borderColor = '#3B82F6'; btn.dataset.sel = '1';
-  document.getElementById('atSelectedRoom').value = room;
+  if (!list.length) sel.add(new Option('Không có giáo viên phù hợp', ''));
+}
+
+function _atOnSelectTeacher(sel) { /* value already set by select */ }
+
+async function _atLoadRoomOptions(sel) {
+  if (sel.dataset.loaded) return;
+  sel.dataset.loaded = '1';
+  sel.innerHTML = '<option value="">Đang tải…</option>';
+  try {
+    const res = await fetch(`/api/available-rooms?day_of_week=${_atDayOfWeek}&session_type=${_atSessionType}&start_session=${_atStartSession}&duration=${_atDuration}&grade=${_atGrade}`);
+    const data = await res.json();
+    const rooms = Array.isArray(data) ? data : (data.rooms || []);
+    sel.innerHTML = '<option value="">— Chọn phòng (tuỳ chọn) —</option>';
+    rooms.forEach(r => sel.add(new Option(r, r)));
+    if (!rooms.length) sel.add(new Option('Không có phòng trống', ''));
+  } catch {
+    sel.innerHTML = '<option value="">Lỗi tải phòng</option>';
+  }
 }
 
 async function submitAssignTeacher() {
   const errEl = document.getElementById('atModalError');
   errEl.classList.add('d-none');
-  const teacherId = document.getElementById('atSelectedTeacherId').value;
+  const teacherId = document.getElementById('atTeacherSelect').value;
   if (!teacherId) { errEl.textContent = 'Vui lòng chọn giáo viên.'; errEl.classList.remove('d-none'); return; }
-  const room = document.getElementById('atSelectedRoom').value;
+  const room = document.getElementById('atRoomSelect').value;
   try {
     const res = await fetch('/admin/classes/' + _atClassId + '/assign-teacher', {
       method: 'POST', headers: {'Content-Type':'application/json'},

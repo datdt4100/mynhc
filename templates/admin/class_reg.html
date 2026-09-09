@@ -324,20 +324,25 @@
       <span class="badge ms-1" style="background:#FEF3C7;color:#92400E;font-size:.72rem;border-radius:8px;">{{ unassigned_classes | length }}</span>
     </div>
     <div style="max-height:380px;overflow-y:auto;overflow-x:auto;-webkit-overflow-scrolling:touch;">
-      <table class="table admin-table mb-0" id="unassigned-table">
+      <table class="table admin-table mb-0" id="unassigned-table" style="min-width:820px;">
         <thead style="position:sticky;top:0;z-index:2;background:#F8FAFC;">
           <tr>
-            <th style="width:44px;">STT</th>
-            <th>Môn</th>
-            <th>Khối</th>
-            <th>Thời gian</th>
-            <th>Phòng</th>
-            <th>HS đăng ký</th>
-            <th style="width:110px;">Thao tác</th>
+            <th style="width:36px;">STT</th>
+            <th style="white-space:nowrap;">Môn</th>
+            <th style="white-space:nowrap;">Khối</th>
+            <th style="white-space:nowrap;">Thời gian</th>
+            <th style="white-space:nowrap;min-width:130px;">Địa điểm</th>
+            <th style="white-space:nowrap;width:70px;">Sĩ số</th>
+            <th style="white-space:nowrap;text-align:center;">HS đăng ký</th>
+            <th style="white-space:nowrap;">Tổ hợp</th>
+            <th style="white-space:nowrap;">Thời gian tạo</th>
+            <th style="width:88px;">Thao tác</th>
           </tr>
         </thead>
         <tbody>
           {% for cls in unassigned_classes %}
+          {% set ec = enrollment_counts.get(cls.id, 0) %}
+          {% set combos = conflict_info.get(cls.id, 100) %}
           <tr id="ua-row-{{ cls.id }}">
             <td class="text-muted" style="font-size:.75rem;">{{ loop.index }}</td>
             <td><span class="badge rounded-pill" style="background:#EFF6FF;color:#0369A1;font-size:.72rem;">{{ cls.subject or '—' }}</span></td>
@@ -345,8 +350,40 @@
             <td style="font-size:.78rem;white-space:nowrap;">
               {{ session_label(cls.session_type, cls.start_session, cls.duration) }} – {{ day_name(cls.day_of_week) }}
             </td>
-            <td style="font-size:.78rem;">{{ cls.location or '<span class="text-muted">—</span>' | safe }}</td>
-            <td style="font-size:.78rem;">{{ enrollment_counts.get(cls.id, 0) }}</td>
+            <td>
+              <select class="form-select form-select-sm ua-room-select"
+                      style="font-size:.75rem;min-width:110px;"
+                      data-class-id="{{ cls.id }}"
+                      data-day="{{ cls.day_of_week }}"
+                      data-session="{{ cls.session_type }}"
+                      data-start="{{ cls.start_session }}"
+                      data-duration="{{ cls.duration }}"
+                      data-grade="{{ cls.grade }}"
+                      onchange="saveUARoom({{ cls.id }}, this)"
+                      onfocus="loadUARooms(this)">
+                <option value="">— Chọn phòng —</option>
+                {% if cls.location %}
+                <option value="{{ cls.location }}" selected>{{ cls.location }}</option>
+                {% endif %}
+              </select>
+            </td>
+            <td style="font-size:.78rem;">{{ cls.max_capacity or '—' }}</td>
+            <td class="text-center">
+              <span class="badge {{ 'bg-danger' if cls.max_capacity and ec >= cls.max_capacity else ('bg-warning text-dark' if ec > 0 else 'bg-light text-muted border') }}"
+                    style="font-size:.78rem;border-radius:8px;">
+                {{ ec }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}
+              </span>
+            </td>
+            <td>
+              {% if combos == 0 %}
+                <span class="conflict-badge conflict-red" title="Không còn cách nào để HS chọn đủ tất cả môn">🔴 0 combo</span>
+              {% elif combos <= 3 %}
+                <span class="conflict-badge conflict-yellow" title="Chỉ còn {{ combos }} cách ghép lịch hợp lệ">🟡 {{ combos }} combo</span>
+              {% else %}
+                <span class="conflict-badge conflict-green" title="{{ combos if combos < 100 else '≥100' }} cách ghép lịch hợp lệ">🟢 OK</span>
+              {% endif %}
+            </td>
+            <td style="font-size:.73rem;color:#64748B;white-space:nowrap;">{{ cls.created_at or '—' }}</td>
             <td>
               <div class="d-flex gap-1">
                 <button class="btn btn-sm" style="border-radius:7px;padding:4px 7px;background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;" title="Phân công giáo viên"
@@ -569,6 +606,46 @@ async function submitAssignTeacher() {
       errEl.textContent = data.error || 'Không thể phân công.'; errEl.classList.remove('d-none');
     }
   } catch { errEl.textContent = 'Lỗi kết nối.'; errEl.classList.remove('d-none'); }
+}
+
+async function loadUARooms(sel) {
+  if (sel.dataset.loaded) return;
+  sel.dataset.loaded = '1';
+  const {day, session, start, duration, grade} = sel.dataset;
+  const cur = sel.value;
+  try {
+    const res = await fetch(`/api/available-rooms?day_of_week=${day}&session_type=${session}&start_session=${start}&duration=${duration}&grade=${grade}`);
+    const data = await res.json();
+    const rooms = Array.isArray(data) ? data : (data.rooms || []);
+    // Remove all options except first placeholder
+    while (sel.options.length > 1) sel.remove(1);
+    // If current value not in rooms, keep it at top
+    if (cur && !rooms.includes(cur)) {
+      sel.add(new Option(cur, cur, false, true));
+    }
+    rooms.forEach(r => {
+      sel.add(new Option(r, r, false, r === cur));
+    });
+    sel.value = cur;
+  } catch {}
+}
+
+async function saveUARoom(classId, sel) {
+  const room = sel.value;
+  try {
+    const res = await fetch('/admin/classes/' + classId, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({location: room || null})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      sel.style.borderColor = '#22c55e';
+      setTimeout(() => { sel.style.borderColor = ''; }, 1500);
+    } else {
+      showAlert(data.error || 'Không thể lưu.', 'error');
+    }
+  } catch { showAlert('Lỗi kết nối.', 'error'); }
 }
 
 function deleteUnassigned(classId) {

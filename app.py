@@ -3220,7 +3220,7 @@ def admin_class_reg():
     all_classes        = [c for c in all_classes_raw if c.teacher_cccd != _UNASSIGNED_CCCD]
 
     conflict_info = {}
-    for c in all_classes:
+    for c in all_classes + unassigned_classes:
         cls_dict = {"subject": c.subject, "day_of_week": c.day_of_week,
                     "session_type": c.session_type, "start_session": c.start_session,
                     "duration": c.duration}
@@ -3353,21 +3353,22 @@ def admin_classes_import_rooms():
 @admin_required
 def admin_class_update(class_id):
     data = request.get_json(force=True, silent=True) or {}
-    location = (data.get("location") or "").strip() or None
-    try:
-        max_capacity = int(data["max_capacity"]) if data.get("max_capacity") else None
-    except (ValueError, TypeError):
-        max_capacity = None
+    updates = {}
+    if "location" in data:
+        updates["location"] = (data.get("location") or "").strip() or None
+    if "max_capacity" in data:
+        try:
+            updates["max_capacity"] = int(data["max_capacity"]) if data.get("max_capacity") else None
+        except (ValueError, TypeError):
+            updates["max_capacity"] = None
+    if not updates:
+        return jsonify(ok=True)
     with engine.begin() as conn:
         row = conn.execute(select(classes.c.grade).where(classes.c.id == class_id)).fetchone()
-        conn.execute(
-            update(classes).where(classes.c.id == class_id).values(
-                location=location, max_capacity=max_capacity
-            )
-        )
+        conn.execute(update(classes).where(classes.c.id == class_id).values(**updates))
     grade = row.grade if row else None
     _bump(event_type="class_update", grade=grade)
-    return jsonify(ok=True, location=location, max_capacity=max_capacity)
+    return jsonify(ok=True, **updates)
 
 
 @app.route("/admin/classes/import-template")

@@ -3399,7 +3399,14 @@ def admin_bulk_capacity():
     if cap <= 0:
         return jsonify(ok=False, error="Sĩ số phải lớn hơn 0.")
     with engine.begin() as conn:
-        conn.execute(update(classes).values(max_capacity=cap))
+        # Only update classes assigned to real teachers (not the placeholder)
+        conn.execute(
+            update(classes)
+            .where(classes.c.teacher_id.in_(
+                select(teachers.c.id).where(teachers.c.cccd != _UNASSIGNED_CCCD)
+            ))
+            .values(max_capacity=cap)
+        )
     _bump(event_type="class_update")
     return jsonify(ok=True, capacity=cap)
 

@@ -132,22 +132,27 @@
       <span class="text-muted ms-1" style="font-weight:400; font-size:.8rem;">(click để xem chi tiết)</span>
     </div>
     <!-- toolbar -->
-    <div style="padding:10px 16px; background:#FAFBFC; border-bottom:1.5px solid #E2E8F0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-      <a href="{{ url_for('admin_class_reg_export') }}" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;" title="Tải Excel danh sách lớp đã đăng ký">
-        <i class="bi bi-file-earmark-arrow-down"></i><span>Tải Excel</span>
-      </a>
-      <div class="d-flex align-items-center gap-1 ms-2" style="font-size:.78rem;">
-        <label class="text-muted fw-semibold mb-0" style="white-space:nowrap;">Sĩ số chung:</label>
-        <input type="number" id="bulk-cap-input" min="1" max="99" placeholder="VD: 30"
-               style="width:72px;border-radius:7px;border:1.5px solid #CBD5E1;padding:3px 7px;font-size:.78rem;"
+    <div style="padding:8px 16px 0; background:#FAFBFC; border-bottom:1.5px solid #E2E8F0; display:flex; flex-direction:column; gap:0;">
+      <!-- row 1: sĩ số chung -->
+      <div style="display:flex; align-items:center; gap:8px; padding-bottom:8px; border-bottom:1px solid #F1F5F9;">
+        <span class="text-muted fw-semibold" style="font-size:.78rem; white-space:nowrap;">Sĩ số chung (lớp GV):</span>
+        <input type="number" id="bulk-cap-input" min="1" max="999" placeholder="VD: 30"
+               style="width:76px;border-radius:7px;border:1.5px solid #CBD5E1;padding:3px 8px;font-size:.78rem;"
                onkeydown="if(event.key==='Enter'){setBulkCapacity();}">
-        <button class="btn btn-sm btn-outline-primary fw-semibold" style="border-radius:7px;font-size:.78rem;padding:3px 10px;white-space:nowrap;"
-                onclick="setBulkCapacity()">Áp dụng tất cả</button>
+        <button class="btn btn-sm btn-outline-primary fw-semibold" style="border-radius:7px;font-size:.78rem;padding:3px 12px;white-space:nowrap;"
+                onclick="setBulkCapacity()"><i class="bi bi-check2-all me-1"></i>Áp dụng</button>
+        <span class="text-muted" style="font-size:.73rem;">Chỉ áp dụng cho lớp đã phân công GV</span>
       </div>
-      <button class="btn btn-sm btn-outline-danger fw-semibold ms-auto" style="border-radius:8px; font-size:.78rem;"
-              onclick="clearAllRegisteredClasses()">
-        <i class="bi bi-trash3 me-1"></i>Xoá tất cả
-      </button>
+      <!-- row 2: actions -->
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 0;">
+        <a href="{{ url_for('admin_class_reg_export') }}" class="btn btn-sm btn-outline-secondary fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem;" title="Tải Excel danh sách lớp đã đăng ký">
+          <i class="bi bi-file-earmark-arrow-down"></i><span>Tải Excel</span>
+        </a>
+        <button class="btn btn-sm btn-outline-danger fw-semibold ms-auto" style="border-radius:8px; font-size:.78rem;"
+                onclick="clearAllRegisteredClasses()">
+          <i class="bi bi-trash3 me-1"></i>Xoá tất cả
+        </button>
+      </div>
     </div>
     <div class="table-responsive-admin" style="max-height:420px;overflow-y:auto;overflow-x:auto;">
       <table class="table admin-table mb-0" id="teacher-summary-table">
@@ -663,16 +668,17 @@ async function setBulkCapacity() {
     });
     const data = await res.json();
     if (data.ok) {
-      // Update all sĩ số inputs on the page
-      document.querySelectorAll('input[data-field="max_capacity"], .cap-input').forEach(el => { el.value = cap; });
-      // Update all enrollment badges
-      document.querySelectorAll('[class*="enroll-badge-"]').forEach(badge => {
-        const m = badge.className.match(/enroll-badge-(\d+)/);
-        if (!m) return;
+      // .cap-input only exists in teacher detail tables, not in unassigned table
+      document.querySelectorAll('.cap-input').forEach(el => {
+        el.value = cap;
+        const id = el.dataset.classId;
+        if (!id) return;
+        const badge = document.querySelector('.enroll-badge-' + id);
+        if (!badge) return;
         const ec = parseInt(badge.textContent.split('/')[0]) || 0;
-        _updateEnrollBadge(m[1], ec, cap);
+        _updateEnrollBadge(id, ec, cap);
       });
-      showAlert('Đã đặt sĩ số ' + cap + ' cho tất cả lớp.', 'success');
+      showAlert('Đã đặt sĩ số ' + cap + ' cho lớp đã phân công GV.', 'success');
     } else {
       showAlert(data.error || 'Có lỗi xảy ra.', 'error');
     }

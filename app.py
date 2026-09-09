@@ -487,7 +487,8 @@ def _cls_slot(row) -> str:
     return f"T{row.day_of_week}{s}{row.start_session}x{row.duration}"
 
 def _norm_name(s: str) -> str:
-    """Normalize a name for comparison: collapse whitespace, lowercase."""
+    """Normalize a name for comparison: NFC unicode, collapse whitespace, lowercase."""
+    s = unicodedata.normalize("NFC", s)
     return " ".join(s.strip().split()).lower()
 
 @app.template_filter("name_fmt")

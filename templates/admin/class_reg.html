@@ -480,6 +480,7 @@
 </div>
 {% endblock %}
 
+{% block scripts %}
 <!-- Teacher Activity Log Modal -->
 <div class="modal fade" id="teacherLogModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:560px;">
@@ -501,8 +502,6 @@
     </div>
   </div>
 </div>
-
-{% block scripts %}
 <script>
 /* ── Assign-teacher modal state ── */
 const _AT_TEACHERS = {{ teachers_json | tojson }};

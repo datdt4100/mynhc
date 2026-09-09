@@ -304,7 +304,7 @@
                           {% endif %}
                         </td>
                         <td style="font-size:.73rem; color:#64748B; white-space:nowrap;">
-                          {{ cls.created_at[:16] if cls.created_at else '—' }}
+                          {{ cls.created_at[:19] if cls.created_at else '—' }}
                         </td>
                         <td class="text-center" style="white-space:nowrap;">
                           <i class="bi bi-exclamation-circle-fill warn-indicator-{{ cls.id }}"
@@ -423,7 +423,7 @@
                 <span class="conflict-badge conflict-green" title="{{ combos if combos < 100 else '≥100' }} cách ghép lịch hợp lệ">🟢 OK</span>
               {% endif %}
             </td>
-            <td style="font-size:.73rem;color:#64748B;white-space:nowrap;">{{ cls.created_at[:16] if cls.created_at else '—' }}</td>
+            <td style="font-size:.73rem;color:#64748B;white-space:nowrap;">{{ cls.created_at[:19] if cls.created_at else '—' }}</td>
             <td>
               <div class="d-flex gap-1">
                 <button class="btn btn-sm" style="border-radius:7px;padding:4px 7px;background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;" title="Phân công giáo viên"
@@ -914,7 +914,7 @@ function openTeacherLog(teacherId, teacherName) {
           <td style="padding:7px 8px;"><span style="color:${col};font-weight:600;">${r.action}</span></td>
           <td style="padding:7px 8px;">${r.subject} <span style="color:#94A3B8;font-size:.72rem;">${khoiStr}</span></td>
           <td style="padding:7px 8px;white-space:nowrap;color:#475569;">${r.slot}</td>
-          <td style="padding:7px 8px;font-size:.74rem;color:#94A3B8;white-space:nowrap;">${r.ts ? r.ts.slice(0,16) : '—'}</td>
+          <td style="padding:7px 8px;font-size:.74rem;color:#94A3B8;white-space:nowrap;">${r.ts ? r.ts.slice(0,19) : '—'}</td>
         </tr>`;
       });
       body.innerHTML = html + '</tbody></table>';

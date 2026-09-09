@@ -234,10 +234,10 @@
           </thead>
           <tbody>
             {% for cls in published_classes %}
-            <tr data-search-cls="{{ cls.teacher_name|lower }} {{ cls.subject_group|lower }} {{ cls.location|lower if cls.location else '' }}">
+            <tr data-search-cls="{{ cls.teacher_name|lower }} {{ (cls.subject or cls.subject_group)|lower }} {{ cls.location|lower if cls.location else '' }}">
               <td><code style="font-size:.78rem; background:#F1F5F9; padding:2px 6px; border-radius:4px;">#{{ cls.id }}</code></td>
               <td class="fw-semibold" style="white-space:nowrap;">{{ cls.teacher_name | name_fmt }}</td>
-              <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">{{ cls.subject_group }}</span></td>
+              <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">{{ cls.subject or cls.subject_group }}</span></td>
               <td><span class="badge bg-light text-dark border" style="font-size:.72rem;">Khối {{ cls.grade }}</span></td>
               <td style="white-space:nowrap; font-size:.78rem;">
                 {{ day_name(cls.day_of_week) }} - {{ "Sáng" if cls.session_type == "morning" else "Chiều" }} - Tiết {{ cls.start_session }}{% if cls.duration > 1 %}–{{ cls.start_session + cls.duration - 1 }}{% endif %}
@@ -534,6 +534,37 @@
   </div>
 </div>
 
+<!-- Delete All Enrollments Modal -->
+<div class="modal fade" id="modalDeleteAll" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:440px;">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;border:none;box-shadow:0 8px 40px rgba(0,0,0,.18);">
+      <div class="modal-header border-0" style="background:linear-gradient(135deg,#DC2626,#B91C1C);padding:16px 20px;">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-exclamation-triangle-fill text-white" style="font-size:1.1rem;"></i>
+          <h5 class="modal-title fw-bold text-white mb-0" style="font-size:.95rem;">Xác nhận xoá toàn bộ đăng ký</h5>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:20px 24px;">
+        <p class="text-danger fw-semibold mb-1" style="font-size:.9rem;">Cảnh báo: Hành động này không thể hoàn tác.</p>
+        <p class="text-muted mb-3" style="font-size:.85rem;">Tất cả dữ liệu đăng ký môn học của học sinh sẽ bị xóa vĩnh viễn.</p>
+        <label class="form-label fw-semibold" style="font-size:.85rem;">Nhập <code>XOA</code> để xác nhận:</label>
+        <input type="text" id="deleteAllConfirmInput" class="form-control form-control-sm"
+               placeholder="Nhập XOA" autocomplete="off"
+               oninput="document.getElementById('btnDeleteAllConfirm').disabled = this.value !== 'XOA';"
+               style="border-radius:8px;font-size:.9rem;">
+      </div>
+      <div class="modal-footer border-0" style="padding:12px 20px;gap:8px;">
+        <button type="button" class="btn btn-light btn-sm fw-semibold" data-bs-dismiss="modal" style="border-radius:8px;">Hủy</button>
+        <button type="button" id="btnDeleteAllConfirm" class="btn btn-danger btn-sm fw-semibold" disabled
+                onclick="execDeleteAll()" style="border-radius:8px;">
+          <i class="bi bi-trash3 me-1"></i>Xóa toàn bộ
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -760,7 +791,16 @@ function toggleStudentReg() {
 
 /* ── Delete all enrollments ── */
 function confirmDeleteAll() {
-  if (!confirm('Xóa TOÀN BỘ đăng ký của tất cả học sinh?\n\nHành động này không thể hoàn tác.')) return;
+  const input = document.getElementById('deleteAllConfirmInput');
+  if (input) input.value = '';
+  const btn = document.getElementById('btnDeleteAllConfirm');
+  if (btn) btn.disabled = true;
+  new bootstrap.Modal(document.getElementById('modalDeleteAll')).show();
+  setTimeout(() => { if (input) input.focus(); }, 400);
+}
+function execDeleteAll() {
+  const modal = bootstrap.Modal.getInstance(document.getElementById('modalDeleteAll'));
+  if (modal) modal.hide();
   fetch('{{ url_for("admin_enrollment_delete_all") }}', {
     method: 'POST',
     headers: { 'X-Requested-With': 'XMLHttpRequest' }

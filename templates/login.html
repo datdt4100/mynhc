@@ -424,11 +424,11 @@
         cfHint.textContent = 'Mật khẩu phải trùng khớp';
         if (pwRules) pwRules.style.display = 'flex';
       } else if (_firstLogin && _role === 'student') {
-        /* Student first login: new password + confirm (no email) */
-        hdrText.textContent = 'Thiết lập mật khẩu';
-        fieldEmail.style.display   = 'none';
+        /* Student first login: email + new password + confirm */
+        hdrText.textContent = 'Thiết lập tài khoản';
+        fieldEmail.style.display   = '';
         fieldConfirm.style.display = '';
-        emailInput.required        = false;
+        emailInput.required        = true;
         cfField.required           = true;
         pwLabel.textContent        = 'Tạo mật khẩu';
         pwField.placeholder        = 'Nhập mật khẩu mới';
@@ -491,7 +491,7 @@
       }
     }
 
-    if (_firstLogin && _role === 'teacher' && emailInput.required) {
+    if (_firstLogin && (_role === 'teacher' || _role === 'student') && emailInput.required) {
       const emailVal = emailInput.value.trim();
       if (!emailVal || !emailVal.includes('@')) {
         markInvalid(emailInput, true); ok = false;
@@ -508,7 +508,7 @@
     /* Build payload */
     const full_name = document.getElementById('full_name').value.trim();
     const payload = { full_name, cccd: _cccd, user_type: _role, password };
-    if (_firstLogin && _role === 'teacher') {
+    if (_firstLogin && (_role === 'teacher' || _role === 'student')) {
       payload.email = emailInput.value.trim();
     }
 

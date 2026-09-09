@@ -877,7 +877,11 @@ def login_step2():
             return jsonify(ok=False, error="Không tìm thấy học sinh.")
 
         if student.is_first_login:
-            # First login: set password (no email required for students)
+            # First login: set email + password
+            if not email:
+                return jsonify(ok=False, error="Vui lòng nhập email.")
+            if "@" not in email:
+                return jsonify(ok=False, error="Email không hợp lệ.")
             ok, err = validate_password(password)
             if not ok:
                 return jsonify(ok=False, error=err)
@@ -885,6 +889,7 @@ def login_step2():
             with engine.begin() as conn:
                 conn.execute(
                     update(students).where(students.c.id == student.id).values(
+                        email=email,
                         password_hash=pw_hash,
                         is_first_login=0,
                         must_change_password=0,

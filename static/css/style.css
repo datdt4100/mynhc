@@ -4,6 +4,9 @@
 
 /* ── Utilities ─────────────────────────────────────────────── */
 .no-caret.dropdown-toggle::after { display:none !important; }
+/* Download button: white background by default, correct hover */
+.btn-dl { background: #fff; }
+.btn-dl:hover, .btn-dl:focus { background: #6c757d !important; color: #fff !important; }
 /* Base flex for section-card-header (templates may override flex-wrap inline) */
 .section-card-header {
   display: flex;

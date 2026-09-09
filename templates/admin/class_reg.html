@@ -237,13 +237,21 @@
                         <td>{{ session_label(cls.session_type, cls.start_session, cls.duration) if session_label is callable else cls.session_type }}</td>
                         <td>{{ cls.duration }} tiết</td>
                         <td>
-                          <input type="text" class="form-control form-control-sm room-input"
-                                 style="font-size:.75rem; min-width:110px; transition:border-color .2s, box-shadow .2s;"
-                                 placeholder="Nhập phòng học"
-                                 value="{{ cls.location or '' }}"
-                                 data-class-id="{{ cls.id }}" data-field="location"
-                                 onchange="saveClassRoom({{ cls.id }}, this)"
-                                 onkeydown="if(event.key==='Enter'){this.blur();}">
+                          <select class="form-select form-select-sm room-input"
+                                  style="font-size:.75rem;min-width:120px;transition:border-color .2s;"
+                                  data-class-id="{{ cls.id }}" data-field="location"
+                                  data-day="{{ cls.day_of_week }}"
+                                  data-session="{{ cls.session_type }}"
+                                  data-start="{{ cls.start_session }}"
+                                  data-duration="{{ cls.duration }}"
+                                  data-grade="{{ cls.grade }}"
+                                  onfocus="loadUARooms(this)"
+                                  onchange="saveClassRoom({{ cls.id }}, this)">
+                            <option value="">— Chọn phòng —</option>
+                            {% if cls.location %}
+                            <option value="{{ cls.location }}" selected>{{ cls.location }}</option>
+                            {% endif %}
+                          </select>
                         </td>
                         <td>
                           <input type="number" class="form-control form-control-sm cap-input"
@@ -359,7 +367,7 @@
                       data-start="{{ cls.start_session }}"
                       data-duration="{{ cls.duration }}"
                       data-grade="{{ cls.grade }}"
-                      onchange="saveUARoom({{ cls.id }}, this)"
+                      onchange="saveUAField({{ cls.id }}, this, 'location')"
                       onfocus="loadUARooms(this)">
                 <option value="">— Chọn phòng —</option>
                 {% if cls.location %}
@@ -367,9 +375,17 @@
                 {% endif %}
               </select>
             </td>
-            <td style="font-size:.78rem;">{{ cls.max_capacity or '—' }}</td>
+            <td>
+              <input type="number" class="form-control form-control-sm"
+                     style="font-size:.75rem;width:70px;transition:border-color .2s;"
+                     placeholder="Sĩ số" min="1"
+                     value="{{ cls.max_capacity or '' }}"
+                     data-class-id="{{ cls.id }}"
+                     onchange="saveUAField({{ cls.id }}, this, 'max_capacity')"
+                     onkeydown="if(event.key==='Enter'){this.blur();}">
+            </td>
             <td class="text-center">
-              <span class="badge {{ 'bg-danger' if cls.max_capacity and ec >= cls.max_capacity else ('bg-warning text-dark' if ec > 0 else 'bg-light text-muted border') }}"
+              <span class="ua-enroll-badge-{{ cls.id }} badge {{ 'bg-danger' if cls.max_capacity and ec >= cls.max_capacity else ('bg-warning text-dark' if ec > 0 else 'bg-light text-muted border') }}"
                     style="font-size:.78rem;border-radius:8px;">
                 {{ ec }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}
               </span>
@@ -630,18 +646,32 @@ async function loadUARooms(sel) {
   } catch {}
 }
 
-async function saveUARoom(classId, sel) {
-  const room = sel.value;
+async function saveUAField(classId, el, field) {
+  const val = el.value.trim();
+  const body = field === 'location'
+    ? {location: val || null}
+    : {max_capacity: val ? parseInt(val) : null};
   try {
     const res = await fetch('/admin/classes/' + classId, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({location: room || null})
+      body: JSON.stringify(body)
     });
     const data = await res.json();
     if (data.ok) {
-      sel.style.borderColor = '#22c55e';
-      setTimeout(() => { sel.style.borderColor = ''; }, 1500);
+      el.style.borderColor = '#22c55e';
+      setTimeout(() => { el.style.borderColor = ''; }, 1500);
+      // Update HS đăng ký badge when max_capacity changes
+      if (field === 'max_capacity') {
+        const badge = document.querySelector('.ua-enroll-badge-' + classId);
+        if (badge) {
+          const cur = parseInt(badge.textContent.split('/')[0].replace(/\D/g, '')) || 0;
+          const cap = parseInt(val) || null;
+          badge.textContent = cur + (cap ? '/' + cap : '');
+          badge.className = 'ua-enroll-badge-' + classId + ' badge '
+            + (cap && cur >= cap ? 'bg-danger' : cur > 0 ? 'bg-warning text-dark' : 'bg-light text-muted border');
+        }
+      }
     } else {
       showAlert(data.error || 'Không thể lưu.', 'error');
     }

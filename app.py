@@ -1210,12 +1210,15 @@ def teacher_delete_class(class_id):
 
         conn.execute(delete(classes).where(classes.c.id == class_id))
         s_code = 'S' if cls.session_type == 'morning' else 'C'
+        subj = cls.subject or session.get("subject_group") or ""
         conn.execute(insert(teacher_class_log).values(
-            teacher_id=teacher_id, class_id=class_id, action='D',
-            slot=f"T{cls.day_of_week}{s_code}{cls.start_session}x{cls.duration}", ts=now_vn()
+            teacher_id=teacher_id, class_id=None, action='D',
+            slot=f"T{cls.day_of_week}{s_code}{cls.start_session}x{cls.duration}|G{cls.grade}|{subj}",
+            ts=now_vn()
         ))
         conn.commit()
 
+    _bump(event_type="class", grade=cls.grade)
     return jsonify(ok=True)
 
 
@@ -4199,9 +4202,10 @@ def admin_class_delete(class_id):
         if cls and cls.teacher_id:
             t = conn.execute(select(teachers).where(teachers.c.id == cls.teacher_id)).fetchone()
             if t and t.cccd != _UNASSIGNED_CCCD:
+                subj = cls.subject or t.subject_group or ""
                 conn.execute(insert(teacher_class_log).values(
-                    teacher_id=cls.teacher_id, class_id=None,
-                    action='D', slot=_cls_slot(cls), ts=now_vn()
+                    teacher_id=cls.teacher_id, class_id=None, action='D',
+                    slot=f"{_cls_slot(cls)}|G{cls.grade}|{subj}", ts=now_vn()
                 ))
         conn.execute(delete(enrollments).where(enrollments.c.class_id == class_id))
         conn.execute(delete(classes).where(classes.c.id == class_id))
@@ -4685,20 +4689,35 @@ _ACTION_LABEL = {'A': 'Phân công', 'U': 'Gỡ bỏ (đổi GV)', 'C': 'Tạo l
 _ENROLL_LABEL = {'A': 'Đăng ký', 'D': 'Hủy đăng ký'}
 
 def _decode_slot(slot: str) -> str:
-    """Decode compact slot 'T3S1x2' → 'T3 Sáng T1–2'"""
+    """Decode compact slot 'T3S1x2' → 'T3 Sáng T1–2' (ignores extended pipe fields)"""
     if not slot:
         return '—'
+    base = slot.split('|')[0]
     try:
-        day   = int(slot[1])
-        ses   = 'Sáng' if slot[2] == 'S' else 'Chiều'
-        rest  = slot[3:].split('x')
+        day   = int(base[1])
+        ses   = 'Sáng' if base[2] == 'S' else 'Chiều'
+        rest  = base[3:].split('x')
         start = int(rest[0])
         dur   = int(rest[1]) if len(rest) > 1 else 1
         end   = start + dur - 1
         t_str = f"T{start}" if dur == 1 else f"T{start}–{end}"
         return f"T{day} {ses} {t_str}"
     except Exception:
-        return slot
+        return base
+
+def _parse_slot_extra(slot: str):
+    """Parse extended slot 'T3S1x2|G11|Vật lý' → (grade_or_None, subject_or_None)"""
+    if not slot:
+        return None, None
+    parts = slot.split('|')
+    grade = None
+    subject = None
+    for p in parts[1:]:
+        if p.startswith('G') and p[1:].isdigit():
+            grade = int(p[1:])
+        elif p:
+            subject = p
+    return grade, subject
 
 
 @app.route("/admin/teacher/<int:teacher_id>/log")
@@ -4714,8 +4733,10 @@ def admin_teacher_log(teacher_id):
                 classes.c.start_session,
                 classes.c.duration,
                 classes.c.subject,
+                teachers.c.subject_group,
             )
             .outerjoin(classes, teacher_class_log.c.class_id == classes.c.id)
+            .outerjoin(teachers, teacher_class_log.c.teacher_id == teachers.c.id)
             .where(teacher_class_log.c.teacher_id == teacher_id)
             .order_by(teacher_class_log.c.id.desc())
             .limit(200)
@@ -4728,15 +4749,20 @@ def admin_teacher_log(teacher_id):
                 session_label(r.session_type, r.start_session, r.duration)
                 + f" – {day_name(r.day_of_week)}"
             )
+            grade   = r.grade
+            subject = r.subject or r.subject_group or "—"
         else:
             slot_label = _decode_slot(r.slot)
+            slot_grade, slot_subject = _parse_slot_extra(r.slot)
+            grade   = slot_grade
+            subject = slot_subject or r.subject_group or "—"
         result.append({
-            "action":    _ACTION_LABEL.get(r.action, r.action),
+            "action":      _ACTION_LABEL.get(r.action, r.action),
             "action_code": r.action,
-            "subject":   r.subject or "—",
-            "slot":      slot_label,
-            "grade":     r.grade,
-            "ts":        r.ts,
+            "subject":     subject,
+            "slot":        slot_label,
+            "grade":       grade,
+            "ts":          r.ts,
         })
     return jsonify(ok=True, log=result)
 

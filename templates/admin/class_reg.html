@@ -94,6 +94,14 @@
 
 {% block content %}
 
+{# ── Teacher-change notification bar (shown via SSE) ── #}
+<div id="cls-change-bar" style="display:none; position:sticky; top:0; z-index:9000; background:#FFF7ED; border-bottom:2px solid #F59E0B; padding:9px 20px; gap:10px; align-items:center; font-size:.85rem; color:#92400E; flex-wrap:wrap;">
+  <i class="bi bi-arrow-clockwise" style="color:#F59E0B; flex-shrink:0;"></i>
+  <span>Giáo viên vừa cập nhật danh sách lớp — trang chưa hiển thị thay đổi mới nhất.</span>
+  <a href="javascript:location.reload()" style="font-weight:700; color:#B45309; text-decoration:underline; white-space:nowrap;">Tải lại trang</a>
+  <button onclick="document.getElementById('cls-change-bar').style.display='none'" style="margin-left:auto; background:none; border:none; cursor:pointer; color:#B45309; font-size:1.1rem; line-height:1; padding:0; flex-shrink:0;">×</button>
+</div>
+
 <div class="container pb-5">
   <div class="d-flex align-items-center gap-2 mb-4 pt-4">
     <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary flex-shrink-0" style="border-radius:8px; width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; padding:0;" title="Quay lại">
@@ -863,6 +871,20 @@ function toggleTeacherReg() {
   .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
   .finally(() => { btn.disabled = false; });
 }
+
+/* ── SSE: show refresh bar when teacher modifies classes ── */
+(function() {
+  const bar = document.getElementById('cls-change-bar');
+  if (!bar) return;
+  const sse = new EventSource('/stream/changes');
+  sse.onmessage = function(e) {
+    try {
+      const d = JSON.parse(e.data);
+      if (d.type === 'class') { bar.style.display = 'flex'; sse.close(); }
+    } catch(_) {}
+  };
+  sse.onerror = function() { sse.close(); };
+})();
 
 /* ── Teacher activity log ── */
 const _ACTION_COLOR = { 'Phân công':'#059669', 'Tạo lớp':'#0EA5E9', 'Gỡ bỏ (đổi GV)':'#F59E0B', 'Xóa lớp':'#EF4444' };

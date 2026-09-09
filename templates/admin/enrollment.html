@@ -352,10 +352,13 @@
                     {% set ec = enrolled_counts_by_student.get(s.id, 0) %}
                     <span class="badge rounded-pill {% if ec == 0 %}bg-light text-muted border{% elif ec >= 5 %}bg-success{% else %}bg-warning text-dark{% endif %}" style="font-size:.7rem; min-width:28px;">{{ ec }}</span>
                   </td>
-                  <td class="text-center">
+                  <td class="text-center" style="white-space:nowrap;">
                     <button class="adm-icon-btn btn-outline-primary"
                             onclick="viewStudentDetail({{ s.id }}, '{{ s.full_name | name_fmt | e }}')"
                             title="Xem chi tiết"><i class="bi bi-eye"></i></button>
+                    <button class="adm-icon-btn ms-1" style="color:#8B5CF6;border-color:#C4B5FD;"
+                            onclick="openStudentLog({{ s.id }}, '{{ s.full_name | name_fmt | e }}')"
+                            title="Lịch sử đăng ký"><i class="bi bi-clock-history"></i></button>
                   </td>
                 </tr>
                 {% endfor %}
@@ -505,6 +508,28 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- Student Activity Log Modal -->
+<div class="modal fade" id="studentLogModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:580px;">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#5B21B6,#8B5CF6);border:none;padding:12px 18px;">
+        <div>
+          <h5 class="modal-title fw-bold text-white mb-0" style="font-size:.92rem;">
+            <i class="bi bi-clock-history me-2"></i>Lịch sử đăng ký
+          </h5>
+          <div id="student-log-name" class="text-white" style="font-size:.78rem;opacity:.85;margin-top:2px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="student-log-body" style="max-height:440px;overflow-y:auto;padding:14px 16px;">
+          <div class="text-center text-muted py-4"><i class="bi bi-hourglass-split" style="font-size:1.5rem;display:block;margin-bottom:8px;"></i>Đang tải…</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -759,6 +784,42 @@ function addExtraRow() {
     <input type="text" name="extra_value[]" class="form-control form-control-sm" placeholder="Giá trị">
     <button type="button" class="btn btn-outline-danger btn-sm" style="border-radius:0 8px 8px 0;" onclick="document.getElementById('extra-row-${extraRowCount}').remove()"><i class="bi bi-x"></i></button>`;
   document.getElementById('extra-rows').appendChild(row);
+}
+
+/* ── Student activity log ── */
+const _ENR_COLOR = { 'Đăng ký': '#059669', 'Hủy đăng ký': '#EF4444' };
+
+function openStudentLog(studentId, studentName) {
+  document.getElementById('student-log-name').textContent = studentName;
+  const body = document.getElementById('student-log-body');
+  body.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-hourglass-split" style="font-size:1.5rem;display:block;margin-bottom:8px;"></i>Đang tải…</div>';
+  bootstrap.Modal.getOrCreate(document.getElementById('studentLogModal')).show();
+  fetch('/admin/student/' + studentId + '/log')
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok || !d.log.length) {
+        body.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-calendar-x" style="font-size:1.8rem;display:block;margin-bottom:8px;"></i>Chưa có lịch sử.</div>';
+        return;
+      }
+      let html = '<table style="width:100%;border-collapse:collapse;font-size:.82rem;">'
+        + '<thead><tr style="background:#F8FAFC;font-size:.74rem;color:#64748B;">'
+        + '<th style="padding:7px 8px;">Hành động</th><th style="padding:7px 8px;">Môn học</th>'
+        + '<th style="padding:7px 8px;">Giáo viên</th><th style="padding:7px 8px;">Giờ học</th>'
+        + '<th style="padding:7px 8px;white-space:nowrap;">Thời điểm</th></tr></thead><tbody>';
+      d.log.forEach((r, i) => {
+        const bg = i % 2 ? '#FAFAFA' : '#fff';
+        const col = _ENR_COLOR[r.action] || '#64748B';
+        html += `<tr style="background:${bg};border-bottom:1px solid #F1F5F9;">
+          <td style="padding:7px 8px;"><span style="color:${col};font-weight:600;">${r.action}</span></td>
+          <td style="padding:7px 8px;">${r.subject}</td>
+          <td style="padding:7px 8px;color:#475569;">${r.teacher}</td>
+          <td style="padding:7px 8px;white-space:nowrap;color:#475569;font-size:.78rem;">${r.slot}</td>
+          <td style="padding:7px 8px;font-size:.74rem;color:#94A3B8;white-space:nowrap;">${r.ts ? r.ts.slice(0,16) : '—'}</td>
+        </tr>`;
+      });
+      body.innerHTML = html + '</tbody></table>';
+    })
+    .catch(() => { body.innerHTML = '<div class="text-center text-muted py-4">Không thể tải dữ liệu.</div>'; });
 }
 </script>
 {% endblock %}

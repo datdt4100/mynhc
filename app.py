@@ -165,6 +165,26 @@ operators = Table(
     Column("password_hash", Text, nullable=False),
 )
 
+# Compact activity logs — action codes: A=assign/enroll, U=reassign, D=delete/cancel, C=create
+teacher_class_log = Table(
+    "teacher_class_log", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("teacher_id", Integer, nullable=False),
+    Column("class_id", Integer, nullable=True),   # NULL if class was later deleted
+    Column("action", Text, nullable=False),        # A | U | D | C
+    Column("slot", Text, nullable=True),           # compact backup "T3S1x2" (day,session,start,dur)
+    Column("ts", Text, nullable=False),
+)
+
+student_enroll_log = Table(
+    "student_enroll_log", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("student_id", Integer, nullable=False),
+    Column("class_id", Integer, nullable=True),
+    Column("action", Text, nullable=False),        # A | D
+    Column("ts", Text, nullable=False),
+)
+
 # ---------------------------------------------------------------------------
 # DB init
 # ---------------------------------------------------------------------------
@@ -429,6 +449,11 @@ _VN_TZ = timezone(timedelta(hours=7))
 
 def now_vn() -> str:
     return datetime.now(_VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+def _cls_slot(row) -> str:
+    """Compact slot backup for log records: T{day}{S|C}{start}x{dur}"""
+    s = 'S' if getattr(row, 'session_type', '') == 'morning' else 'C'
+    return f"T{row.day_of_week}{s}{row.start_session}x{row.duration}"
 
 @app.template_filter("name_fmt")
 def _name_fmt(s):
@@ -1462,7 +1487,7 @@ def student_export_schedule():
 
     slots = [{'day': c.day_of_week, 'session': c.session_type, 'start': c.start_session,
                'duration': c.duration or 1, 'line1': c.subject or c.subject_group or '—',
-               'line2': _name_fmt(c.teacher_name), 'line3': c.location or ''}
+               'line2': _name_fmt(c.teacher_name), 'line3': ''}
              for c in enrolled]
     title    = "THỜI KHOÁ BIỂU"
     subtitle = f"{_name_fmt(st.full_name)} — Lớp {st.class_name}"
@@ -1615,13 +1640,17 @@ def student_enroll():
         )
 
     with engine.connect() as conn:
+        ts = now_vn()
         conn.execute(
             insert(enrollments).values(
                 student_id=student_id,
                 class_id=class_id,
-                enrolled_at=now_vn(),
+                enrolled_at=ts,
             )
         )
+        conn.execute(insert(student_enroll_log).values(
+            student_id=student_id, class_id=class_id, action='A', ts=ts
+        ))
         conn.commit()
         covered = _student_covered_subjects(conn, student_id, student_grade)
 
@@ -1655,6 +1684,9 @@ def student_cancel_enroll(class_id):
                      enrollments.c.class_id == class_id)
             )
         )
+        conn.execute(insert(student_enroll_log).values(
+            student_id=student_id, class_id=class_id, action='D', ts=now_vn()
+        ))
         conn.commit()
         covered = _student_covered_subjects(conn, student_id, student_grade)
     return jsonify(ok=True, covered_subjects=covered)
@@ -3345,8 +3377,8 @@ def admin_import_classes_template():
     hfont = Font(bold=True, color="FFFFFF", size=10)
     thin  = Side(style="thin", color="CBD5E1")
     bdr   = Border(left=thin, right=thin, top=thin, bottom=thin)
-    HEADERS = ["Tên giáo viên", "Môn (đầy đủ)", "Khối", "Buổi", "Thứ", "Tiết bắt đầu", "Số tiết"]
-    WIDTHS  = [30, 16, 8, 10, 8, 16, 10]
+    HEADERS = ["Tên giáo viên", "Môn (đầy đủ)", "Khối", "Buổi", "Thứ", "Tiết bắt đầu", "Số tiết", "Sĩ số"]
+    WIDTHS  = [30, 16, 8, 10, 8, 16, 10, 10]
     NOTES   = [
         "Để trống nếu do trường phân công",
         "Tiếng Anh / Ngữ Văn / Vật lý / Hóa học / Toán",
@@ -3355,6 +3387,7 @@ def admin_import_classes_template():
         "2 đến 7 (Thứ Hai đến Thứ Bảy)",
         "1 (Tiết 1-2) hoặc 3 (Tiết 3-4)",
         "Thường là 2",
+        "Mặc định 50 nếu bỏ trống",
     ]
     for c, (h, w) in enumerate(zip(HEADERS, WIDTHS), 1):
         cell = ws.cell(row=1, column=c, value=h)
@@ -3372,9 +3405,9 @@ def admin_import_classes_template():
     ws.row_dimensions[2].height = 40
     # Sample rows
     samples = [
-        ("Nguyễn Văn A", "Toán", 10, "Chiều", 3, 1, 2),
-        ("Lê Thị B", "Tiếng Anh", 11, "Chiều", 4, 3, 2),
-        ("", "Ngữ Văn", 12, "Sáng", 7, 1, 2),
+        ("Nguyễn Văn A", "Toán", 10, "Chiều", 3, 1, 2, 50),
+        ("Lê Thị B", "Tiếng Anh", 11, "Chiều", 4, 3, 2, 40),
+        ("", "Ngữ Văn", 12, "Sáng", 7, 1, 2, ""),
     ]
     sfill_a = PatternFill("solid", fgColor="F0F9FF")
     sfill_b = PatternFill("solid", fgColor="FFFFFF")
@@ -3386,7 +3419,7 @@ def admin_import_classes_template():
             cell.font = Font(size=10)
             cell.alignment = Alignment(horizontal="center" if c >= 3 else "left", vertical="center")
     ws.freeze_panes = "A3"
-    ws.auto_filter.ref = f"A1:G{len(samples)+2}"
+    ws.auto_filter.ref = f"A1:H{len(samples)+2}"
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return send_file(buf, as_attachment=True,
                      download_name="mau_import_lop.xlsx",
@@ -3429,6 +3462,19 @@ def admin_class_assign_teacher(class_id):
                 location=location,
             )
         )
+        slot = _cls_slot(cls)
+        ts   = now_vn()
+        # If class had a real teacher before (not unassigned placeholder), log unassign for them
+        old_teacher = conn.execute(
+            select(teachers).where(teachers.c.id == cls.teacher_id)
+        ).fetchone()
+        if old_teacher and old_teacher.cccd != _UNASSIGNED_CCCD and cls.teacher_id != teacher_id:
+            conn.execute(insert(teacher_class_log).values(
+                teacher_id=cls.teacher_id, class_id=class_id, action='U', slot=slot, ts=ts
+            ))
+        conn.execute(insert(teacher_class_log).values(
+            teacher_id=teacher_id, class_id=class_id, action='A', slot=slot, ts=ts
+        ))
     _bump(event_type="class", grade=cls.grade)
     return jsonify(ok=True, teacher_name=teacher_row.full_name, subject=teacher_row.subject_group)
 
@@ -3577,7 +3623,7 @@ def admin_add_class_manual():
             max_capacity = int(data.get("max_capacity") or 50) or 50
         except (ValueError, TypeError):
             max_capacity = 50
-        conn.execute(insert(classes).values(
+        result = conn.execute(insert(classes).values(
             teacher_id    = teacher_row.id,
             grade         = grade,
             subject       = subject,
@@ -3590,6 +3636,14 @@ def admin_add_class_manual():
             is_published  = 1,
             created_at    = now_vn(),
         ))
+        if not school_assign:
+            new_class_id = result.inserted_primary_key[0]
+            s_code = 'S' if session_type == 'morning' else 'C'
+            conn.execute(insert(teacher_class_log).values(
+                teacher_id=teacher_row.id, class_id=new_class_id,
+                action='C', slot=f"T{day_of_week}{s_code}{start_session}x{duration}",
+                ts=now_vn()
+            ))
         conn.commit()
     return jsonify(ok=True)
 
@@ -3665,12 +3719,19 @@ def admin_import_classes_excel():
                     _, teacher_name, subj_raw, grade_raw, time_raw = (row + (None,)*5)[:5]
                     buoi, thu, tiet = parse_time_string(time_raw or "")
                     so_tiet = 2
+                    max_capacity = 50
                 else:
-                    teacher_name, subj_raw, grade_raw, buoi_str, thu_raw, tiet_raw, so_tiet = (row + (None,)*7)[:7]
+                    teacher_name, subj_raw, grade_raw, buoi_str, thu_raw, tiet_raw, so_tiet, si_so_raw = (row + (None,)*8)[:8]
                     buoi    = BUOI_MAP.get(str(buoi_str or "").strip().lower())
                     thu     = int(thu_raw) if thu_raw else None
                     tiet    = int(tiet_raw) if tiet_raw else None
                     so_tiet = int(so_tiet) if so_tiet else 2
+                    try:
+                        max_capacity = int(float(si_so_raw)) if si_so_raw not in (None, "") else 50
+                        if max_capacity <= 0:
+                            max_capacity = 50
+                    except (ValueError, TypeError):
+                        max_capacity = 50
 
                 teacher_name = str(teacher_name or "").strip()
                 grade        = int(float(grade_raw)) if grade_raw else None
@@ -3759,7 +3820,7 @@ def admin_import_classes_excel():
                     start_session = tiet,
                     duration      = so_tiet,
                     location      = None,
-                    max_capacity  = None,
+                    max_capacity  = max_capacity,
                     is_published  = 1,
                     created_at    = now_vn(),
                 ))
@@ -3989,6 +4050,14 @@ def admin_class_publish(class_id):
 @admin_required
 def admin_class_delete(class_id):
     with engine.begin() as conn:
+        cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        if cls and cls.teacher_id:
+            t = conn.execute(select(teachers).where(teachers.c.id == cls.teacher_id)).fetchone()
+            if t and t.cccd != _UNASSIGNED_CCCD:
+                conn.execute(insert(teacher_class_log).values(
+                    teacher_id=cls.teacher_id, class_id=None,
+                    action='D', slot=_cls_slot(cls), ts=now_vn()
+                ))
         conn.execute(delete(enrollments).where(enrollments.c.class_id == class_id))
         conn.execute(delete(classes).where(classes.c.id == class_id))
     return jsonify(ok=True)
@@ -4462,6 +4531,115 @@ def admin_enrollment_students(class_id):
         }
         for s in enrolled
     ])
+
+# ---------------------------------------------------------------------------
+# Activity log APIs
+# ---------------------------------------------------------------------------
+
+_ACTION_LABEL = {'A': 'Phân công', 'U': 'Gỡ bỏ (đổi GV)', 'C': 'Tạo lớp', 'D': 'Xóa lớp'}
+_ENROLL_LABEL = {'A': 'Đăng ký', 'D': 'Hủy đăng ký'}
+
+def _decode_slot(slot: str) -> str:
+    """Decode compact slot 'T3S1x2' → 'T3 Sáng T1–2'"""
+    if not slot:
+        return '—'
+    try:
+        day   = int(slot[1])
+        ses   = 'Sáng' if slot[2] == 'S' else 'Chiều'
+        rest  = slot[3:].split('x')
+        start = int(rest[0])
+        dur   = int(rest[1]) if len(rest) > 1 else 1
+        end   = start + dur - 1
+        t_str = f"T{start}" if dur == 1 else f"T{start}–{end}"
+        return f"T{day} {ses} {t_str}"
+    except Exception:
+        return slot
+
+
+@app.route("/admin/teacher/<int:teacher_id>/log")
+@admin_required
+def admin_teacher_log(teacher_id):
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(
+                teacher_class_log,
+                classes.c.grade,
+                classes.c.day_of_week,
+                classes.c.session_type,
+                classes.c.start_session,
+                classes.c.duration,
+                classes.c.subject,
+            )
+            .outerjoin(classes, teacher_class_log.c.class_id == classes.c.id)
+            .where(teacher_class_log.c.teacher_id == teacher_id)
+            .order_by(teacher_class_log.c.id.desc())
+            .limit(200)
+        ).fetchall()
+
+    result = []
+    for r in rows:
+        if r.day_of_week:
+            slot_label = (
+                session_label(r.session_type, r.start_session, r.duration)
+                + f" – {day_name(r.day_of_week)}"
+            )
+        else:
+            slot_label = _decode_slot(r.slot)
+        result.append({
+            "action":    _ACTION_LABEL.get(r.action, r.action),
+            "action_code": r.action,
+            "subject":   r.subject or "—",
+            "slot":      slot_label,
+            "grade":     r.grade,
+            "ts":        r.ts,
+        })
+    return jsonify(ok=True, log=result)
+
+
+@app.route("/admin/student/<int:student_id>/log")
+@admin_required
+def admin_student_log(student_id):
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(
+                student_enroll_log,
+                classes.c.grade,
+                classes.c.day_of_week,
+                classes.c.session_type,
+                classes.c.start_session,
+                classes.c.duration,
+                classes.c.subject,
+                teachers.c.full_name.label("teacher_name"),
+                teachers.c.subject_group,
+            )
+            .outerjoin(classes, student_enroll_log.c.class_id == classes.c.id)
+            .outerjoin(teachers, classes.c.teacher_id == teachers.c.id)
+            .where(student_enroll_log.c.student_id == student_id)
+            .order_by(student_enroll_log.c.id.desc())
+            .limit(200)
+        ).fetchall()
+
+    result = []
+    for r in rows:
+        subject = r.subject or r.subject_group or "—"
+        if r.day_of_week:
+            slot_label = (
+                session_label(r.session_type, r.start_session, r.duration)
+                + f" – {day_name(r.day_of_week)}"
+            )
+        else:
+            slot_label = "—"
+        result.append({
+            "action":      _ENROLL_LABEL.get(r.action, r.action),
+            "action_code": r.action,
+            "subject":     subject,
+            "teacher":     _name_fmt(r.teacher_name) if r.teacher_name else "—",
+            "slot":        slot_label,
+            "grade":       r.grade,
+            "ts":          r.ts,
+        })
+    return jsonify(ok=True, log=result)
+
 
 # ---------------------------------------------------------------------------
 # Main

@@ -2,6 +2,16 @@
    ║  NHC Subject Survey — Mobile-first, Vietnamese-ready    ║
    ╚══════════════════════════════════════════════════════════╝ */
 
+/* ── Utilities ─────────────────────────────────────────────── */
+.no-caret.dropdown-toggle::after { display:none !important; }
+/* Base flex for section-card-header (templates may override flex-wrap inline) */
+.section-card-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* ── Variables ─────────────────────────────────────────────── */
 :root {
   /* Sky-blue fresh palette */

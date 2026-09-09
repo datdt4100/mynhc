@@ -317,16 +317,15 @@
 
     <!-- Calendar -->
     <div class="section-card mb-4">
-      <div class="section-card-header" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
-        <span><i class="bi bi-calendar-week me-1"></i>Lịch tuần</span>
-        <div class="dropdown">
-          <button class="btn btn-sm btn-outline-secondary fw-semibold dropdown-toggle d-flex align-items-center gap-1"
-                  style="border-radius:8px;font-size:.76rem;background:#fff;" type="button" data-bs-toggle="dropdown">
-            <i class="bi bi-download"></i><span class="d-none d-sm-inline">Xuất file</span>
+      <div class="section-card-header" style="justify-content:space-between;flex-wrap:nowrap;gap:8px;align-items:center;">
+        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="bi bi-calendar-week me-1"></i>Lịch tuần</span>
+        <div class="dropdown flex-shrink-0">
+          <button class="btn btn-sm btn-outline-secondary fw-semibold dropdown-toggle no-caret"
+                  style="border-radius:8px;font-size:.8rem;background:#fff;padding:5px 12px;white-space:nowrap;" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+            Tải xuống
           </button>
           <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width:140px;font-size:.82rem;">
-            <li><a class="dropdown-item d-flex align-items-center gap-2" href="#" onclick="exportTKBTeacher('png')"><i class="bi bi-image text-info"></i>PNG</a></li>
-            <li><a class="dropdown-item d-flex align-items-center gap-2" href="#" onclick="exportTKBTeacher('pdf')"><i class="bi bi-file-pdf text-danger"></i>PDF</a></li>
+            <li><a class="dropdown-item d-flex align-items-center gap-2" href="#" onclick="exportTKBTeacher('png');return false;"><i class="bi bi-image text-info"></i>PNG</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('teacher_export_schedule', fmt='xlsx') }}"><i class="bi bi-file-earmark-excel text-success"></i>Excel</a></li>
             <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('teacher_export_schedule', fmt='docx') }}"><i class="bi bi-file-earmark-word text-primary"></i>Word</a></li>
@@ -1193,37 +1192,28 @@ async function exportTKBTeacher(fmt) {
   const el = document.getElementById('cal-outer');
   if (!el) { showToast('Không tìm thấy bảng lịch.', 'error'); return; }
 
-  if (fmt === 'pdf') {
-    const style = document.createElement('style');
-    style.id = '_print_style';
-    style.innerHTML = `@media print {
-      body > *:not(.main-content) { display:none !important; }
-      .main-content > *:not(.section-card) { display:none !important; }
-      .section-card-header .dropdown { display:none !important; }
-    }`;
-    document.head.appendChild(style);
-    window.print();
-    setTimeout(() => { const s = document.getElementById('_print_style'); if(s) s.remove(); }, 1000);
-    return;
-  }
-
   if (fmt === 'png') {
-    const link_el = event.currentTarget;
-    if (!window.html2canvas) {
-      await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-        s.onload = res; s.onerror = rej;
-        document.head.appendChild(s);
-      });
-    }
+    showToast('Đang tạo ảnh, vui lòng chờ…', 'success');
     try {
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#fff', logging: false });
+      if (!window.html2canvas) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+      const canvas = await html2canvas(el, {
+        scale: 2, useCORS: true, allowTaint: true,
+        backgroundColor: '#fff', logging: false
+      });
       const link = document.createElement('a');
       link.download = 'lich_day.png';
       link.href = canvas.toDataURL('image/png');
       link.click();
-    } catch(e) { showToast('Không thể xuất PNG.', 'error'); }
+    } catch(e) {
+      showToast('Không thể xuất PNG. Dùng "In / PDF" thay thế.', 'error');
+    }
   }
 }
 </script>

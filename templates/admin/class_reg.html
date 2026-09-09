@@ -304,7 +304,7 @@
                           {% endif %}
                         </td>
                         <td style="font-size:.73rem; color:#64748B; white-space:nowrap;">
-                          {{ cls.created_at or '—' }}
+                          {{ cls.created_at[:16] if cls.created_at else '—' }}
                         </td>
                         <td class="text-center" style="white-space:nowrap;">
                           <i class="bi bi-exclamation-circle-fill warn-indicator-{{ cls.id }}"
@@ -423,7 +423,7 @@
                 <span class="conflict-badge conflict-green" title="{{ combos if combos < 100 else '≥100' }} cách ghép lịch hợp lệ">🟢 OK</span>
               {% endif %}
             </td>
-            <td style="font-size:.73rem;color:#64748B;white-space:nowrap;">{{ cls.created_at or '—' }}</td>
+            <td style="font-size:.73rem;color:#64748B;white-space:nowrap;">{{ cls.created_at[:16] if cls.created_at else '—' }}</td>
             <td>
               <div class="d-flex gap-1">
                 <button class="btn btn-sm" style="border-radius:7px;padding:4px 7px;background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;" title="Phân công giáo viên"

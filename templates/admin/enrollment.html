@@ -685,7 +685,7 @@ function viewStudents(classId) {
         <div style="overflow:auto;max-height:420px;"><table class="sched-table">
         <thead><tr><th style="width:38px;">STT</th><th>Họ tên</th><th>Mã đăng nhập</th><th>Khối</th><th>Lớp</th><th>Truy cập gần nhất</th></tr></thead><tbody>`;
       data.students.forEach((s, i) => {
-        html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold">${s.full_name}</td><td><code style="font-size:.75rem;">${s.cccd}</code></td><td>${s.grade??'—'}</td><td>${s.class_name??'—'}</td><td style="font-size:.75rem;color:#64748B;white-space:nowrap;">${s.last_seen_at??'—'}</td></tr>`;
+        html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold">${s.full_name}</td><td><code style="font-size:.75rem;">${s.cccd}</code></td><td>${s.grade??'—'}</td><td>${s.class_name??'—'}</td><td style="font-size:.75rem;color:#64748B;white-space:nowrap;">${s.last_seen_at ? s.last_seen_at.slice(0,16) : '—'}</td></tr>`;
       });
       body.innerHTML = html + '</tbody></table></div>';
     }).catch(() => { body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải danh sách.</div>'; });

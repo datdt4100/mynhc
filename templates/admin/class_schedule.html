@@ -343,7 +343,7 @@ function openDetail(day, slot, ses) {
       </div>
       <div class="cls-item-time">
         ${c.created_at
-          ? `<i class="bi bi-clock"></i>${c.created_at}`
+          ? `<i class="bi bi-clock"></i>${c.created_at.slice(0,16)}`
           : `<span style="color:#D1D5DB;font-size:.63rem;">—</span>`}
       </div>
     </div>`;

@@ -4847,6 +4847,88 @@ def admin_student_log(student_id):
 
 
 # ---------------------------------------------------------------------------
+# Admin diagnostic endpoint — temporary, admin-only
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/diagnose-student/<cccd>")
+@admin_required
+def admin_diagnose_student(cccd):
+    """Return full enrollment diagnostic for a student by CCCD."""
+    with engine.connect() as conn:
+        s = conn.execute(select(students).where(students.c.cccd == cccd)).fetchone()
+        if not s:
+            return jsonify(ok=False, error=f"Không tìm thấy học sinh với CCCD {cccd}")
+
+        enrolled_ids = {r.class_id for r in conn.execute(
+            select(enrollments.c.class_id).where(enrollments.c.student_id == s.id)
+        ).fetchall()}
+
+        pub_classes = conn.execute(
+            select(classes, teachers.c.full_name.label("teacher_name"),
+                   teachers.c.subject_group)
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .where(and_(classes.c.is_published == 1, classes.c.grade == s.grade))
+            .order_by(classes.c.day_of_week, classes.c.session_type, classes.c.start_session)
+        ).fetchall()
+
+        cls_details = []
+        for c in pub_classes:
+            cnt = conn.execute(
+                select(func.count(enrollments.c.id))
+                .where(enrollments.c.class_id == c.id)
+            ).scalar()
+            reasons = []
+            if c.id in enrolled_ids:
+                reasons.append("đã đăng ký")
+            elif c.max_capacity is not None and cnt >= c.max_capacity:
+                reasons.append(f"đã đầy ({cnt}/{c.max_capacity})")
+            else:
+                conflict = _time_conflict(s.id, {
+                    "day_of_week": c.day_of_week,
+                    "session_type": c.session_type,
+                    "start_session": c.start_session,
+                    "duration": c.duration,
+                })
+                if conflict:
+                    reasons.append(f"trùng lịch với lớp {conflict.id}")
+            subj_label = c.subject or c.subject_group or "—"
+            cls_details.append({
+                "id": c.id,
+                "subject": subj_label,
+                "teacher": _name_fmt(c.teacher_name),
+                "slot": session_label(c.session_type, c.start_session, c.duration) + f" – {day_name(c.day_of_week)}",
+                "count": cnt,
+                "max": c.max_capacity,
+                "enrolled": c.id in enrolled_ids,
+                "blocked_reasons": reasons,
+                "can_enroll": len(reasons) == 0,
+            })
+
+    return jsonify(
+        ok=True,
+        student={
+            "id": s.id,
+            "full_name": s.full_name,
+            "cccd": s.cccd,
+            "grade": s.grade,
+            "class_name": s.class_name,
+            "email": s.email,
+            "is_first_login": s.is_first_login,
+            "activated_at": s.activated_at,
+        },
+        settings={
+            "student_reg_open": get_setting("student_reg_open", "0"),
+            "require_5_subjects": get_setting("require_5_subjects", "1"),
+            "allow_multi_class": get_setting("allow_multi_class", "1"),
+            "schedule_constraint": get_setting("schedule_constraint", "1"),
+        },
+        enrolled_count=len(enrolled_ids),
+        published_classes_for_grade=len(pub_classes),
+        classes=cls_details,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 

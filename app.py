@@ -744,48 +744,45 @@ def login_step1():
     if not full_name or not cccd:
         return jsonify(ok=False, error="Vui lòng nhập đầy đủ thông tin.")
 
+    full_name_lower = full_name.lower()
+
     with engine.connect() as conn:
+        # Lookup by CCCD (unique), compare name case-insensitively in Python
         teacher = conn.execute(
-            select(teachers).where(
-                and_(teachers.c.full_name == full_name, teachers.c.cccd == cccd)
-            )
+            select(teachers).where(teachers.c.cccd == cccd)
         ).fetchone()
-        if teacher:
+        if teacher and teacher.full_name.strip().lower() == full_name_lower:
             title = "Cô" if teacher.gender == "Nữ" else "Thầy"
             return jsonify(
                 ok=True,
                 user_type="teacher",
-                full_name=teacher.full_name,
+                full_name=_name_fmt(teacher.full_name),
                 gender=teacher.gender,
                 title=title,
                 is_first_login=teacher.is_first_login,
             )
 
         student = conn.execute(
-            select(students).where(
-                and_(students.c.full_name == full_name, students.c.cccd == cccd)
-            )
+            select(students).where(students.c.cccd == cccd)
         ).fetchone()
-        if student:
+        if student and student.full_name.strip().lower() == full_name_lower:
             return jsonify(
                 ok=True,
                 user_type="student",
-                full_name=student.full_name,
+                full_name=_name_fmt(student.full_name),
                 gender=None,
                 title="Học sinh",
                 is_first_login=student.is_first_login,
             )
 
         operator = conn.execute(
-            select(operators).where(
-                and_(operators.c.full_name == full_name, operators.c.login_code == cccd)
-            )
+            select(operators).where(operators.c.login_code == cccd)
         ).fetchone()
-        if operator:
+        if operator and operator.full_name.strip().lower() == full_name_lower:
             return jsonify(
                 ok=True,
                 user_type="operator",
-                full_name=operator.full_name,
+                full_name=_name_fmt(operator.full_name),
                 gender=None,
                 title="Quản trị lớp học",
                 is_first_login=0,
@@ -805,13 +802,15 @@ def login_step2():
     password = normalize_password(data.get("password") or "")
     email = (data.get("email") or "").strip()
 
+    full_name_lower = full_name.lower()
+
     if user_type == "teacher":
         with engine.connect() as conn:
             teacher = conn.execute(
-                select(teachers).where(
-                    and_(teachers.c.full_name == full_name, teachers.c.cccd == cccd)
-                )
+                select(teachers).where(teachers.c.cccd == cccd)
             ).fetchone()
+        if teacher and teacher.full_name.strip().lower() != full_name_lower:
+            teacher = None
 
         if not teacher:
             return jsonify(ok=False, error="Không tìm thấy giáo viên.")
@@ -844,7 +843,7 @@ def login_step2():
         session.clear()
         session["user_type"] = "teacher"
         session["user_id"] = teacher.id
-        session["full_name"] = teacher.full_name
+        session["full_name"] = _name_fmt(teacher.full_name)
         session["gender"] = teacher.gender
         session["subject_group"] = teacher.subject_group
 
@@ -856,10 +855,10 @@ def login_step2():
     elif user_type == "student":
         with engine.connect() as conn:
             student = conn.execute(
-                select(students).where(
-                    and_(students.c.full_name == full_name, students.c.cccd == cccd)
-                )
+                select(students).where(students.c.cccd == cccd)
             ).fetchone()
+        if student and student.full_name.strip().lower() != full_name_lower:
+            student = None
 
         if not student:
             return jsonify(ok=False, error="Không tìm thấy học sinh.")
@@ -897,7 +896,7 @@ def login_step2():
         session.clear()
         session["user_type"] = "student"
         session["user_id"] = student.id
-        session["full_name"] = student.full_name
+        session["full_name"] = _name_fmt(student.full_name)
         session["grade"] = student.grade
 
         must_change = getattr(student, 'must_change_password', 0) or 0
@@ -908,10 +907,10 @@ def login_step2():
     elif user_type == "operator":
         with engine.connect() as conn:
             op = conn.execute(
-                select(operators).where(
-                    and_(operators.c.full_name == full_name, operators.c.login_code == cccd)
-                )
+                select(operators).where(operators.c.login_code == cccd)
             ).fetchone()
+        if op and op.full_name.strip().lower() != full_name_lower:
+            op = None
         if not op:
             return jsonify(ok=False, error="Không tìm thấy tài khoản.")
         if not check_password_hash(op.password_hash, password):
@@ -2706,7 +2705,7 @@ def admin_students_upload():
         for row in ws.iter_rows(min_row=2, values_only=True):
             if not any(row):
                 continue
-            full_name = str(row[idx["Họ và tên"]] or "").strip()
+            full_name = _name_fmt(str(row[idx["Họ và tên"]] or "").strip())
             cccd = str(row[idx["Mã đăng nhập"]] or "").strip()
             class_name = str(row[idx["Lớp"]] or "").strip()
             try:

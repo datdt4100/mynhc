@@ -3574,13 +3574,18 @@ def admin_add_class_manual():
 
     with engine.connect() as conn:
         if school_assign:
-            # Validate subject_input exists as a subject_group in teachers table
-            valid_groups = {r.subject_group for r in conn.execute(
+            # Validate subject_input exists as a subject_group in teachers table (case-insensitive)
+            valid_groups_rows = conn.execute(
                 select(teachers.c.subject_group)
                 .where(teachers.c.cccd != _UNASSIGNED_CCCD)
-            ).fetchall() if r.subject_group}
-            if subject_input and subject_input not in valid_groups:
-                return jsonify(ok=False, error=f"Môn '{subject_input}' không có trong tổ bộ môn của bất kỳ giáo viên nào trong hệ thống.")
+            ).fetchall()
+            valid_groups_ci = {r.subject_group.lower(): r.subject_group
+                               for r in valid_groups_rows if r.subject_group}
+            if subject_input:
+                canonical = valid_groups_ci.get(subject_input.lower())
+                if not canonical:
+                    return jsonify(ok=False, error=f"Môn '{subject_input}' không có trong tổ bộ môn của bất kỳ giáo viên nào trong hệ thống.")
+                subject_input = canonical  # normalize
             teacher_row = conn.execute(
                 select(teachers).where(teachers.c.cccd == _UNASSIGNED_CCCD)
             ).fetchone()
@@ -3717,6 +3722,8 @@ def admin_import_classes_excel():
                                 or teacher_map_exact.get("trường phân công"))
         valid_subjects = {t.subject_group for t in all_teachers
                           if t.subject_group and t.cccd != _UNASSIGNED_CCCD}
+        # Case-insensitive lookup: lowercase → canonical form
+        valid_subjects_ci = {sg.lower(): sg for sg in valid_subjects}
 
         def _find_teacher(name):
             if not name.strip():
@@ -3784,11 +3791,28 @@ def admin_import_classes_excel():
 
                 buoi_label = BUOI_LABEL.get(buoi, buoi)
 
-                # Check duplicate: same class already exists
+                # Resolve subject early (needed for dup check and school-assign validation)
+                subj_key       = str(subj_raw or "").strip().lower()
+                subj_raw_clean = str(subj_raw or "").strip()
+                subject        = SUBJ_NORM.get(subj_key) or subj_raw_clean or teacher_row.subject_group or ""
+
+                is_school_assign = teacher_name.strip() == ""
+                if is_school_assign:
+                    if not subject:
+                        errors_list.append(f"Dòng {i}: Thiếu môn học (bắt buộc khi không có giáo viên).")
+                        continue
+                    canonical = valid_subjects_ci.get(subject.lower())
+                    if not canonical:
+                        errors_list.append(f"Dòng {i}: Môn '{subject}' không có trong tổ bộ môn của bất kỳ GV nào trong hệ thống.")
+                        continue
+                    subject = canonical  # normalize to DB canonical form
+
+                # Check duplicate: same class already exists (include subject so same-slot diff-subject rows are not collapsed)
                 dup = conn.execute(
                     select(classes.c.id).where(and_(
                         classes.c.teacher_id    == teacher_row.id,
                         classes.c.grade         == grade,
+                        classes.c.subject       == subject,
                         classes.c.day_of_week   == thu,
                         classes.c.session_type  == buoi,
                         classes.c.start_session == tiet,
@@ -3798,42 +3822,27 @@ def admin_import_classes_excel():
                     skipped += 1
                     continue
 
-                # Check teacher time conflict: overlapping slot on same day/session
-                # Overlap: new=[tiet, tiet+so_tiet) ∩ existing=[start, start+duration) ≠ ∅
-                conflict = conn.execute(
-                    select(
-                        classes.c.grade.label("g"),
-                        classes.c.start_session.label("s"),
-                        classes.c.duration.label("d"),
-                    ).where(and_(
-                        classes.c.teacher_id   == teacher_row.id,
-                        classes.c.day_of_week  == thu,
-                        classes.c.session_type == buoi,
-                        classes.c.start_session < tiet + so_tiet,
-                        (classes.c.start_session + classes.c.duration) > tiet,
-                    ))
-                ).fetchone()
-                if conflict:
-                    errors_list.append(
-                        f"Dòng {i}: GV '{teacher_row.full_name}' đã có lớp K{conflict.g}"
-                        f" {buoi_label} T{thu} tiết {conflict.s}–{conflict.s + conflict.d - 1}"
-                        f" → trùng giờ với lớp đang import (tiết {tiet}–{tiet + so_tiet - 1})."
-                    )
-                    continue
-
-                # Normalise subject: known aliases → canonical name; unknown → keep raw input; fallback → teacher's subject_group
-                subj_key  = str(subj_raw or "").strip().lower()
-                subj_raw_clean = str(subj_raw or "").strip()
-                subject   = SUBJ_NORM.get(subj_key) or subj_raw_clean or teacher_row.subject_group or ""
-
-                # If school-assigned, subject must exist as a subject_group in teachers table
-                is_school_assign = teacher_name.strip() == ""
-                if is_school_assign:
-                    if not subject:
-                        errors_list.append(f"Dòng {i}: Thiếu môn học (bắt buộc khi không có giáo viên).")
-                        continue
-                    if subject not in valid_subjects:
-                        errors_list.append(f"Dòng {i}: Môn '{subject}' không có trong tổ bộ môn của bất kỳ GV nào trong hệ thống.")
+                # Check teacher time conflict (skip for placeholder — admin assigns real teacher later)
+                if teacher_row.cccd != _UNASSIGNED_CCCD:
+                    conflict = conn.execute(
+                        select(
+                            classes.c.grade.label("g"),
+                            classes.c.start_session.label("s"),
+                            classes.c.duration.label("d"),
+                        ).where(and_(
+                            classes.c.teacher_id   == teacher_row.id,
+                            classes.c.day_of_week  == thu,
+                            classes.c.session_type == buoi,
+                            classes.c.start_session < tiet + so_tiet,
+                            (classes.c.start_session + classes.c.duration) > tiet,
+                        ))
+                    ).fetchone()
+                    if conflict:
+                        errors_list.append(
+                            f"Dòng {i}: GV '{teacher_row.full_name}' đã có lớp K{conflict.g}"
+                            f" {buoi_label} T{thu} tiết {conflict.s}–{conflict.s + conflict.d - 1}"
+                            f" → trùng giờ với lớp đang import (tiết {tiet}–{tiet + so_tiet - 1})."
+                        )
                         continue
 
                 conn.execute(insert(classes).values(

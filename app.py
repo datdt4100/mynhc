@@ -486,8 +486,20 @@ def _cls_slot(row) -> str:
     s = 'S' if getattr(row, 'session_type', '') == 'morning' else 'C'
     return f"T{row.day_of_week}{s}{row.start_session}x{row.duration}"
 
+# Vietnamese tone marks only (grave, acute, tilde, hook, dot-below).
+# Structural marks (circumflex U+0302, breve U+0306, horn U+031B) are kept
+# so that ơ/ư/ă/â/ê/ô remain distinct from their unaccented base letters.
+_VIET_TONES = frozenset('̣̀́̃̉')
+
 def _norm_name(s: str) -> str:
-    """Normalize a name for comparison: NFC unicode, collapse whitespace, lowercase."""
+    """Normalize for comparison: strip tone marks, keep structural marks, lowercase.
+
+    Handles common Vietnamese data-entry inconsistency where tone marks are
+    placed on different vowels in a cluster (e.g. 'hòa' vs 'hoà').
+    Also handles NFD-stored names from Excel imports.
+    """
+    s = unicodedata.normalize("NFD", s)
+    s = "".join(c for c in s if c not in _VIET_TONES)
     s = unicodedata.normalize("NFC", s)
     return " ".join(s.strip().split()).lower()
 

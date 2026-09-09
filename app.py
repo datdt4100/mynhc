@@ -2395,6 +2395,10 @@ def admin_index():
         busy_room_count = conn2.execute(
             select(func.count()).select_from(room_external_busy)
         ).scalar() or 0
+    subject_groups = sorted({
+        t.subject_group for t in teacher_list
+        if t.subject_group and t.cccd != _UNASSIGNED_CCCD
+    })
     return render_template(
         "admin/index.html",
         stats={
@@ -2416,6 +2420,7 @@ def admin_index():
         room_list=room_list,
         room_count=room_count,
         busy_room_count=busy_room_count,
+        subject_groups=subject_groups,
     )
 
 # --- Admin: Teacher management ---

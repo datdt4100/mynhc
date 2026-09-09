@@ -1230,11 +1230,9 @@
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Môn học <span class="text-danger">*</span></label>
             <select id="manSubject" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
               <option value="">-- Chọn môn --</option>
-              <option value="Toán">Toán</option>
-              <option value="Ngữ Văn">Ngữ Văn</option>
-              <option value="Tiếng Anh">Tiếng Anh</option>
-              <option value="Vật lý">Vật lý</option>
-              <option value="Hóa học">Hóa học</option>
+              {% for sg in subject_groups %}
+              <option value="{{ sg }}">{{ sg }}</option>
+              {% endfor %}
             </select>
           </div>
           <div class="col-4">

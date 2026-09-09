@@ -482,9 +482,14 @@ def now_vn() -> str:
     return datetime.now(_VN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 def _cls_slot(row) -> str:
-    """Compact slot backup for log records: T{day}{S|C}{start}x{dur}"""
+    """Extended slot for log records: T{day}{S|C}{start}x{dur}|G{grade}|{subject}"""
     s = 'S' if getattr(row, 'session_type', '') == 'morning' else 'C'
-    return f"T{row.day_of_week}{s}{row.start_session}x{row.duration}"
+    base = f"T{row.day_of_week}{s}{row.start_session}x{row.duration}"
+    grade = getattr(row, 'grade', None)
+    subj  = getattr(row, 'subject', '') or ''
+    if grade:
+        return f"{base}|G{grade}|{subj}"
+    return base
 
 # Vietnamese tone marks only (grave, acute, tilde, hook, dot-below).
 # Structural marks (circumflex U+0302, breve U+0306, horn U+031B) are kept
@@ -1192,9 +1197,11 @@ def teacher_register_class():
             )
             class_id = result.inserted_primary_key[0]
             s_code = 'S' if session_type == 'morning' else 'C'
+            _subj = subject or ""
             conn.execute(insert(teacher_class_log).values(
                 teacher_id=teacher_id, class_id=class_id, action='C',
-                slot=f"T{day_of_week}{s_code}{start_session}x{duration}", ts=now_vn()
+                slot=f"T{day_of_week}{s_code}{start_session}x{duration}|G{grade}|{_subj}",
+                ts=now_vn()
             ))
 
     _bump(event_type="class", grade=grade)
@@ -3793,7 +3800,7 @@ def admin_add_class_manual():
             s_code = 'S' if session_type == 'morning' else 'C'
             conn.execute(insert(teacher_class_log).values(
                 teacher_id=teacher_row.id, class_id=new_class_id,
-                action='C', slot=f"T{day_of_week}{s_code}{start_session}x{duration}",
+                action='C', slot=f"T{day_of_week}{s_code}{start_session}x{duration}|G{grade}|{subject}",
                 ts=now_vn()
             ))
         conn.commit()

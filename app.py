@@ -3216,8 +3216,12 @@ def admin_class_reg():
             ).scalar()
             enrollment_counts[c.id] = cnt
 
-    unassigned_classes = [c for c in all_classes_raw if c.teacher_cccd == _UNASSIGNED_CCCD]
-    all_classes        = [c for c in all_classes_raw if c.teacher_cccd != _UNASSIGNED_CCCD]
+    unassigned_classes = sorted(
+        [c for c in all_classes_raw if c.teacher_cccd == _UNASSIGNED_CCCD],
+        key=lambda c: (c.grade, c.day_of_week, 0 if c.session_type == "morning" else 1,
+                       c.start_session, c.subject or "")
+    )
+    all_classes = [c for c in all_classes_raw if c.teacher_cccd != _UNASSIGNED_CCCD]
 
     conflict_info = {}
     for c in all_classes + unassigned_classes:

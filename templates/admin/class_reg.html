@@ -338,7 +338,9 @@
             <th style="width:36px;">STT</th>
             <th style="white-space:nowrap;">Môn</th>
             <th style="white-space:nowrap;">Khối</th>
-            <th style="white-space:nowrap;">Thời gian</th>
+            <th style="white-space:nowrap;">Thứ</th>
+            <th style="white-space:nowrap;">Buổi / Tiết</th>
+            <th style="white-space:nowrap;">Số tiết</th>
             <th style="white-space:nowrap;min-width:130px;">Địa điểm</th>
             <th style="white-space:nowrap;width:70px;">Sĩ số</th>
             <th style="white-space:nowrap;text-align:center;">HS đăng ký</th>
@@ -355,9 +357,9 @@
             <td class="text-muted" style="font-size:.75rem;">{{ loop.index }}</td>
             <td><span class="badge rounded-pill" style="background:#EFF6FF;color:#0369A1;font-size:.72rem;">{{ cls.subject or '—' }}</span></td>
             <td><span class="badge bg-light text-dark border" style="font-size:.72rem;">K{{ cls.grade }}</span></td>
-            <td style="font-size:.78rem;white-space:nowrap;">
-              {{ session_label(cls.session_type, cls.start_session, cls.duration) }} – {{ day_name(cls.day_of_week) }}
-            </td>
+            <td style="font-size:.78rem;white-space:nowrap;">{{ day_name(cls.day_of_week) }}</td>
+            <td style="font-size:.78rem;white-space:nowrap;">{{ session_label(cls.session_type, cls.start_session, cls.duration) }}</td>
+            <td style="font-size:.78rem;white-space:nowrap;">{{ cls.duration }} tiết</td>
             <td>
               <select class="form-select form-select-sm ua-room-select"
                       style="font-size:.75rem;min-width:110px;"

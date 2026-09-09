@@ -866,7 +866,7 @@ function openTeacherLog(teacherId, teacherName) {
   document.getElementById('teacher-log-name').textContent = teacherName;
   const body = document.getElementById('teacher-log-body');
   body.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-hourglass-split" style="font-size:1.5rem;display:block;margin-bottom:8px;"></i>Đang tải…</div>';
-  const modal = bootstrap.Modal.getOrCreate(document.getElementById('teacherLogModal'));
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('teacherLogModal'));
   modal.show();
   fetch('/admin/teacher/' + teacherId + '/log')
     .then(r => r.json())

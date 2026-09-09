@@ -838,7 +838,7 @@ function openStudentLog(studentId, studentName) {
   document.getElementById('student-log-name').textContent = studentName;
   const body = document.getElementById('student-log-body');
   body.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-hourglass-split" style="font-size:1.5rem;display:block;margin-bottom:8px;"></i>Đang tải…</div>';
-  bootstrap.Modal.getOrCreate(document.getElementById('studentLogModal')).show();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('studentLogModal')).show();
   fetch('/admin/student/' + studentId + '/log')
     .then(r => r.json())
     .then(d => {

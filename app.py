@@ -1177,6 +1177,11 @@ def teacher_register_class():
                 )
             )
             class_id = result.inserted_primary_key[0]
+            s_code = 'S' if session_type == 'morning' else 'C'
+            conn.execute(insert(teacher_class_log).values(
+                teacher_id=teacher_id, class_id=class_id, action='C',
+                slot=f"T{day_of_week}{s_code}{start_session}x{duration}", ts=now_vn()
+            ))
 
     _bump(event_type="class", grade=grade)
     return jsonify(ok=True, class_id=class_id)
@@ -1204,6 +1209,11 @@ def teacher_delete_class(class_id):
             return jsonify(ok=False, error="Lớp đã có học sinh đăng ký, không thể xóa.")
 
         conn.execute(delete(classes).where(classes.c.id == class_id))
+        s_code = 'S' if cls.session_type == 'morning' else 'C'
+        conn.execute(insert(teacher_class_log).values(
+            teacher_id=teacher_id, class_id=class_id, action='D',
+            slot=f"T{cls.day_of_week}{s_code}{cls.start_session}x{cls.duration}", ts=now_vn()
+        ))
         conn.commit()
 
     return jsonify(ok=True)

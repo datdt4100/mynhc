@@ -4955,5 +4955,10 @@ def admin_diagnose_student(cccd):
 # Main
 # ---------------------------------------------------------------------------
 
+@app.route("/health-check")
+def health_check():
+    return "", 200
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5051, threaded=True)

@@ -1255,6 +1255,267 @@ def student_dashboard():
     )
 
 
+def _build_schedule_wb(title, subtitle, slots):
+    """Build openpyxl timetable workbook. slots: list of dicts with day/session/start/duration/line1/line2/line3"""
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    thin = Side(style="thin", color="CBD5E1")
+    bdr  = Border(left=thin, right=thin, top=thin, bottom=thin)
+    days       = [2, 3, 4, 5, 6, 7]
+    day_labels = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"]
+
+    lookup = {}
+    for s in slots:
+        for i in range(s['duration']):
+            lookup[(s['day'], s['session'], s['start'] + i)] = (s, i == 0)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Thời khoá biểu"
+
+    # Title row
+    ws.merge_cells("A1:G1")
+    c = ws["A1"]; c.value = title
+    c.font = Font(bold=True, size=13, color="FFFFFF")
+    c.fill = PatternFill("solid", fgColor="065F46")
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 28
+
+    # Subtitle row
+    ws.merge_cells("A2:G2")
+    c = ws["A2"]; c.value = subtitle
+    c.font = Font(size=10, color="065F46", italic=True)
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[2].height = 18
+
+    # Day-header row
+    c = ws.cell(row=3, column=1, value="")
+    c.fill = PatternFill("solid", fgColor="F8FAFC"); c.border = bdr
+    hfill = PatternFill("solid", fgColor="10B981")
+    hfont = Font(bold=True, color="FFFFFF", size=10)
+    for ci, (_, dl) in enumerate(zip(days, day_labels), 2):
+        cell = ws.cell(row=3, column=ci, value=dl)
+        cell.font = hfont; cell.fill = hfill; cell.border = bdr
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[3].height = 24
+
+    cur = 4
+    for sess_type, sess_label, sess_color in [
+        ("morning",   "BUỔI SÁNG",  "C2410C"),
+        ("afternoon", "BUỔI CHIỀU", "1D4ED8"),
+    ]:
+        ws.merge_cells(f"A{cur}:G{cur}")
+        dc = ws[f"A{cur}"]; dc.value = sess_label
+        dc.font = Font(bold=True, size=10, color="FFFFFF")
+        dc.fill = PatternFill("solid", fgColor=sess_color)
+        dc.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+        ws.row_dimensions[cur].height = 20
+        cur += 1
+
+        for tiet in [1, 2, 3, 4]:
+            lc = ws.cell(row=cur, column=1, value=f"Tiết {tiet}")
+            lc.font = Font(size=9, color="64748B")
+            lc.alignment = Alignment(horizontal="center", vertical="center")
+            lc.fill = PatternFill("solid", fgColor="F8FAFC"); lc.border = bdr
+            ws.row_dimensions[cur].height = 48
+
+            for ci, d in enumerate(days, 2):
+                key = (d, sess_type, tiet)
+                col_l = get_column_letter(ci)
+                if key in lookup:
+                    sl, is_first = lookup[key]
+                    if is_first:
+                        lines = [sl['line1'], sl['line2']] + ([f"📍 {sl['line3']}"] if sl['line3'] else [])
+                        cell = ws.cell(row=cur, column=ci, value="\n".join(lines))
+                        cell.font = Font(bold=True, size=9, color="065F46")
+                        cell.fill = PatternFill("solid", fgColor="DCFCE7")
+                        cell.alignment = Alignment(wrap_text=True, vertical="center", horizontal="center")
+                        cell.border = bdr
+                        if sl['duration'] > 1 and tiet == sl['start']:
+                            ws.merge_cells(f"{col_l}{cur}:{col_l}{cur + sl['duration'] - 1}")
+                else:
+                    cell = ws.cell(row=cur, column=ci)
+                    cell.fill = PatternFill("solid", fgColor="F8FAFC"); cell.border = bdr
+            cur += 1
+
+    ws.column_dimensions["A"].width = 9
+    for ci in range(2, 8):
+        ws.column_dimensions[get_column_letter(ci)].width = 18
+    ws.freeze_panes = "B4"
+    return wb
+
+
+def _build_schedule_docx(title, subtitle, slots):
+    """Build python-docx timetable. Returns BytesIO."""
+    try:
+        from docx import Document
+        from docx.shared import Pt, RGBColor, Cm
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+    except ImportError:
+        return None
+
+    def _cell_bg(cell, hex_color):
+        tc = cell._tc; tcPr = tc.get_or_add_tcPr()
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:fill'), hex_color); shd.set(qn('w:val'), 'clear')
+        tcPr.append(shd)
+
+    def _cell_text(cell, text, bold=False, sz=9, color='000000', center=True):
+        for p in cell.paragraphs:
+            for r in p.runs: p._element.remove(r._element)
+        para = cell.paragraphs[0]
+        para.alignment = WD_ALIGN_PARAGRAPH.CENTER if center else WD_ALIGN_PARAGRAPH.LEFT
+        run = para.add_run(text)
+        run.bold = bold; run.font.size = Pt(sz)
+        run.font.color.rgb = RGBColor.from_string(color)
+
+    lookup = {}
+    for s in slots:
+        for i in range(s['duration']):
+            lookup[(s['day'], s['session'], s['start'] + i)] = (s, i == 0)
+
+    days       = [2, 3, 4, 5, 6, 7]
+    day_labels = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"]
+
+    doc = Document()
+    sec = doc.sections[0]
+    sec.page_width = Cm(29.7); sec.page_height = Cm(21)
+    sec.left_margin = sec.right_margin = Cm(1.5)
+    sec.top_margin  = sec.bottom_margin = Cm(1.5)
+    sec.orientation = 1  # landscape
+
+    h = doc.add_heading(title, level=1)
+    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    sub = doc.add_paragraph(subtitle)
+    sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Table: 11 rows × 7 cols
+    ROW_HEADER = 0
+    ROW_MORN   = 1
+    TIETS_MORN = [2, 3, 4, 5]   # rows for morning tiets 1-4
+    ROW_AFT    = 6
+    TIETS_AFT  = [7, 8, 9, 10]  # rows for afternoon tiets 1-4
+
+    tbl = doc.add_table(rows=11, cols=7)
+    tbl.style = 'Table Grid'
+
+    # Header row
+    _cell_bg(tbl.cell(ROW_HEADER, 0), 'F8FAFC')
+    _cell_text(tbl.cell(ROW_HEADER, 0), '', sz=9)
+    for ci, dl in enumerate(day_labels, 1):
+        _cell_bg(tbl.cell(ROW_HEADER, ci), '10B981')
+        _cell_text(tbl.cell(ROW_HEADER, ci), dl, bold=True, sz=9, color='FFFFFF')
+
+    # Session dividers
+    for ri, (label, color) in [(ROW_MORN, ("BUỔI SÁNG", 'C2410C')), (ROW_AFT, ("BUỔI CHIỀU", '1D4ED8'))]:
+        merged = tbl.cell(ri, 0).merge(tbl.cell(ri, 6))
+        _cell_bg(merged, color)
+        _cell_text(merged, label, bold=True, sz=10, color='FFFFFF')
+
+    # Tiet rows
+    for sess_type, tiet_rows in [("morning", TIETS_MORN), ("afternoon", TIETS_AFT)]:
+        for ti, ri in enumerate(tiet_rows):
+            tiet = ti + 1
+            _cell_bg(tbl.cell(ri, 0), 'F8FAFC')
+            _cell_text(tbl.cell(ri, 0), f'Tiết {tiet}', sz=9, color='64748B')
+            for ci, d in enumerate(days, 1):
+                key = (d, sess_type, tiet)
+                if key in lookup:
+                    sl, is_first = lookup[key]
+                    if is_first:
+                        lines = [sl['line1'], sl['line2']] + ([f"📍 {sl['line3']}"] if sl['line3'] else [])
+                        dur = sl['duration']
+                        if dur > 1:
+                            end_ri = ri + dur - 1
+                            cell = tbl.cell(ri, ci).merge(tbl.cell(end_ri, ci))
+                        else:
+                            cell = tbl.cell(ri, ci)
+                        _cell_bg(cell, 'DCFCE7')
+                        _cell_text(cell, "\n".join(lines), bold=True, sz=8, color='065F46')
+                    # else: covered by merge
+                else:
+                    _cell_bg(tbl.cell(ri, ci), 'F8FAFC')
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
+
+
+@app.route("/student/export-schedule")
+@student_required
+def student_export_schedule():
+    fmt = request.args.get('fmt', 'xlsx')
+    student_id = session["user_id"]
+    with engine.connect() as conn:
+        st = conn.execute(select(students).where(students.c.id == student_id)).fetchone()
+        enrolled = conn.execute(
+            select(classes, teachers.c.full_name.label("teacher_name"), teachers.c.subject_group)
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .join(enrollments, classes.c.id == enrollments.c.class_id)
+            .where(enrollments.c.student_id == student_id)
+            .order_by(classes.c.day_of_week, classes.c.session_type, classes.c.start_session)
+        ).fetchall()
+
+    slots = [{'day': c.day_of_week, 'session': c.session_type, 'start': c.start_session,
+               'duration': c.duration or 1, 'line1': c.subject or c.subject_group or '—',
+               'line2': _name_fmt(c.teacher_name), 'line3': c.location or ''}
+             for c in enrolled]
+    title    = "THỜI KHOÁ BIỂU"
+    subtitle = f"{_name_fmt(st.full_name)} — Lớp {st.class_name}"
+    slug     = st.cccd
+
+    if fmt == 'xlsx':
+        wb  = _build_schedule_wb(title, subtitle, slots)
+        buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+        return send_file(buf, as_attachment=True, download_name=f"tkb_{slug}.xlsx",
+                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    elif fmt == 'docx':
+        buf = _build_schedule_docx(title, subtitle, slots)
+        if not buf:
+            flash("Lỗi tạo file DOCX.", "error"); return redirect(url_for("student_dashboard"))
+        return send_file(buf, as_attachment=True, download_name=f"tkb_{slug}.docx",
+                         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    return "Định dạng không hỗ trợ", 400
+
+
+@app.route("/teacher/export-schedule")
+@teacher_required
+def teacher_export_schedule():
+    fmt = request.args.get('fmt', 'xlsx')
+    teacher_id = session["user_id"]
+    with engine.connect() as conn:
+        tv = conn.execute(select(teachers).where(teachers.c.id == teacher_id)).fetchone()
+        tclasses = conn.execute(
+            select(classes).where(classes.c.teacher_id == teacher_id)
+            .order_by(classes.c.grade, classes.c.day_of_week, classes.c.session_type, classes.c.start_session)
+        ).fetchall()
+
+    slots = [{'day': c.day_of_week, 'session': c.session_type, 'start': c.start_session,
+               'duration': c.duration or 1, 'line1': tv.subject_group or '—',
+               'line2': f"Khối {c.grade}", 'line3': c.location or ''}
+             for c in tclasses]
+    title    = "THỜI KHOÁ BIỂU GIẢNG DẠY"
+    subtitle = f"{_name_fmt(tv.full_name)} — {tv.subject_group}"
+    slug     = tv.cccd if hasattr(tv, 'cccd') else str(teacher_id)
+
+    if fmt == 'xlsx':
+        wb  = _build_schedule_wb(title, subtitle, slots)
+        buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+        return send_file(buf, as_attachment=True, download_name=f"tkb_{slug}.xlsx",
+                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    elif fmt == 'docx':
+        buf = _build_schedule_docx(title, subtitle, slots)
+        if not buf:
+            flash("Lỗi tạo file DOCX.", "error"); return redirect(url_for("teacher_dashboard"))
+        return send_file(buf, as_attachment=True, download_name=f"tkb_{slug}.docx",
+                         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    return "Định dạng không hỗ trợ", 400
+
+
 @app.route("/student/enroll", methods=["POST"])
 @student_required
 def student_enroll():

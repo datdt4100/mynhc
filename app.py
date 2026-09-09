@@ -3569,6 +3569,13 @@ def admin_add_class_manual():
 
     with engine.connect() as conn:
         if school_assign:
+            # Validate subject_input exists as a subject_group in teachers table
+            valid_groups = {r.subject_group for r in conn.execute(
+                select(teachers.c.subject_group)
+                .where(teachers.c.cccd != _UNASSIGNED_CCCD)
+            ).fetchall() if r.subject_group}
+            if subject_input and subject_input not in valid_groups:
+                return jsonify(ok=False, error=f"Môn '{subject_input}' không có trong tổ bộ môn của bất kỳ giáo viên nào trong hệ thống.")
             teacher_row = conn.execute(
                 select(teachers).where(teachers.c.cccd == _UNASSIGNED_CCCD)
             ).fetchone()
@@ -3703,6 +3710,8 @@ def admin_import_classes_excel():
         teacher_map_stripped = {_strip_diacritics(t.full_name): t for t in all_teachers}
         placeholder_teacher  = (teacher_map_exact.get("do trường phân công")
                                 or teacher_map_exact.get("trường phân công"))
+        valid_subjects = {t.subject_group for t in all_teachers
+                          if t.subject_group and t.cccd != _UNASSIGNED_CCCD}
 
         def _find_teacher(name):
             if not name.strip():
@@ -3807,9 +3816,20 @@ def admin_import_classes_excel():
                     )
                     continue
 
-                # Normalise subject from Excel column, fall back to teacher's subject_group
-                subj_key = str(subj_raw or "").strip().lower()
-                subject  = SUBJ_NORM.get(subj_key) or teacher_row.subject_group or ""
+                # Normalise subject: known aliases → canonical name; unknown → keep raw input; fallback → teacher's subject_group
+                subj_key  = str(subj_raw or "").strip().lower()
+                subj_raw_clean = str(subj_raw or "").strip()
+                subject   = SUBJ_NORM.get(subj_key) or subj_raw_clean or teacher_row.subject_group or ""
+
+                # If school-assigned, subject must exist as a subject_group in teachers table
+                is_school_assign = teacher_name.strip() == ""
+                if is_school_assign:
+                    if not subject:
+                        errors_list.append(f"Dòng {i}: Thiếu môn học (bắt buộc khi không có giáo viên).")
+                        continue
+                    if subject not in valid_subjects:
+                        errors_list.append(f"Dòng {i}: Môn '{subject}' không có trong tổ bộ môn của bất kỳ GV nào trong hệ thống.")
+                        continue
 
                 conn.execute(insert(classes).values(
                     teacher_id    = teacher_row.id,

@@ -457,12 +457,19 @@ function openAssignModal(classId, subject, grade, dayLabel, sessionLabel, sessio
     subject + ' · K' + grade + ' · ' + sessionLabel + ' – ' + dayLabel;
   document.getElementById('atSelectedTeacherId').value = '';
   document.getElementById('atSelectedTeacherInfo').textContent = '';
-  document.getElementById('atTeacherSearch').value = '';
   document.getElementById('atModalError').classList.add('d-none');
   document.getElementById('atSelectedRoom').value = '';
   document.getElementById('atRoomList').innerHTML = '';
   document.getElementById('atRoomEmpty').style.display = 'none';
-  _atRenderTeachers(_AT_TEACHERS);
+  /* Pre-filter by subject_group if class has a subject */
+  const searchEl = document.getElementById('atTeacherSearch');
+  if (subject) {
+    searchEl.value = subject;
+    _atFilterTeachers(subject);
+  } else {
+    searchEl.value = '';
+    _atRenderTeachers(_AT_TEACHERS);
+  }
   _atLoadRooms(sessionType, dayOfWeek, startSession, duration, grade);
   new bootstrap.Modal(document.getElementById('assignTeacherModal')).show();
 }

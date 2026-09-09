@@ -763,7 +763,7 @@ def index():
 def stream_changes():
     """SSE: push a JSON event whenever the schedule or class list changes."""
     def gen():
-        last = 0.0
+        last = _change_ts[0]  # snapshot at connect time; only send future changes
         while True:
             ts = _change_ts[0]
             if ts != last:

@@ -3406,7 +3406,7 @@ def admin_class_reg_export():
             idx,
             c.teacher_name,
             c.teacher_email or "",
-            c.subject_group,
+            c.subject_group or c.subject or "",
             f"Khối {c.grade}",
             day_name(c.day_of_week),
             f"{buoi} – {tiet_label}",
@@ -3627,6 +3627,89 @@ def admin_class_assign_teacher(class_id):
         ))
     _bump(event_type="class", grade=cls.grade)
     return jsonify(ok=True, teacher_name=teacher_row.full_name, subject=teacher_row.subject_group)
+
+
+@app.route("/admin/classes/<int:class_id>/split", methods=["POST"])
+@admin_required
+def admin_class_split(class_id):
+    import random as _random
+    data     = request.get_json(force=True)
+    original = data.get("original", {})
+    splits   = data.get("splits", [])
+    if not splits:
+        return jsonify(ok=False, error="Không có lớp tách nào.")
+    orig_teacher_id = original.get("teacher_id")
+    orig_location   = (original.get("location") or "").strip() or None
+    orig_capacity   = int(original.get("max_capacity") or 0) or None
+    if not orig_teacher_id:
+        return jsonify(ok=False, error="Chưa chọn giáo viên cho lớp gốc.")
+    for i, sp in enumerate(splits, 1):
+        if not sp.get("teacher_id"):
+            return jsonify(ok=False, error=f"Chưa chọn giáo viên cho lớp tách {i}.")
+    with engine.begin() as conn:
+        cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        if not cls:
+            return jsonify(ok=False, error="Không tìm thấy lớp.")
+        orig_teacher = conn.execute(select(teachers).where(teachers.c.id == orig_teacher_id)).fetchone()
+        if not orig_teacher:
+            return jsonify(ok=False, error="Không tìm thấy giáo viên.")
+        enrolled = conn.execute(
+            select(enrollments.c.id, enrollments.c.student_id)
+            .where(enrollments.c.class_id == class_id)
+        ).fetchall()
+        enroll_list = list(enrolled)
+        _random.shuffle(enroll_list)
+        s_code = 'S' if cls.session_type == 'morning' else 'C'
+        ts = now_vn()
+        new_class_ids = []
+        offset = 0
+        for sp in splits:
+            sp_teacher_id = int(sp["teacher_id"])
+            sp_location   = (sp.get("location") or "").strip() or None
+            sp_capacity   = int(sp.get("max_capacity") or 50)
+            sp_teacher = conn.execute(select(teachers).where(teachers.c.id == sp_teacher_id)).fetchone()
+            sp_subj = (sp_teacher.subject_group if sp_teacher else None) or cls.subject or ""
+            result = conn.execute(insert(classes).values(
+                teacher_id    = sp_teacher_id,
+                grade         = cls.grade,
+                duration      = cls.duration,
+                day_of_week   = cls.day_of_week,
+                session_type  = cls.session_type,
+                start_session = cls.start_session,
+                subject       = sp_subj,
+                location      = sp_location,
+                max_capacity  = sp_capacity,
+                extra_data    = None,
+                is_published  = cls.is_published,
+                created_at    = ts,
+            ))
+            new_cid = result.inserted_primary_key[0]
+            new_class_ids.append(new_cid)
+            batch = enroll_list[offset:offset + sp_capacity]
+            for row in batch:
+                conn.execute(
+                    update(enrollments).where(enrollments.c.id == row.id).values(class_id=new_cid)
+                )
+            offset += sp_capacity
+            conn.execute(insert(teacher_class_log).values(
+                teacher_id=sp_teacher_id, class_id=new_cid, action='C',
+                slot=f"T{cls.day_of_week}{s_code}{cls.start_session}x{cls.duration}|G{cls.grade}|{sp_subj}",
+                ts=ts,
+            ))
+        orig_subj = orig_teacher.subject_group or cls.subject or ""
+        conn.execute(update(classes).where(classes.c.id == class_id).values(
+            teacher_id  =orig_teacher_id,
+            subject     =orig_subj,
+            location    =orig_location,
+            max_capacity=orig_capacity,
+        ))
+        conn.execute(insert(teacher_class_log).values(
+            teacher_id=orig_teacher_id, class_id=class_id, action='A',
+            slot=f"T{cls.day_of_week}{s_code}{cls.start_session}x{cls.duration}|G{cls.grade}|{orig_subj}",
+            ts=ts,
+        ))
+    _bump(event_type="class", grade=cls.grade)
+    return jsonify(ok=True, new_class_ids=new_class_ids)
 
 
 @app.route("/admin/classes/available-for-slot")
@@ -4526,7 +4609,7 @@ def admin_enrollment_export():
             summary_rows.append([
                 cls.id,
                 cls.teacher_name,
-                cls.subject_group or "",
+                cls.subject_group or cls.subject or "",
                 cls.grade,
                 day_name(cls.day_of_week),
                 buoi,
@@ -4537,14 +4620,14 @@ def admin_enrollment_export():
             ])
 
             # ── Detail sheet ──────────────────────────────────────────
-            raw_name = f"{cls.id}_{cls.subject_group or 'lop'}_K{cls.grade}"
+            raw_name = f"{cls.id}_{cls.subject_group or cls.subject or 'lop'}_K{cls.grade}"
             sheet_name = raw_name[:31]
             ws = wb.create_sheet(title=sheet_name)
 
             # Title row (merged A1:E1)
             ws.merge_cells("A1:E1")
             c = ws["A1"]
-            c.value = f"DANH SÁCH HỌC SINH ĐĂNG KÝ — {cls.subject_group or ''} Khối {cls.grade}"
+            c.value = f"DANH SÁCH HỌC SINH ĐĂNG KÝ — {cls.subject_group or cls.subject or ''} Khối {cls.grade}"
             c.font      = Font(bold=True, size=13, color="FFFFFF")
             c.fill      = PatternFill("solid", fgColor="065F46")
             c.alignment = Alignment(horizontal="center", vertical="center")
@@ -4554,7 +4637,7 @@ def admin_enrollment_export():
             info_bg   = "ECFDF5"
             info_data = [
                 ("Giáo viên",  cls.teacher_name),
-                ("Tổ bộ môn", cls.subject_group or "—"),
+                ("Tổ bộ môn", cls.subject_group or cls.subject or "—"),
                 ("Thời gian",  f"{day_name(cls.day_of_week)}, {buoi}, {tiet_str}"),
                 ("Địa điểm",   cls.location or "—"),
                 ("Sĩ số",      f"{enrolled_count} / {cls.max_capacity or '—'}"),

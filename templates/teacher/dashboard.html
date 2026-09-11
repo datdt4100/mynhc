@@ -157,9 +157,9 @@
 }
 .cal-bottom {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
 }
 .cal-count {
   font-size: .68rem;
@@ -207,6 +207,25 @@
 }
 .cal-cell--registered:hover .cal-del-btn { opacity: 1; }
 .cal-del-btn:hover { background: rgba(239,68,68,.25); }
+
+.cal-detail-inline {
+  font-size: .65rem;
+  font-weight: 600;
+  color: #0EA5E9;
+  background: rgba(14,165,233,.12);
+  border: 1px solid rgba(14,165,233,.3);
+  border-radius: 8px;
+  padding: 1px 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: background .15s, border-color .15s;
+  white-space: nowrap;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.cal-detail-inline:hover { background: rgba(14,165,233,.25); border-color: rgba(14,165,233,.6); }
 
 /* ── Legend ── */
 .cal-legend {
@@ -378,7 +397,13 @@
                         <span class="cal-count count-badge{% if cls.max_capacity and cnt >= cls.max_capacity %} warn-red{% endif %}"
                               data-class-id="{{ cls.id }}" data-max="{{ cls.max_capacity or '' }}"
                               {% if cls.max_capacity and cnt >= cls.max_capacity %}title="Lớp đã đầy"{% endif %}>{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
+                        {% if teacher_view_enrollments %}
+                        <button class="cal-detail-inline" onclick="openEnrollDetail({{ cls.id }}, 'Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}', '{{ day_name(cls.day_of_week) }} Sáng', event)" title="Xem danh sách đăng ký">
+                          <i class="bi bi-people-fill"></i> Chi tiết
+                        </button>
+                        {% else %}
                         <span class="cal-status-dot"></span>
+                        {% endif %}
                       </div>
                     </div>
                     {% if teacher_reg_open %}
@@ -423,7 +448,13 @@
                         <span class="cal-count count-badge{% if cls.max_capacity and cnt >= cls.max_capacity %} warn-red{% endif %}"
                               data-class-id="{{ cls.id }}" data-max="{{ cls.max_capacity or '' }}"
                               {% if cls.max_capacity and cnt >= cls.max_capacity %}title="Lớp đã đầy"{% endif %}>{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
+                        {% if teacher_view_enrollments %}
+                        <button class="cal-detail-inline" onclick="openEnrollDetail({{ cls.id }}, 'Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}', '{{ day_name(cls.day_of_week) }} Chiều', event)" title="Xem danh sách đăng ký">
+                          <i class="bi bi-people-fill"></i> Chi tiết
+                        </button>
+                        {% else %}
                         <span class="cal-status-dot"></span>
+                        {% endif %}
                       </div>
                     </div>
                     {% if teacher_reg_open %}
@@ -583,6 +614,29 @@
 {% endblock %}
 
 {% block scripts %}
+{# ── Modal: Danh sách HS đăng ký ── #}
+<div class="modal fade" id="enrollDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:560px;">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#0369A1,#0EA5E9);border:none;padding:12px 18px;">
+        <div>
+          <h5 class="modal-title fw-bold text-white mb-0" style="font-size:.92rem;">
+            <i class="bi bi-people-fill me-2"></i>Danh sách đăng ký
+          </h5>
+          <div id="enrollDetailInfo" style="font-size:.75rem;color:rgba(255,255,255,.85);margin-top:2px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="enrollDetailBody" style="padding:12px 16px;max-height:420px;overflow-y:auto;">
+          <div class="text-center text-muted py-4">
+            <i class="bi bi-hourglass-split" style="font-size:1.4rem;display:block;margin-bottom:8px;"></i>Đang tải…
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 <script>
 const DAY_NAMES = {2:'Thứ Hai',3:'Thứ Ba',4:'Thứ Tư',5:'Thứ Năm',6:'Thứ Sáu',7:'Thứ Bảy'};
 const SES_NAMES = {morning:'Buổi Sáng', afternoon:'Buổi Chiều'};
@@ -1201,6 +1255,58 @@ async function exportTKBTeacher(fmt) {
     } catch(e) {
       showToast('Không thể xuất PNG. Dùng "In / PDF" thay thế.', 'error');
     }
+  }
+}
+
+/* ── Enroll detail modal ── */
+async function openEnrollDetail(classId, classLabel, slotLabel, event) {
+  if (event) event.stopPropagation();
+  document.getElementById('enrollDetailInfo').textContent = classLabel + ' · ' + slotLabel;
+  document.getElementById('enrollDetailBody').innerHTML =
+    '<div class="text-center text-muted py-4"><i class="bi bi-hourglass-split" style="font-size:1.4rem;display:block;margin-bottom:8px;"></i>Đang tải…</div>';
+  new bootstrap.Modal(document.getElementById('enrollDetailModal')).show();
+  try {
+    const res  = await fetch('/teacher/classes/' + classId + '/students');
+    const data = await res.json();
+    if (!data.ok) { document.getElementById('enrollDetailBody').innerHTML = '<p class="text-danger p-3">' + (data.error || 'Lỗi tải dữ liệu.') + '</p>'; return; }
+    const list = data.students;
+    if (!list.length) {
+      document.getElementById('enrollDetailBody').innerHTML = '<p class="text-muted text-center py-4">Chưa có học sinh đăng ký.</p>';
+      return;
+    }
+    let rows = '';
+    list.forEach((s, i) => {
+      const genderBadge = s.gender === 'Nam'
+        ? '<span style="font-size:.7rem;background:#EFF6FF;color:#1D4ED8;border-radius:6px;padding:1px 6px;font-weight:600;">Nam</span>'
+        : s.gender === 'Nữ'
+          ? '<span style="font-size:.7rem;background:#FDF2F8;color:#9D174D;border-radius:6px;padding:1px 6px;font-weight:600;">Nữ</span>'
+          : '';
+      rows += '<tr><td style="text-align:center;color:#94A3B8;">' + (i+1) + '</td>'
+            + '<td style="font-weight:500;">' + s.full_name + '</td>'
+            + '<td style="color:#64748B;">' + (s.class_name || '') + '</td>'
+            + '<td style="text-align:center;">' + genderBadge + '</td></tr>';
+    });
+    document.getElementById('enrollDetailBody').innerHTML =
+      '<table style="width:100%;border-collapse:collapse;font-size:.83rem;">'
+      + '<thead><tr style="background:#F8FAFC;border-bottom:2px solid #E2E8F0;">'
+      + '<th style="padding:7px 10px;text-align:center;font-weight:600;color:#64748B;width:40px;">STT</th>'
+      + '<th style="padding:7px 10px;font-weight:600;color:#374151;">Họ và tên</th>'
+      + '<th style="padding:7px 10px;font-weight:600;color:#64748B;">Lớp</th>'
+      + '<th style="padding:7px 10px;text-align:center;font-weight:600;color:#64748B;width:60px;">Giới tính</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody>'
+      + '<tfoot><tr><td colspan="4" style="padding:8px 10px;font-size:.78rem;color:#94A3B8;border-top:1px solid #E2E8F0;">'
+      + 'Tổng: <strong>' + list.length + ' HS</strong></td></tr></tfoot>'
+      + '</table>';
+    // Zebra rows
+    document.querySelectorAll('#enrollDetailBody tbody tr').forEach((tr, i) => {
+      tr.style.background = i % 2 === 0 ? '#fff' : '#F8FAFC';
+      tr.querySelectorAll('td').forEach((td, j) => {
+        td.style.padding = '7px 10px';
+        td.style.borderBottom = '1px solid #F1F5F9';
+      });
+    });
+  } catch {
+    document.getElementById('enrollDetailBody').innerHTML = '<p class="text-danger p-3">Lỗi kết nối.</p>';
   }
 }
 </script>

@@ -586,6 +586,23 @@
             <span id="email-check-label">{% if require_email_check %}Bật{% else %}Tắt{% endif %}</span>
           </button>
         </div>
+        <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
+          <div>
+            <span style="font-size:.78rem; font-weight:600; color:#374151;">
+              <i class="bi bi-people me-1" style="color:#0EA5E9;"></i>GV xem danh sách đăng ký
+            </span>
+            <span id="teacher-view-enroll-desc" style="font-size:.72rem; color:#64748B; display:block; margin-top:1px;">
+              {% if teacher_view_enrollments %}GV thấy nút Chi tiết để xem danh sách HS{% else %}GV không thấy danh sách HS đăng ký{% endif %}
+            </span>
+          </div>
+          <button id="btn-toggle-teacher-view-enroll"
+                  class="reg-toggle {% if teacher_view_enrollments %}open{% else %}closed{% endif %}"
+                  data-on="{{ 'true' if teacher_view_enrollments else 'false' }}"
+                  onclick="toggleTeacherViewEnroll()">
+            <span class="toggle-dot"></span>
+            <span id="teacher-view-enroll-label">{% if teacher_view_enrollments %}Bật{% else %}Tắt{% endif %}</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1480,6 +1497,25 @@ function toggleEmailCheck() {
       btn.classList.toggle('closed', !on);
       label.textContent = on ? 'Bật' : 'Tắt';
       desc.textContent  = on ? 'Hiện popup yêu cầu HS bổ sung email khi đăng nhập' : 'Không yêu cầu bổ sung email';
+    })
+    .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+    .finally(() => { btn.disabled = false; });
+}
+
+function toggleTeacherViewEnroll() {
+  const btn   = document.getElementById('btn-toggle-teacher-view-enroll');
+  const label = document.getElementById('teacher-view-enroll-label');
+  const desc  = document.getElementById('teacher-view-enroll-desc');
+  btn.disabled = true;
+  fetch('{{ url_for("admin_teacher_view_enrollments_toggle") }}', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      const on = data.on;
+      btn.dataset.on = on ? 'true' : 'false';
+      btn.classList.toggle('open',   on);
+      btn.classList.toggle('closed', !on);
+      label.textContent = on ? 'Bật' : 'Tắt';
+      desc.textContent  = on ? 'GV thấy nút Chi tiết để xem danh sách HS' : 'GV không thấy danh sách HS đăng ký';
     })
     .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
     .finally(() => { btn.disabled = false; });

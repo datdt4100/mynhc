@@ -289,7 +289,8 @@ def init_db():
                            ("schedule_constraint", "1"),
                            ("allow_multi_class", "1"),
                            ("require_5_subjects", "1"),
-                           ("require_email_check", "0")]:
+                           ("require_email_check", "0"),
+                           ("teacher_view_enrollments", "0")]:
             try:
                 conn.execute(
                     insert(settings_table).values(key=key, value=value)
@@ -1065,6 +1066,7 @@ def teacher_dashboard():
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
     maintenance = get_setting("maintenance_mode", "0") == "1"
     schedule_constraint = get_setting("schedule_constraint", "1") == "1"
+    teacher_view_enrollments = get_setting("teacher_view_enrollments", "0") == "1"
     return render_template(
         "teacher/dashboard.html",
         teacher=teacher_row,
@@ -1074,6 +1076,7 @@ def teacher_dashboard():
         teacher_reg_open=teacher_reg_open,
         maintenance=maintenance,
         schedule_constraint=schedule_constraint,
+        teacher_view_enrollments=teacher_view_enrollments,
         day_name=day_name,
         session_label=session_label,
     )
@@ -1272,6 +1275,7 @@ def teacher_class_students(class_id):
             "full_name": s.full_name,
             "class_name": s.class_name,
             "grade": s.grade,
+            "gender": s.gender or "",
             "enrolled_at": s.enrolled_at,
         }
         for s in enrolled
@@ -2507,6 +2511,7 @@ def admin_index():
     allow_multi_class = get_setting("allow_multi_class", "1") == "1"
     require_5_subjects = get_setting("require_5_subjects", "1") == "1"
     require_email_check = get_setting("require_email_check", "0") == "1"
+    teacher_view_enrollments = get_setting("teacher_view_enrollments", "0") == "1"
     with engine.connect() as conn2:
         busy_room_count = conn2.execute(
             select(func.count()).select_from(room_external_busy)
@@ -2534,6 +2539,7 @@ def admin_index():
         allow_multi_class=allow_multi_class,
         require_5_subjects=require_5_subjects,
         require_email_check=require_email_check,
+        teacher_view_enrollments=teacher_view_enrollments,
         room_list=room_list,
         room_count=room_count,
         busy_room_count=busy_room_count,
@@ -4302,6 +4308,15 @@ def admin_require_email_check_toggle():
     current = get_setting("require_email_check", "0")
     new_val = "0" if current == "1" else "1"
     set_setting("require_email_check", new_val)
+    return jsonify(ok=True, on=new_val == "1")
+
+
+@app.route("/admin/teacher-view-enrollments/toggle", methods=["POST"])
+@admin_required
+def admin_teacher_view_enrollments_toggle():
+    current = get_setting("teacher_view_enrollments", "0")
+    new_val = "0" if current == "1" else "1"
+    set_setting("teacher_view_enrollments", new_val)
     return jsonify(ok=True, on=new_val == "1")
 
 

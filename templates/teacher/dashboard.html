@@ -595,6 +595,7 @@
                 <th style="width:38px;">STT</th>
                 <th>Họ và tên</th>
                 <th class="text-center">Giới tính</th>
+                <th class="text-center">Tài khoản</th>
                 <th class="text-center">Số môn ĐK</th>
                 <th class="text-center" style="width:80px;">Thao tác</th>
               </tr>
@@ -614,6 +615,13 @@
                   {% endif %}
                 </td>
                 <td class="text-center">
+                  {% if s.password_hash and not s.is_first_login %}
+                  <span class="badge rounded-pill" style="background:#DCFCE7;color:#15803D;font-size:.7rem;"><i class="bi bi-check-circle-fill me-1"></i>Đã kích hoạt</span>
+                  {% else %}
+                  <span class="badge rounded-pill" style="background:#FEF3C7;color:#92400E;font-size:.7rem;"><i class="bi bi-hourglass me-1"></i>Chưa kích hoạt</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
                   {% set ec = enrolled_counts_by_student.get(s.id, 0) %}
                   <span class="badge rounded-pill {% if ec == 0 %}bg-light text-muted border{% elif ec >= 5 %}bg-success{% else %}bg-warning text-dark{% endif %}"
                         style="font-size:.7rem; min-width:28px;" data-student-enroll="{{ s.id }}">{{ ec }}</span>
@@ -628,7 +636,7 @@
                 </td>
               </tr>
               {% else %}
-              <tr><td colspan="5" class="text-center text-muted py-5">Chưa có học sinh nào trong lớp {{ homeroom_class.class_name }}</td></tr>
+              <tr><td colspan="6" class="text-center text-muted py-5">Chưa có học sinh nào trong lớp {{ homeroom_class.class_name }}</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -1624,11 +1632,15 @@ function refreshHmStudents() {
           : `<span class="text-muted" style="font-size:.75rem;">—</span>`;
         const ec = s.enrolled_count;
         const ecBadge = `<span class="badge rounded-pill ${ec===0?'bg-light text-muted border':ec>=5?'bg-success':'bg-warning text-dark'}" style="font-size:.7rem;min-width:28px;" data-student-enroll="${s.id}">${ec}</span>`;
+        const activatedBadge = s.activated
+          ? `<span class="badge rounded-pill" style="background:#DCFCE7;color:#15803D;font-size:.7rem;"><i class="bi bi-check-circle-fill me-1"></i>Đã kích hoạt</span>`
+          : `<span class="badge rounded-pill" style="background:#FEF3C7;color:#92400E;font-size:.7rem;"><i class="bi bi-hourglass me-1"></i>Chưa kích hoạt</span>`;
         const visible = !q || (s.full_name.toLowerCase().includes(q) || s.cccd.includes(q));
         html += `<tr data-search="${s.full_name.toLowerCase()} ${s.cccd}" style="${visible?'':'display:none'}">
           <td class="text-muted" style="font-size:.72rem;">${i+1}</td>
           <td class="fw-semibold" style="font-size:.85rem;">${s.full_name}</td>
           <td class="text-center">${genderBadge}</td>
+          <td class="text-center">${activatedBadge}</td>
           <td class="text-center">${ecBadge}</td>
           <td class="text-center" style="white-space:nowrap;">
             <button class="hm-icon-btn btn-info" onclick="viewHmStudentDetail(${s.id},'${s.full_name.replace(/'/g,"\\'")}')"><i class="bi bi-eye"></i></button>

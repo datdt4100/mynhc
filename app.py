@@ -4186,6 +4186,7 @@ def api_teacher_homeroom_students():
                 "cccd": s.cccd,
                 "gender": s.gender or "—",
                 "enrolled_count": cnt,
+                "activated": bool(s.password_hash and not s.is_first_login),
                 "last_seen_at": s.last_seen_at,
             })
     return jsonify(ok=True, class_name=hroom.class_name, students=result)

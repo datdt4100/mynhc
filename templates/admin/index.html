@@ -714,18 +714,16 @@
       </a>
       {% if homeroom_list %}
       {% set tab_enabled_count = homeroom_list | selectattr('show_student_tab') | list | length %}
-      <button type="button" id="btnToggleAllStudentTab"
-              class="btn btn-sm fw-semibold ms-auto"
-              onclick="toggleAllGVCNStudentTab(this)"
-              data-enabled="{{ '1' if tab_enabled_count > 0 else '0' }}"
-              style="border-radius:8px;font-size:.78rem;border:none;
-                     {% if tab_enabled_count > 0 %}background:#16A34A;color:#fff;{% else %}background:#E5E7EB;color:#374151;{% endif %}">
-        {% if tab_enabled_count > 0 %}
-          <i class="bi bi-people-fill me-1"></i>Quản lý HS: Bật ({{ tab_enabled_count }}/{{ homeroom_list | length }})
-        {% else %}
-          <i class="bi bi-people me-1"></i>Quản lý HS: Tắt
-        {% endif %}
-      </button>
+      <div class="ms-auto d-flex align-items-center gap-2" style="font-size:.8rem;color:#374151;">
+        <span style="font-weight:600;white-space:nowrap;">Quản lý học sinh</span>
+        <div class="form-check form-switch mb-0">
+          <input class="form-check-input" type="checkbox" role="switch"
+                 id="switchStudentTab"
+                 {{ 'checked' if tab_enabled_count > 0 else '' }}
+                 onchange="toggleAllGVCNStudentTab(this)"
+                 style="width:2.4em;height:1.25em;cursor:pointer;">
+        </div>
+      </div>
       <form method="POST" action="{{ url_for('admin_homeroom_clear') }}" class="mb-0">
         <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px;font-size:.78rem;"
                 onclick="showConfirmSubmit(this,{title:'Xóa toàn bộ GVCN?',msg:'Danh sách GVCN sẽ bị xóa hoàn toàn.',confirmText:'Xóa tất cả',confirmClass:'btn-danger'})">
@@ -736,10 +734,10 @@
     </div>
 
     {% if homeroom_list %}
-    <div class="table-responsive" style="max-height:420px;overflow-y:auto;border-radius:10px;border:1px solid #F3E8FF;">
+    <div class="table-responsive" style="max-height:420px;overflow-y:auto;border-radius:10px;border:1px solid #BFDBFE;">
       <table class="table mb-0" style="font-size:.8rem;border-collapse:separate;border-spacing:0;">
         <thead style="position:sticky;top:0;z-index:2;">
-          <tr style="background:linear-gradient(135deg,#7C3AED 0%,#9D174D 100%);color:#fff;">
+          <tr style="background:#1D4ED8;color:#fff;">
             <th style="width:38px;text-align:center;padding:9px 6px;font-weight:600;border:none;">#</th>
             <th style="width:80px;padding:9px 8px;font-weight:600;border:none;">Lớp</th>
             <th style="width:56px;text-align:center;padding:9px 6px;font-weight:600;border:none;">Sĩ số</th>
@@ -755,8 +753,8 @@
           {% for h in homeroom_list %}
           {% set grade = h.class_name[:2] if h.class_name | length >= 2 else h.class_name %}
           {% if grade != ns.prev_grade %}
-            <tr style="background:linear-gradient(90deg,#F5F3FF,#FDF2F8);border-top:{{ '2px solid #E2E8F0' if ns.prev_grade else 'none' }};">
-              <td colspan="8" style="padding:5px 12px;font-size:.73rem;font-weight:700;color:#7C3AED;letter-spacing:.06em;border:none;">
+            <tr style="background:#EFF6FF;border-top:{{ '2px solid #BFDBFE' if ns.prev_grade else 'none' }};">
+              <td colspan="8" style="padding:5px 12px;font-size:.73rem;font-weight:700;color:#1D4ED8;letter-spacing:.06em;border:none;">
                 <i class="bi bi-grid-3x3-gap-fill me-1" style="font-size:.65rem;"></i>KHỐI {{ grade }}
               </td>
             </tr>
@@ -767,10 +765,10 @@
           {% set total = st.get('total', 0) %}
           {% set nam = st.get('nam', 0) %}
           {% set nu = st.get('nu', 0) %}
-          <tr style="border-top:1px solid #F3F4F6;transition:background .15s;" onmouseover="this.style.background='#FAFAFA'" onmouseout="this.style.background=''">
+          <tr style="border-top:1px solid #F3F4F6;transition:background .15s;" onmouseover="this.style.background='#F0F9FF'" onmouseout="this.style.background=''">
             <td style="text-align:center;color:#A0A0A0;font-size:.72rem;padding:7px 6px;border:none;">{{ ns.stt }}</td>
             <td style="padding:7px 8px;border:none;">
-              <span class="badge" style="background:linear-gradient(135deg,#7C3AED,#9D174D);color:#fff;font-size:.72rem;font-weight:700;border-radius:6px;padding:3px 8px;">{{ h.class_name }}</span>
+              <span class="badge" style="background:#1D4ED8;color:#fff;font-size:.72rem;font-weight:700;border-radius:6px;padding:3px 8px;">{{ h.class_name }}</span>
             </td>
             <td style="text-align:center;font-weight:700;color:#1E293B;padding:7px 6px;border:none;">{{ total }}</td>
             <td style="text-align:center;padding:7px 6px;border:none;">
@@ -2443,9 +2441,8 @@ function toggleSideNav(navId, btn) {
   btn.querySelector('i').className = open ? 'bi bi-layout-sidebar-reverse' : 'bi bi-layout-sidebar';
 }
 
-async function toggleAllGVCNStudentTab(btn) {
-  const currentlyEnabled = btn.dataset.enabled === '1';
-  const enable = !currentlyEnabled;
+async function toggleAllGVCNStudentTab(checkbox) {
+  const enable = checkbox.checked;
   try {
     const res = await fetch('{{ url_for("admin_homeroom_toggle_student_tab_all") }}', {
       method: 'POST',
@@ -2453,18 +2450,14 @@ async function toggleAllGVCNStudentTab(btn) {
       body: JSON.stringify({enable: enable})
     });
     const data = await res.json();
-    if (data.ok) {
-      const total = document.querySelectorAll('#gvcn tbody tr:not([style*="background:#F8FAFC"])').length;
-      btn.dataset.enabled = enable ? '1' : '0';
-      btn.style.background = enable ? '#16A34A' : '#E5E7EB';
-      btn.style.color = enable ? '#fff' : '#374151';
-      btn.innerHTML = enable
-        ? `<i class="bi bi-people-fill me-1"></i>Quản lý HS: Bật (${total}/${total})`
-        : `<i class="bi bi-people me-1"></i>Quản lý HS: Tắt`;
-    } else {
+    if (!data.ok) {
+      checkbox.checked = !enable; // revert
       showAlert(data.error || 'Không thể cập nhật.', 'error');
     }
-  } catch { showAlert('Lỗi kết nối.', 'error'); }
+  } catch {
+    checkbox.checked = !enable;
+    showAlert('Lỗi kết nối.', 'error');
+  }
 }
 
 async function deleteGVCN(className) {

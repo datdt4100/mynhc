@@ -694,6 +694,74 @@
   <!-- ════════════════════════════════════════
        TEACHER SECTION
   ════════════════════════════════════════ -->
+  <!-- ════ GVCN Section ════ -->
+  <div class="section-card" id="gvcn">
+    <div class="section-card-header">
+      <i class="bi bi-person-hearts" style="color:#EC4899;"></i>
+      <span>Giáo viên chủ nhiệm</span>
+      <span class="badge rounded-pill ms-1" style="background:#FDF2F8; color:#9D174D; font-size:.72rem; font-weight:700;">{{ homeroom_list | length }} lớp</span>
+    </div>
+    <div class="section-toolbar">
+      <form id="frmUploadGVCN" method="POST" action="{{ url_for('admin_homeroom_upload') }}" enctype="multipart/form-data" class="d-contents">
+        <input type="file" id="fileGVCN" name="file" accept=".xlsx,.xls" style="display:none;" onchange="document.getElementById('frmUploadGVCN').submit()">
+      </form>
+      <button type="button" class="btn btn-sm fw-semibold" style="border-radius:8px;font-size:.78rem;background:#EC4899;color:#fff;"
+              onclick="document.getElementById('fileGVCN').click()">
+        <i class="bi bi-upload me-1"></i>Tải lên
+      </button>
+      <a href="{{ url_for('admin_homeroom_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px;font-size:.78rem;">
+        <i class="bi bi-download me-1"></i>File mẫu
+      </a>
+      {% if homeroom_list %}
+      <form method="POST" action="{{ url_for('admin_homeroom_clear') }}" class="mb-0 ms-auto">
+        <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px;font-size:.78rem;"
+                onclick="showConfirmSubmit(this,{title:'Xóa toàn bộ GVCN?',msg:'Danh sách GVCN sẽ bị xóa hoàn toàn.',confirmText:'Xóa tất cả',confirmClass:'btn-danger'})">
+          <i class="bi bi-trash3 me-1"></i>Xóa tất cả
+        </button>
+      </form>
+      {% endif %}
+    </div>
+
+    {% if homeroom_list %}
+    <div class="table-responsive" style="max-height:360px;overflow-y:auto;">
+      <table class="table table-hover admin-table mb-0" style="font-size:.8rem;">
+        <thead style="position:sticky;top:0;z-index:1;background:#fff;">
+          <tr>
+            <th style="width:80px;">Lớp</th>
+            <th style="width:60px;text-align:center;">Sĩ số</th>
+            <th style="width:50px;text-align:center;">Nam</th>
+            <th style="width:50px;text-align:center;">Nữ</th>
+            <th>GVCN</th>
+            <th style="width:140px;color:#64748B;">Tổ Bộ Môn</th>
+            <th style="width:44px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in homeroom_list %}
+          {% set st = class_stats.get(h.class_name, {}) %}
+          <tr>
+            <td><span class="badge rounded-pill" style="background:#FDF2F8;color:#9D174D;font-size:.72rem;font-weight:700;">{{ h.class_name }}</span></td>
+            <td style="text-align:center;font-weight:600;">{{ st.get('total', 0) }}</td>
+            <td style="text-align:center;color:#1D4ED8;">{{ st.get('nam', 0) }}</td>
+            <td style="text-align:center;color:#9D174D;">{{ st.get('nu', 0) }}</td>
+            <td style="font-weight:600;">{{ h.gvcn_name or '—' }}</td>
+            <td style="color:#64748B;font-size:.75rem;">{{ h.subject_group or '—' }}</td>
+            <td style="text-align:center;">
+              <button class="btn btn-sm p-0" style="color:#EF4444;background:none;border:none;"
+                      title="Xóa" onclick="deleteGVCN('{{ h.class_name }}')">
+                <i class="bi bi-trash3"></i>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="p-3 text-muted" style="font-size:.82rem;"><i class="bi bi-info-circle me-1"></i>Chưa có dữ liệu GVCN. Upload file Excel để thêm.</div>
+    {% endif %}
+  </div>
+
   {% set teacher_groups = teacher_list | rejectattr('subject_group', 'equalto', '') | map(attribute='subject_group') | unique | sort | list %}
   <div class="section-card">
     <div class="section-card-header">
@@ -941,11 +1009,19 @@
             {% for s in student_list | sort(attribute='full_name') | sort(attribute='class_name') | sort(attribute='grade') %}
             {% if s.class_name != ns.prev_class %}
             {% set ns.prev_class = s.class_name %}
+            {% set hroom = homeroom_map.get(s.class_name) %}
+            {% set st = class_stats.get(s.class_name, {}) %}
             <tr class="class-sep-row" data-grade="{{ s.grade }}" data-class-sep="{{ s.class_name }}">
               <td colspan="9">
                 <i class="bi bi-collection me-1" style="color:#0EA5E9;"></i>
                 <strong>{{ s.class_name }}</strong>
-                <span class="sep-count" style="margin-left:8px;font-weight:400;color:#94A3B8;font-size:.72rem;"></span>
+                <span class="sep-count" style="margin-left:4px;font-weight:400;color:#94A3B8;font-size:.72rem;"></span>
+                {% if hroom and hroom.gvcn_name %}
+                <span style="margin-left:10px;font-size:.72rem;color:#64748B;">
+                  · <span style="color:#9D174D;font-weight:600;">{{ hroom.gvcn_name }}</span>
+                  {% if hroom.subject_group %}<span style="color:#94A3B8;"> ({{ hroom.subject_group }})</span>{% endif %}
+                </span>
+                {% endif %}
               </td>
             </tr>
             {% endif %}
@@ -2325,6 +2401,21 @@ function toggleSideNav(navId, btn) {
   const open = nav.classList.toggle('nav-open');
   btn.classList.toggle('active', open);
   btn.querySelector('i').className = open ? 'bi bi-layout-sidebar-reverse' : 'bi bi-layout-sidebar';
+}
+
+async function deleteGVCN(className) {
+  showConfirm(`Xóa GVCN lớp ${className}?`, 'Dòng này sẽ bị xóa khỏi danh sách GVCN.', async function() {
+    try {
+      const res  = await fetch('{{ url_for("admin_homeroom_delete") }}', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({class_name: className})
+      });
+      const data = await res.json();
+      if (data.ok) location.reload();
+      else showAlert(data.error || 'Không thể xóa.', 'error');
+    } catch { showAlert('Lỗi kết nối.', 'error'); }
+  }, {confirmText:'Xóa', confirmClass:'btn-danger'});
 }
 </script>
 {% endblock %}

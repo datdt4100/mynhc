@@ -190,6 +190,14 @@ settings_table = Table(
     Column("value", Text, nullable=True),
 )
 
+homeroom_classes = Table(
+    "homeroom_classes", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("class_name", Text, unique=True, nullable=False),   # e.g. "10A1"
+    Column("gvcn_name", Text, nullable=True),                  # Họ tên GVCN
+    Column("subject_group", Text, nullable=True),              # Tổ bộ môn GVCN
+)
+
 operators = Table(
     "operators", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -255,6 +263,17 @@ def init_db():
         try:
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS rooms (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)"
+            ))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+        # Migrate: create homeroom_classes table if not exists
+        try:
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS homeroom_classes "
+                "(id INTEGER PRIMARY KEY AUTOINCREMENT, class_name TEXT UNIQUE NOT NULL, "
+                "gvcn_name TEXT, subject_group TEXT)"
             ))
             conn.commit()
         except Exception:
@@ -2507,6 +2526,20 @@ def admin_index():
         ).fetchall()
         room_list  = sorted(conn.execute(select(rooms)).fetchall(), key=lambda r: _room_sort_key(r.name))
         room_count = len(room_list)
+        homeroom_list = conn.execute(
+            select(homeroom_classes).order_by(homeroom_classes.c.class_name)
+        ).fetchall()
+        # Build class stats from students for GVCN table
+        from collections import defaultdict as _dd
+        _cls_stats: dict = _dd(lambda: {"total": 0, "nam": 0, "nu": 0})
+        for s in student_list:
+            _cls_stats[s.class_name]["total"] += 1
+            if s.gender == "Nam":
+                _cls_stats[s.class_name]["nam"] += 1
+            elif s.gender == "Nữ":
+                _cls_stats[s.class_name]["nu"] += 1
+        class_stats = dict(_cls_stats)
+        homeroom_map = {h.class_name: h for h in homeroom_list}  # for template lookup
 
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
     student_reg_open = get_setting("student_reg_open", "0") == "1"
@@ -2547,6 +2580,9 @@ def admin_index():
         teacher_view_enrollments=teacher_view_enrollments,
         teacher_room_select=teacher_room_select,
         room_list=room_list,
+        homeroom_list=homeroom_list,
+        class_stats=class_stats,
+        homeroom_map=homeroom_map,
         room_count=room_count,
         busy_room_count=busy_room_count,
         subject_groups=subject_groups,
@@ -3024,6 +3060,96 @@ def admin_students_clear():
         conn.execute(delete(students))
     flash("Đã xóa toàn bộ danh sách học sinh.", "success")
     return redirect(url_for("admin_index"))
+
+
+# ---------------------------------------------------------------------------
+# Homeroom class (GVCN) management
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/homeroom/upload", methods=["POST"])
+@admin_required
+def admin_homeroom_upload():
+    f = request.files.get("file")
+    if not f or not f.filename.endswith((".xlsx", ".xls")):
+        flash("Vui lòng chọn file Excel (.xlsx/.xls).", "error")
+        return redirect(url_for("admin_index") + "#gvcn")
+    try:
+        wb = openpyxl.load_workbook(f, data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+    except Exception:
+        flash("Không đọc được file Excel.", "error")
+        return redirect(url_for("admin_index") + "#gvcn")
+
+    inserted = updated = 0
+    with engine.begin() as conn:
+        for row in rows:
+            if not row or not row[0]:
+                continue
+            class_name   = str(row[0]).strip()
+            gvcn_name    = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+            subject_group = str(row[2]).strip() if len(row) > 2 and row[2] else ""
+            existing = conn.execute(
+                select(homeroom_classes).where(homeroom_classes.c.class_name == class_name)
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    update(homeroom_classes).where(homeroom_classes.c.class_name == class_name)
+                    .values(gvcn_name=gvcn_name or None, subject_group=subject_group or None)
+                )
+                updated += 1
+            else:
+                conn.execute(insert(homeroom_classes).values(
+                    class_name=class_name, gvcn_name=gvcn_name or None, subject_group=subject_group or None
+                ))
+                inserted += 1
+    flash(f"Đã nhập {inserted} lớp mới, cập nhật {updated} lớp.", "success")
+    return redirect(url_for("admin_index") + "#gvcn")
+
+
+@app.route("/admin/homeroom/clear", methods=["POST"])
+@admin_required
+def admin_homeroom_clear():
+    with engine.begin() as conn:
+        conn.execute(delete(homeroom_classes))
+    flash("Đã xóa toàn bộ danh sách GVCN.", "success")
+    return redirect(url_for("admin_index") + "#gvcn")
+
+
+@app.route("/admin/homeroom/delete", methods=["POST"])
+@admin_required
+def admin_homeroom_delete():
+    class_name = (request.get_json(force=True).get("class_name") or "").strip()
+    if not class_name:
+        return jsonify(ok=False, error="Thiếu tên lớp.")
+    with engine.begin() as conn:
+        conn.execute(delete(homeroom_classes).where(homeroom_classes.c.class_name == class_name))
+    return jsonify(ok=True)
+
+
+@app.route("/admin/homeroom/template")
+@admin_required
+def admin_homeroom_template():
+    from openpyxl.styles import Font, PatternFill, Alignment
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "GVCN"
+    hfill = PatternFill("solid", fgColor="0369A1")
+    hfont = Font(bold=True, color="FFFFFF", size=10)
+    headers = ["Lớp", "GVCN", "Tổ Bộ Môn"]
+    widths  = [12, 28, 20]
+    for c, (h, w) in enumerate(zip(headers, widths), 1):
+        cell = ws.cell(row=1, column=c, value=h)
+        cell.font = hfill and hfont; cell.fill = hfill
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        ws.column_dimensions[openpyxl.utils.get_column_letter(c)].width = w
+    samples = [("10A1", "Nguyễn Văn A", "Toán"), ("10A2", "Lê Thị B", "Ngữ Văn")]
+    for i, row in enumerate(samples):
+        for c, v in enumerate(row, 1):
+            ws.cell(row=i+2, column=c, value=v)
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name="mau_gvcn.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 # ---------------------------------------------------------------------------

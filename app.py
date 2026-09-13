@@ -2335,23 +2335,24 @@ def api_available_rooms():
         ss    = int(request.args["start_session"])
         dur   = int(request.args["duration"])
         grade = int(request.args.get("grade", 0))
+        exclude_class_id = request.args.get("exclude_class_id")
+        exclude_class_id = int(exclude_class_id) if exclude_class_id else None
     except (KeyError, ValueError):
         return jsonify([]), 400
     end = ss + dur - 1
     with engine.connect() as conn:
         all_rooms = sorted([r.name for r in conn.execute(select(rooms)).fetchall()], key=_room_sort_key)
-        # rooms already booked for overlapping slots
-        booked = conn.execute(
-            select(classes.c.location).where(
-                and_(
-                    classes.c.day_of_week == dow,
-                    classes.c.session_type == st,
-                    classes.c.location.isnot(None),
-                    classes.c.start_session <= end,
-                    (classes.c.start_session + classes.c.duration - 1) >= ss,
-                )
-            )
-        ).fetchall()
+        # rooms already booked for overlapping slots (exclude current class if re-assigning)
+        booked_filter = and_(
+            classes.c.day_of_week == dow,
+            classes.c.session_type == st,
+            classes.c.location.isnot(None),
+            classes.c.start_session <= end,
+            (classes.c.start_session + classes.c.duration - 1) >= ss,
+        )
+        if exclude_class_id:
+            booked_filter = and_(booked_filter, classes.c.id != exclude_class_id)
+        booked = conn.execute(select(classes.c.location).where(booked_filter)).fetchall()
         booked_set = {r.location for r in booked if r.location}
         # rooms marked busy externally (any tiết in the requested range)
         ext_busy = conn.execute(
@@ -4168,24 +4169,20 @@ def admin_import_classes_excel():
     )
 
 
-@app.route("/admin/class-schedule")
-@admin_required
-def admin_class_schedule():
-    with engine.connect() as conn:
-        all_classes = conn.execute(
-            select(classes, teachers.c.full_name.label("teacher_name"),
-                   teachers.c.subject_group)
-            .join(teachers, classes.c.teacher_id == teachers.c.id)
-            .order_by(classes.c.grade, teachers.c.subject_group, classes.c.start_session)
+def _build_class_schedule_grid(conn):
+    """Shared helper: build grid_json + enrollment_counts. Returns (grid_json, all_subjects)."""
+    all_classes = conn.execute(
+        select(classes, teachers.c.full_name.label("teacher_name"), teachers.c.subject_group)
+        .join(teachers, classes.c.teacher_id == teachers.c.id)
+        .order_by(classes.c.grade, teachers.c.subject_group, classes.c.start_session)
+    ).fetchall()
+    enrollment_counts = {
+        r.class_id: r.cnt
+        for r in conn.execute(
+            select(enrollments.c.class_id, func.count().label("cnt"))
+            .group_by(enrollments.c.class_id)
         ).fetchall()
-        enrollment_counts = {
-            r.class_id: r.cnt
-            for r in conn.execute(
-                select(enrollments.c.class_id, func.count().label("cnt"))
-                .group_by(enrollments.c.class_id)
-            ).fetchall()
-        }
-    # Build JSON-serialisable grid for JS: {ses: {"{day}_{start}": [...]}}
+    }
     grid_json = {}
     for ses in ("morning", "afternoon"):
         grid_json[ses] = {}
@@ -4219,14 +4216,62 @@ def admin_class_schedule():
                 "created_at": ca_fmt,
                 "created_at_raw": str(ca_raw) if ca_raw else "",
             })
-    # Sort each slot's classes by created_at (nulls last)
     for ses in grid_json:
         for key in grid_json[ses]:
             grid_json[ses][key].sort(key=lambda x: x["created_at_raw"] or "9999")
-    # Collect all distinct subjects (sorted) for modal columns
     all_subjects = sorted({
         c.subject_group or c.subject or "" for c in all_classes if (c.subject_group or c.subject)
     })
+    return grid_json, all_subjects
+
+
+@app.route("/api/class-schedule-data")
+@admin_required
+def api_class_schedule_data():
+    """Lightweight JSON endpoint for SSE-driven refresh on class-schedule page."""
+    with engine.connect() as conn:
+        grid_json, _ = _build_class_schedule_grid(conn)
+    return jsonify(grid=grid_json)
+
+
+@app.route("/admin/rooms/fix-conflicts", methods=["POST"])
+@admin_required
+def admin_rooms_fix_conflicts():
+    """Scan for classes sharing the same room in the same time slot; keep oldest, clear rest."""
+    cleared = []
+    with engine.begin() as conn:
+        all_cls = conn.execute(
+            select(classes).where(classes.c.location.isnot(None))
+        ).fetchall()
+        # group by (day_of_week, session_type, location)
+        from collections import defaultdict
+        groups = defaultdict(list)
+        for c in all_cls:
+            end = c.start_session + c.duration - 1
+            groups[(c.day_of_week, c.session_type, c.location)].append(c)
+        for (dow, ses, loc), grp in groups.items():
+            if len(grp) < 2:
+                continue
+            # Find actual overlapping pairs
+            grp_sorted = sorted(grp, key=lambda c: c.id)
+            keep = grp_sorted[0]
+            for c in grp_sorted[1:]:
+                # check overlap
+                keep_end = keep.start_session + keep.duration - 1
+                c_end    = c.start_session + c.duration - 1
+                if keep.start_session <= c_end and c.start_session <= keep_end:
+                    conn.execute(update(classes).where(classes.c.id == c.id).values(location=None))
+                    cleared.append({"class_id": c.id, "location": loc})
+    if cleared:
+        _bump(event_type="class_update")
+    return jsonify(ok=True, cleared=cleared, count=len(cleared))
+
+
+@app.route("/admin/class-schedule")
+@admin_required
+def admin_class_schedule():
+    with engine.connect() as conn:
+        grid_json, all_subjects = _build_class_schedule_grid(conn)
     return render_template(
         "admin/class_schedule.html",
         grid_json=grid_json,

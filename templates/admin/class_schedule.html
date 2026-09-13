@@ -406,12 +406,13 @@ function openDetail(day, slot, ses) {
   items.forEach((c, i) => {
     const noTime = !c.created_at;
     const enrollPill = `<span class="enroll-pill" id="enroll-pill-${c.id}"><i class="bi bi-people me-1"></i>${c.enrollment}${c.max_capacity ? '/' + c.max_capacity : ''} HS</span>`;
-    const locHtml = c.location
-      ? `<span class="loc-badge"><i class="bi bi-geo-alt-fill me-1"></i>${c.location}</span>`
-      : `<span class="loc-pending"><i class="bi bi-hourglass-split me-1"></i>Đang sắp xếp</span>
-         <button class="btn-assign-room" onclick="openRoomAssign(${c.id},'${c.teacher.replace(/'/g,"\\'")}','K${c.grade} ${c.subject}',${c.day_of_week},'${c.session_type}',${c.start_session},${c.duration})">
-           <i class="bi bi-geo-alt me-1"></i>Xếp phòng
+    const escapedTeacher = c.teacher.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const assignBtn = `<button class="btn-assign-room" onclick="openRoomAssign(${c.id},'${escapedTeacher}','K${c.grade} ${c.subject}',${c.day_of_week},'${c.session_type}',${c.start_session},${c.duration},${JSON.stringify(c.location)})">
+           <i class="bi bi-geo-alt me-1"></i>${c.location ? 'Đổi phòng' : 'Xếp phòng'}
          </button>`;
+    const locHtml = c.location
+      ? `<span class="loc-badge" id="loc-badge-${c.id}"><i class="bi bi-geo-alt-fill me-1"></i>${c.location}</span>${assignBtn}`
+      : `<span class="loc-pending" id="loc-badge-${c.id}"><i class="bi bi-hourglass-split me-1"></i>Đang sắp xếp</span>${assignBtn}`;
     h += `<div class="cls-item cls-item-${c.grade}${noTime ? ' cls-item-no-time' : ''}" id="cls-item-${c.id}">
       <div class="cls-item-rank">${i + 1}</div>
       <div class="cls-item-body">
@@ -439,21 +440,26 @@ document.getElementById('inner-morning').innerHTML   = _buildGrid('morning');
 document.getElementById('inner-afternoon').innerHTML = _buildGrid('afternoon');
 
 // ── Room assignment ──
-let _raClassId = null, _raSelectedRoom = null;
+let _raClassId = null, _raSelectedRoom = null, _raCurrentLocation = null;
 
-async function openRoomAssign(classId, teacher, label, day, ses, start, dur) {
+async function openRoomAssign(classId, teacher, label, day, ses, start, dur, currentLocation) {
   _raClassId = classId;
   _raSelectedRoom = null;
+  _raCurrentLocation = currentLocation || null;
   document.getElementById('raSubtitle').textContent = `${teacher} · ${label}`;
   document.getElementById('raConfirmBtn').disabled = true;
   document.getElementById('raRoomList').innerHTML =
     '<div class="text-center text-muted py-3"><i class="bi bi-hourglass-split me-1"></i>Đang tải phòng trống…</div>';
-  const raModal = new bootstrap.Modal(document.getElementById('roomAssignModal'));
-  raModal.show();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('roomAssignModal')).show();
   try {
-    const res  = await fetch(`/api/available-rooms?day_of_week=${day}&session_type=${ses}&start_session=${start}&duration=${dur}&grade=0`);
+    const url = `/api/available-rooms?day_of_week=${day}&session_type=${ses}&start_session=${start}&duration=${dur}&grade=0&exclude_class_id=${classId}`;
+    const res  = await fetch(url);
     const data = await res.json();
-    const rooms = Array.isArray(data) ? data : (data.rooms || []);
+    let rooms = Array.isArray(data) ? data : (data.rooms || []);
+    // If class already has a room, add it at top so admin can "keep" it
+    if (_raCurrentLocation && !rooms.includes(_raCurrentLocation)) {
+      rooms = [_raCurrentLocation, ...rooms];
+    }
     if (!rooms.length) {
       document.getElementById('raRoomList').innerHTML =
         '<p class="text-muted text-center py-3">Không có phòng trống trong khung giờ này.</p>';
@@ -461,12 +467,16 @@ async function openRoomAssign(classId, teacher, label, day, ses, start, dur) {
     }
     let h = '';
     rooms.forEach(r => {
+      const isCurrent = r === _raCurrentLocation;
       h += `<div class="ra-room-option" data-room="${r}"
-              style="padding:9px 14px;border-radius:9px;border:1.5px solid #E2E8F0;cursor:pointer;
-                     display:flex;align-items:center;gap:8px;font-size:.83rem;font-weight:600;color:#374151;
+              style="padding:9px 14px;border-radius:9px;border:1.5px solid ${isCurrent ? '#0EA5E9' : '#E2E8F0'};
+                     background:${isCurrent ? '#F0F9FF' : ''};
+                     cursor:pointer;display:flex;align-items:center;gap:8px;
+                     font-size:.83rem;font-weight:600;color:${isCurrent ? '#0369A1' : '#374151'};
                      transition:border-color .12s,background .12s;"
               onclick="selectRoom(this,'${r.replace(/'/g,"\\'")}')">
-              <i class="bi bi-building" style="color:#64748B;"></i>${r}
+              <i class="bi bi-building" style="color:${isCurrent ? '#0EA5E9' : '#64748B'};"></i>${r}
+              ${isCurrent ? '<span style="margin-left:auto;font-size:.65rem;color:#0EA5E9;font-weight:700;">Hiện tại</span>' : ''}
             </div>`;
     });
     document.getElementById('raRoomList').innerHTML = h;
@@ -503,23 +513,7 @@ async function confirmRoomAssign() {
     const data = await res.json();
     if (data.ok) {
       bootstrap.Modal.getInstance(document.getElementById('roomAssignModal'))?.hide();
-      // Update cls-item in detail modal
-      const item = document.getElementById(`cls-item-${_raClassId}`);
-      if (item) {
-        const locDiv = item.querySelector('.cls-item-location');
-        if (locDiv) {
-          const pill = locDiv.querySelector('.enroll-pill');
-          locDiv.innerHTML = (pill ? pill.outerHTML : '') +
-            `<span class="loc-badge"><i class="bi bi-geo-alt-fill me-1"></i>${_raSelectedRoom}</span>`;
-        }
-      }
-      // Update GRID data so re-open shows updated info
-      for (const ses in GRID) {
-        for (const key in GRID[ses]) {
-          const c = GRID[ses][key].find(x => x.id === _raClassId);
-          if (c) { c.location = _raSelectedRoom; break; }
-        }
-      }
+      _applyLocationUpdate(_raClassId, _raSelectedRoom);
     } else {
       alert(data.error || 'Không thể xếp phòng.');
       btn.disabled = false;
@@ -531,5 +525,96 @@ async function confirmRoomAssign() {
     btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Xác nhận';
   }
 }
+
+function _applyLocationUpdate(classId, newLocation) {
+  // Update GRID in memory
+  for (const ses in GRID) {
+    for (const key in GRID[ses]) {
+      const c = GRID[ses][key].find(x => x.id === classId);
+      if (c) { c.location = newLocation || ''; }
+    }
+  }
+  // Update DOM in open detail modal
+  const badge = document.getElementById(`loc-badge-${classId}`);
+  if (badge) {
+    if (newLocation) {
+      badge.className = 'loc-badge';
+      badge.innerHTML = `<i class="bi bi-geo-alt-fill me-1"></i>${newLocation}`;
+    } else {
+      badge.className = 'loc-pending';
+      badge.innerHTML = `<i class="bi bi-hourglass-split me-1"></i>Đang sắp xếp`;
+    }
+    // Update button text
+    const btn = badge.nextElementSibling;
+    if (btn && btn.classList.contains('btn-assign-room')) {
+      btn.innerHTML = `<i class="bi bi-geo-alt me-1"></i>${newLocation ? 'Đổi phòng' : 'Xếp phòng'}`;
+    }
+  }
+}
+
+// ── SSE real-time sync ──
+(function() {
+  let _refreshPending = false;
+  const sse = new EventSource('/stream/changes');
+  sse.onmessage = async function(e) {
+    try {
+      const d = JSON.parse(e.data);
+      if (d.type && d.type !== 'ping' && !_refreshPending) {
+        _refreshPending = true;
+        setTimeout(async () => {
+          try {
+            const res  = await fetch('/api/class-schedule-data');
+            const data = await res.json();
+            if (data.grid) {
+              // Merge location+enrollment updates into GRID
+              for (const ses in data.grid) {
+                for (const key in data.grid[ses]) {
+                  const fresh = data.grid[ses][key];
+                  const current = (GRID[ses] || {})[key] || [];
+                  fresh.forEach(fc => {
+                    const existing = current.find(c => c.id === fc.id);
+                    if (existing) {
+                      existing.location    = fc.location;
+                      existing.enrollment  = fc.enrollment;
+                      existing.max_capacity = fc.max_capacity;
+                    }
+                  });
+                  // Also update loc-badges for any open modal items
+                  fresh.forEach(fc => {
+                    const badge = document.getElementById(`loc-badge-${fc.id}`);
+                    if (badge) _applyLocationUpdate(fc.id, fc.location);
+                  });
+                }
+              }
+            }
+          } catch {}
+          _refreshPending = false;
+        }, 800);
+      }
+    } catch {}
+  };
+  sse.onerror = function() { sse.close(); };
+})();
+
+// Auto fix existing conflicts on page load (silent)
+(async function() {
+  try {
+    const res  = await fetch('/admin/rooms/fix-conflicts', {method:'POST'});
+    const data = await res.json();
+    if (data.ok && data.count > 0) {
+      console.log(`[fix-conflicts] Cleared ${data.count} conflicting room assignments`);
+      // Refresh grid data
+      const gr = await fetch('/api/class-schedule-data');
+      const gd = await gr.json();
+      if (gd.grid) {
+        for (const ses in gd.grid) {
+          for (const key in gd.grid[ses]) {
+            if (GRID[ses]) GRID[ses][key] = gd.grid[ses][key];
+          }
+        }
+      }
+    }
+  } catch {}
+})();
 </script>
 {% endblock %}

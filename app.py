@@ -196,6 +196,7 @@ homeroom_classes = Table(
     Column("class_name", Text, unique=True, nullable=False),   # e.g. "10A1"
     Column("gvcn_name", Text, nullable=True),                  # Họ tên GVCN
     Column("subject_group", Text, nullable=True),              # Tổ bộ môn GVCN
+    Column("show_student_tab", Integer, default=0),            # 1 = GVCN thấy tab Quản lý HS
 )
 
 operators = Table(
@@ -273,8 +274,14 @@ def init_db():
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS homeroom_classes "
                 "(id INTEGER PRIMARY KEY AUTOINCREMENT, class_name TEXT UNIQUE NOT NULL, "
-                "gvcn_name TEXT, subject_group TEXT)"
+                "gvcn_name TEXT, subject_group TEXT, show_student_tab INTEGER DEFAULT 0)"
             ))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        # Migrate: add show_student_tab column if missing (existing DBs)
+        try:
+            conn.execute(text("ALTER TABLE homeroom_classes ADD COLUMN show_student_tab INTEGER DEFAULT 0"))
             conn.commit()
         except Exception:
             conn.rollback()
@@ -1075,13 +1082,16 @@ def teacher_dashboard():
             ).scalar()
             enrollment_counts[c.id] = cnt
 
-        # GVCN: find homeroom class for this teacher
+        # GVCN: find homeroom class for this teacher (only if show_student_tab=1)
         homeroom_class = None
         homeroom_students = []
         enrolled_counts_by_student = {}
         if teacher_row:
             hroom = conn.execute(
-                select(homeroom_classes).where(homeroom_classes.c.gvcn_name == teacher_row.full_name)
+                select(homeroom_classes).where(and_(
+                    homeroom_classes.c.gvcn_name == teacher_row.full_name,
+                    homeroom_classes.c.show_student_tab == 1,
+                ))
             ).fetchone()
             if hroom:
                 homeroom_class = hroom
@@ -2551,19 +2561,23 @@ def admin_index():
         ).fetchall()
         room_list  = sorted(conn.execute(select(rooms)).fetchall(), key=lambda r: _room_sort_key(r.name))
         room_count = len(room_list)
-        homeroom_list = conn.execute(
-            select(homeroom_classes).order_by(homeroom_classes.c.class_name)
+        _hrooms = conn.execute(select(homeroom_classes)).fetchall()
+        import re as _re
+        homeroom_list = sorted(_hrooms, key=lambda h: (
+            -(int(_re.match(r'^(\d+)', h.class_name).group(1)) if _re.match(r'^(\d+)', h.class_name) else 0),
+            h.class_name
+        ))
+        # Build class stats from students for GVCN table (direct SQL)
+        from sqlalchemy import case as _case
+        _stats_rows = conn.execute(
+            select(
+                students.c.class_name,
+                func.count().label("total"),
+                func.sum(_case((students.c.gender == "Nam", 1), else_=0)).label("nam"),
+                func.sum(_case((students.c.gender == "Nữ", 1), else_=0)).label("nu"),
+            ).group_by(students.c.class_name)
         ).fetchall()
-        # Build class stats from students for GVCN table
-        from collections import defaultdict as _dd
-        _cls_stats: dict = _dd(lambda: {"total": 0, "nam": 0, "nu": 0})
-        for s in student_list:
-            _cls_stats[s.class_name]["total"] += 1
-            if s.gender == "Nam":
-                _cls_stats[s.class_name]["nam"] += 1
-            elif s.gender == "Nữ":
-                _cls_stats[s.class_name]["nu"] += 1
-        class_stats = dict(_cls_stats)
+        class_stats = {r.class_name: {"total": r.total, "nam": r.nam, "nu": r.nu} for r in _stats_rows}
         homeroom_map = {h.class_name: h for h in homeroom_list}  # for template lookup
 
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
@@ -3111,9 +3125,17 @@ def admin_homeroom_upload():
         for row in rows:
             if not row or not row[0]:
                 continue
-            class_name   = str(row[0]).strip()
-            gvcn_name    = str(row[1]).strip() if len(row) > 1 and row[1] else ""
-            subject_group = str(row[2]).strip() if len(row) > 2 and row[2] else ""
+            # Detect format: if col A is a number (STT), use col B=Lớp, col D=GVCN, col E=TổBM
+            if isinstance(row[0], (int, float)):
+                class_name    = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+                gvcn_name     = str(row[3]).strip() if len(row) > 3 and row[3] else ""
+                subject_group = str(row[4]).strip() if len(row) > 4 and row[4] else ""
+            else:
+                class_name    = str(row[0]).strip()
+                gvcn_name     = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+                subject_group = str(row[2]).strip() if len(row) > 2 and row[2] else ""
+            if not class_name:
+                continue
             existing = conn.execute(
                 select(homeroom_classes).where(homeroom_classes.c.class_name == class_name)
             ).fetchone()
@@ -3150,6 +3172,37 @@ def admin_homeroom_delete():
     with engine.begin() as conn:
         conn.execute(delete(homeroom_classes).where(homeroom_classes.c.class_name == class_name))
     return jsonify(ok=True)
+
+
+@app.route("/admin/homeroom/toggle-student-tab", methods=["POST"])
+@admin_required
+def admin_homeroom_toggle_student_tab():
+    class_name = (request.get_json(force=True).get("class_name") or "").strip()
+    if not class_name:
+        return jsonify(ok=False, error="Thiếu tên lớp.")
+    with engine.begin() as conn:
+        row = conn.execute(
+            select(homeroom_classes).where(homeroom_classes.c.class_name == class_name)
+        ).fetchone()
+        if not row:
+            return jsonify(ok=False, error="Không tìm thấy lớp.")
+        new_val = 0 if row.show_student_tab else 1
+        conn.execute(
+            update(homeroom_classes)
+            .where(homeroom_classes.c.class_name == class_name)
+            .values(show_student_tab=new_val)
+        )
+    return jsonify(ok=True, enabled=bool(new_val))
+
+
+@app.route("/admin/homeroom/toggle-student-tab-all", methods=["POST"])
+@admin_required
+def admin_homeroom_toggle_student_tab_all():
+    enable = request.get_json(force=True).get("enable")
+    new_val = 1 if enable else 0
+    with engine.begin() as conn:
+        conn.execute(update(homeroom_classes).values(show_student_tab=new_val))
+    return jsonify(ok=True, enabled=bool(new_val))
 
 
 @app.route("/admin/homeroom/template")

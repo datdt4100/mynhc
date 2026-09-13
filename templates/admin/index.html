@@ -713,7 +713,20 @@
         <i class="bi bi-download me-1"></i>File mẫu
       </a>
       {% if homeroom_list %}
-      <form method="POST" action="{{ url_for('admin_homeroom_clear') }}" class="mb-0 ms-auto">
+      {% set tab_enabled_count = homeroom_list | selectattr('show_student_tab') | list | length %}
+      <button type="button" id="btnToggleAllStudentTab"
+              class="btn btn-sm fw-semibold ms-auto"
+              onclick="toggleAllGVCNStudentTab(this)"
+              data-enabled="{{ '1' if tab_enabled_count > 0 else '0' }}"
+              style="border-radius:8px;font-size:.78rem;border:none;
+                     {% if tab_enabled_count > 0 %}background:#16A34A;color:#fff;{% else %}background:#E5E7EB;color:#374151;{% endif %}">
+        {% if tab_enabled_count > 0 %}
+          <i class="bi bi-people-fill me-1"></i>Quản lý HS: Bật ({{ tab_enabled_count }}/{{ homeroom_list | length }})
+        {% else %}
+          <i class="bi bi-people me-1"></i>Quản lý HS: Tắt
+        {% endif %}
+      </button>
+      <form method="POST" action="{{ url_for('admin_homeroom_clear') }}" class="mb-0">
         <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px;font-size:.78rem;"
                 onclick="showConfirmSubmit(this,{title:'Xóa toàn bộ GVCN?',msg:'Danh sách GVCN sẽ bị xóa hoàn toàn.',confirmText:'Xóa tất cả',confirmClass:'btn-danger'})">
           <i class="bi bi-trash3 me-1"></i>Xóa tất cả
@@ -723,32 +736,59 @@
     </div>
 
     {% if homeroom_list %}
-    <div class="table-responsive" style="max-height:360px;overflow-y:auto;">
-      <table class="table table-hover admin-table mb-0" style="font-size:.8rem;">
-        <thead style="position:sticky;top:0;z-index:1;background:#fff;">
-          <tr>
-            <th style="width:80px;">Lớp</th>
-            <th style="width:60px;text-align:center;">Sĩ số</th>
-            <th style="width:50px;text-align:center;">Nam</th>
-            <th style="width:50px;text-align:center;">Nữ</th>
-            <th>GVCN</th>
-            <th style="width:140px;color:#64748B;">Tổ Bộ Môn</th>
-            <th style="width:44px;"></th>
+    <div class="table-responsive" style="max-height:420px;overflow-y:auto;border-radius:10px;border:1px solid #F3E8FF;">
+      <table class="table mb-0" style="font-size:.8rem;border-collapse:separate;border-spacing:0;">
+        <thead style="position:sticky;top:0;z-index:2;">
+          <tr style="background:linear-gradient(135deg,#7C3AED 0%,#9D174D 100%);color:#fff;">
+            <th style="width:38px;text-align:center;padding:9px 6px;font-weight:600;border:none;">#</th>
+            <th style="width:80px;padding:9px 8px;font-weight:600;border:none;">Lớp</th>
+            <th style="width:56px;text-align:center;padding:9px 6px;font-weight:600;border:none;">Sĩ số</th>
+            <th style="width:46px;text-align:center;padding:9px 6px;font-weight:600;border:none;">Nam</th>
+            <th style="width:46px;text-align:center;padding:9px 6px;font-weight:600;border:none;">Nữ</th>
+            <th style="padding:9px 8px;font-weight:600;border:none;">GVCN</th>
+            <th style="width:130px;padding:9px 8px;font-weight:600;border:none;opacity:.85;">Tổ Bộ Môn</th>
+            <th style="width:40px;border:none;"></th>
           </tr>
         </thead>
         <tbody>
+          {% set ns = namespace(prev_grade='', stt=0) %}
           {% for h in homeroom_list %}
+          {% set grade = h.class_name[:2] if h.class_name | length >= 2 else h.class_name %}
+          {% if grade != ns.prev_grade %}
+            <tr style="background:linear-gradient(90deg,#F5F3FF,#FDF2F8);border-top:{{ '2px solid #E2E8F0' if ns.prev_grade else 'none' }};">
+              <td colspan="8" style="padding:5px 12px;font-size:.73rem;font-weight:700;color:#7C3AED;letter-spacing:.06em;border:none;">
+                <i class="bi bi-grid-3x3-gap-fill me-1" style="font-size:.65rem;"></i>KHỐI {{ grade }}
+              </td>
+            </tr>
+            {% set ns.prev_grade = grade %}
+          {% endif %}
+          {% set ns.stt = ns.stt + 1 %}
           {% set st = class_stats.get(h.class_name, {}) %}
-          <tr>
-            <td><span class="badge rounded-pill" style="background:#FDF2F8;color:#9D174D;font-size:.72rem;font-weight:700;">{{ h.class_name }}</span></td>
-            <td style="text-align:center;font-weight:600;">{{ st.get('total', 0) }}</td>
-            <td style="text-align:center;color:#1D4ED8;">{{ st.get('nam', 0) }}</td>
-            <td style="text-align:center;color:#9D174D;">{{ st.get('nu', 0) }}</td>
-            <td style="font-weight:600;">{{ h.gvcn_name or '—' }}</td>
-            <td style="color:#64748B;font-size:.75rem;">{{ h.subject_group or '—' }}</td>
-            <td style="text-align:center;">
-              <button class="btn btn-sm p-0" style="color:#EF4444;background:none;border:none;"
-                      title="Xóa" onclick="deleteGVCN('{{ h.class_name }}')">
+          {% set total = st.get('total', 0) %}
+          {% set nam = st.get('nam', 0) %}
+          {% set nu = st.get('nu', 0) %}
+          <tr style="border-top:1px solid #F3F4F6;transition:background .15s;" onmouseover="this.style.background='#FAFAFA'" onmouseout="this.style.background=''">
+            <td style="text-align:center;color:#A0A0A0;font-size:.72rem;padding:7px 6px;border:none;">{{ ns.stt }}</td>
+            <td style="padding:7px 8px;border:none;">
+              <span class="badge" style="background:linear-gradient(135deg,#7C3AED,#9D174D);color:#fff;font-size:.72rem;font-weight:700;border-radius:6px;padding:3px 8px;">{{ h.class_name }}</span>
+            </td>
+            <td style="text-align:center;font-weight:700;color:#1E293B;padding:7px 6px;border:none;">{{ total }}</td>
+            <td style="text-align:center;padding:7px 6px;border:none;">
+              {% if nam > 0 %}<span style="color:#1D4ED8;font-weight:600;">{{ nam }}</span>{% else %}<span style="color:#CBD5E1;">0</span>{% endif %}
+            </td>
+            <td style="text-align:center;padding:7px 6px;border:none;">
+              {% if nu > 0 %}<span style="color:#DB2777;font-weight:600;">{{ nu }}</span>{% else %}<span style="color:#CBD5E1;">0</span>{% endif %}
+            </td>
+            <td style="font-weight:600;color:#1E293B;padding:7px 8px;border:none;">{{ h.gvcn_name or '—' }}</td>
+            <td style="color:#6B7280;font-size:.75rem;padding:7px 8px;border:none;">
+              {% if h.subject_group %}
+              <span style="background:#EFF6FF;color:#1D4ED8;border-radius:4px;padding:1px 6px;font-size:.7rem;">{{ h.subject_group }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td style="text-align:center;padding:7px 4px;border:none;">
+              <button class="btn btn-sm p-0" style="color:#EF4444;background:none;border:none;opacity:.7;" title="Xóa"
+                      onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7"
+                      onclick="deleteGVCN('{{ h.class_name }}')">
                 <i class="bi bi-trash3"></i>
               </button>
             </td>
@@ -2401,6 +2441,30 @@ function toggleSideNav(navId, btn) {
   const open = nav.classList.toggle('nav-open');
   btn.classList.toggle('active', open);
   btn.querySelector('i').className = open ? 'bi bi-layout-sidebar-reverse' : 'bi bi-layout-sidebar';
+}
+
+async function toggleAllGVCNStudentTab(btn) {
+  const currentlyEnabled = btn.dataset.enabled === '1';
+  const enable = !currentlyEnabled;
+  try {
+    const res = await fetch('{{ url_for("admin_homeroom_toggle_student_tab_all") }}', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({enable: enable})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const total = document.querySelectorAll('#gvcn tbody tr:not([style*="background:#F8FAFC"])').length;
+      btn.dataset.enabled = enable ? '1' : '0';
+      btn.style.background = enable ? '#16A34A' : '#E5E7EB';
+      btn.style.color = enable ? '#fff' : '#374151';
+      btn.innerHTML = enable
+        ? `<i class="bi bi-people-fill me-1"></i>Quản lý HS: Bật (${total}/${total})`
+        : `<i class="bi bi-people me-1"></i>Quản lý HS: Tắt`;
+    } else {
+      showAlert(data.error || 'Không thể cập nhật.', 'error');
+    }
+  } catch { showAlert('Lỗi kết nối.', 'error'); }
 }
 
 async function deleteGVCN(className) {

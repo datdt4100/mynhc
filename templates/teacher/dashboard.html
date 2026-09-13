@@ -284,11 +284,11 @@
 /* ── Homeroom student table ── */
 .hm-table { font-size: .82rem; min-width: 520px; }
 .hm-table thead th {
-  background: linear-gradient(135deg, #9D174D 0%, #EC4899 60%, #F9A8D4 100%);
+  background: linear-gradient(135deg, #065f46 0%, #10B981 60%, #34D399 100%);
   color: #fff; font-weight: 700; border: none; padding: 11px 10px;
   white-space: nowrap; position: sticky; top: 0; z-index: 2;
 }
-.hm-table tbody tr:hover { background: rgba(252,231,243,.35); }
+.hm-table tbody tr:hover { background: rgba(209,250,229,.35); }
 .hm-table td { vertical-align: middle; padding: 9px 10px; }
 
 .hm-icon-btn {
@@ -296,15 +296,15 @@
   border-radius: 7px; border: 1.5px solid; background: transparent; cursor: pointer;
   font-size: .82rem; transition: all .12s; padding: 0;
 }
-.hm-icon-btn.btn-info   { color: #0E7490; border-color: #0E7490; }
-.hm-icon-btn.btn-info:hover   { background: #0E7490; color: #fff; }
+.hm-icon-btn.btn-info   { color: #0369A1; border-color: #0369A1; }
+.hm-icon-btn.btn-info:hover   { background: #0369A1; color: #fff; }
 .hm-icon-btn.btn-purple { color: #7C3AED; border-color: #C4B5FD; }
 .hm-icon-btn.btn-purple:hover { background: #7C3AED; color: #fff; }
 
 .hm-sched-table { font-size: .8rem; width: 100%; border-collapse: collapse; }
 .hm-sched-table th { background: #F8FAFC; padding: 7px 10px; font-weight: 700; color: #475569; border-bottom: 1.5px solid #E2E8F0; white-space: nowrap; }
 .hm-sched-table td { padding: 8px 10px; border-bottom: 1px solid #F1F5F9; }
-.hm-sched-table tbody tr:hover { background: #FDF4FF; }
+.hm-sched-table tbody tr:hover { background: #F0FDF4; }
 </style>
 {% endblock %}
 
@@ -324,7 +324,7 @@
           <span id="hmStudentCount" class="badge ms-1" style="background:rgba(255,255,255,.25); color:inherit; font-size:.7rem; border-radius:10px; padding:2px 7px;">{{ homeroom_students | length }}</span>
         </button>
       </div>
-      <span style="font-size:.8rem; color:#9D174D; font-weight:600; background:#FDF2F8; border:1.5px solid #F9A8D4; border-radius:20px; padding:4px 12px;">
+      <span style="font-size:.8rem; color:#065f46; font-weight:600; background:#ECFDF5; border:1.5px solid #A7F3D0; border-radius:20px; padding:4px 12px;">
         <i class="bi bi-person-hearts me-1"></i>GVCN – {{ homeroom_class.class_name }}
       </span>
     </div>
@@ -460,7 +460,14 @@
                               data-class-id="{{ cls.id }}" data-max="{{ cls.max_capacity or '' }}"
                               {% if cls.max_capacity and cnt >= cls.max_capacity %}title="Lớp đã đầy"{% endif %}>{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
                         {% if teacher_view_enrollments %}
-                        <button class="cal-detail-inline" onclick="openEnrollDetail({{ cls.id }}, 'Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}', '{{ day_name(cls.day_of_week) }} Sáng', event, {{ cls.day_of_week }}, 'morning', {{ cls.start_session }}, {{ cls.duration }}, {{ (cls.location or '')|tojson }})" title="Xem danh sách đăng ký">
+                        <button class="cal-detail-inline"
+                                data-cid="{{ cls.id }}"
+                                data-label="Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}"
+                                data-slot="{{ day_name(cls.day_of_week) }} Sáng"
+                                data-day="{{ cls.day_of_week }}" data-ses="morning"
+                                data-start="{{ cls.start_session }}" data-dur="{{ cls.duration }}"
+                                data-loc="{{ cls.location or '' }}"
+                                onclick="openEnrollDetailBtn(this, event)" title="Xem danh sách đăng ký">
                           <i class="bi bi-people-fill"></i> Chi tiết
                         </button>
                         {% else %}
@@ -511,7 +518,14 @@
                               data-class-id="{{ cls.id }}" data-max="{{ cls.max_capacity or '' }}"
                               {% if cls.max_capacity and cnt >= cls.max_capacity %}title="Lớp đã đầy"{% endif %}>{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
                         {% if teacher_view_enrollments %}
-                        <button class="cal-detail-inline" onclick="openEnrollDetail({{ cls.id }}, 'Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}', '{{ day_name(cls.day_of_week) }} Chiều', event, {{ cls.day_of_week }}, 'afternoon', {{ cls.start_session }}, {{ cls.duration }}, {{ (cls.location or '')|tojson }})" title="Xem danh sách đăng ký">
+                        <button class="cal-detail-inline"
+                                data-cid="{{ cls.id }}"
+                                data-label="Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}"
+                                data-slot="{{ day_name(cls.day_of_week) }} Chiều"
+                                data-day="{{ cls.day_of_week }}" data-ses="afternoon"
+                                data-start="{{ cls.start_session }}" data-dur="{{ cls.duration }}"
+                                data-loc="{{ cls.location or '' }}"
+                                onclick="openEnrollDetailBtn(this, event)" title="Xem danh sách đăng ký">
                           <i class="bi bi-people-fill"></i> Chi tiết
                         </button>
                         {% else %}
@@ -558,22 +572,22 @@
     {% if homeroom_class %}
     <!-- ═══ PANE: Quản Lý Học Sinh ═══ -->
     <div id="pane-hm" style="display:none;">
-      <div class="section-card mb-4" style="border-radius:16px; border:1.5px solid #F9A8D4;">
-        <div class="section-card-header" style="background:linear-gradient(90deg,#FDF2F8,#FCE7F3); border-bottom-color:#F9A8D4;">
-          <i class="bi bi-people-fill" style="color:#9D174D;"></i>
-          <span style="color:#9D174D;">Danh sách học sinh lớp {{ homeroom_class.class_name }}</span>
-          <span id="hmCountBadge" class="badge ms-1" style="background:#FCE7F3; color:#9D174D; border:1px solid #F9A8D4; font-size:.72rem; font-weight:700;">{{ homeroom_students | length }}</span>
+      <div class="section-card mb-4">
+        <div class="section-card-header">
+          <i class="bi bi-people-fill"></i>
+          <span>Danh sách học sinh lớp {{ homeroom_class.class_name }}</span>
+          <span id="hmCountBadge" class="badge ms-1" style="background:#DCFCE7; color:#15803D; font-size:.72rem; font-weight:700;">{{ homeroom_students | length }}</span>
           <span class="ms-auto text-muted d-none d-md-inline" style="font-size:.75rem; font-weight:400;">
             <i class="bi bi-arrow-repeat me-1"></i>Cập nhật theo thời gian thực
           </span>
         </div>
         <!-- Search toolbar -->
-        <div style="padding:10px 16px; background:#FFF9FB; border-bottom:1.5px solid #F9A8D4; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <div style="padding:10px 16px; background:#FAFBFC; border-bottom:1.5px solid #E2E8F0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
           <div style="position:relative; display:flex; align-items:center;">
             <i class="bi bi-search" style="position:absolute; left:10px; color:#94A3B8; font-size:.82rem; pointer-events:none;"></i>
             <input type="search" id="hmSearchInput" placeholder="Tìm tên, mã đăng nhập…"
                    oninput="filterHmStudents()"
-                   style="padding:6px 10px 6px 30px; border:1.5px solid #F9A8D4; border-radius:8px; font-size:.8rem; background:#FFF; width:220px;">
+                   style="padding:6px 10px 6px 30px; border:1.5px solid #E2E8F0; border-radius:8px; font-size:.8rem; background:#F8FAFC; width:220px;">
           </div>
           <span class="ms-auto text-muted" style="font-size:.78rem;" id="hmSearchHint"></span>
         </div>
@@ -583,7 +597,6 @@
               <tr>
                 <th style="width:38px;">STT</th>
                 <th>Họ và tên</th>
-                <th>Mã đăng nhập</th>
                 <th class="text-center">Giới tính</th>
                 <th class="text-center">Số môn ĐK</th>
                 <th class="text-center" style="width:80px;">Thao tác</th>
@@ -594,12 +607,11 @@
               <tr data-search="{{ s.full_name | lower }} {{ s.cccd }}">
                 <td class="text-muted" style="font-size:.72rem;">{{ loop.index }}</td>
                 <td class="fw-semibold" style="font-size:.85rem;">{{ s.full_name | name_fmt }}</td>
-                <td><code style="font-size:.76rem;">{{ s.cccd }}</code></td>
                 <td class="text-center">
                   {% if s.gender == 'Nam' %}
                   <span class="badge rounded-pill" style="background:#DBEAFE; color:#1D4ED8; font-size:.7rem;">Nam</span>
                   {% elif s.gender == 'Nữ' %}
-                  <span class="badge rounded-pill" style="background:#FCE7F3; color:#9D174D; font-size:.7rem;">Nữ</span>
+                  <span class="badge rounded-pill" style="background:#EFF6FF; color:#1D4ED8; font-size:.7rem;">Nữ</span>
                   {% else %}
                   <span class="text-muted" style="font-size:.75rem;">—</span>
                   {% endif %}
@@ -619,7 +631,7 @@
                 </td>
               </tr>
               {% else %}
-              <tr><td colspan="6" class="text-center text-muted py-5">Chưa có học sinh nào trong lớp {{ homeroom_class.class_name }}</td></tr>
+              <tr><td colspan="5" class="text-center text-muted py-5">Chưa có học sinh nào trong lớp {{ homeroom_class.class_name }}</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -754,7 +766,7 @@
 <div class="modal fade" id="hmDetailModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
     <div class="modal-content" style="border-radius:16px; overflow:hidden;">
-      <div class="modal-header" style="background:linear-gradient(135deg,#9D174D,#EC4899); border:none; padding:14px 20px;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#065f46,#10B981); border:none; padding:14px 20px;">
         <div>
           <h5 class="modal-title fw-bold text-white mb-0" id="hmDetailName">Chi tiết học sinh</h5>
           <div id="hmDetailSub" style="font-size:.78rem; color:rgba(255,255,255,.75); margin-top:2px;"></div>
@@ -1461,6 +1473,11 @@ async function exportTKBTeacher(fmt) {
 /* ── Enroll detail modal ── */
 let _enrollClassMeta = null;  // {id, day, session, start, duration, location}
 
+function openEnrollDetailBtn(btn, event) {
+  const d = btn.dataset;
+  openEnrollDetail(+d.cid, d.label, d.slot, event, +d.day, d.ses, +d.start, +d.dur, d.loc || '');
+}
+
 async function openEnrollDetail(classId, classLabel, slotLabel, event, day, ses, start, dur, location) {
   if (event) event.stopPropagation();
   _enrollClassMeta = {id: classId, day, ses, start, dur, location: location || ''};
@@ -1606,7 +1623,7 @@ function refreshHmStudents() {
         const genderBadge = s.gender === 'Nam'
           ? `<span class="badge rounded-pill" style="background:#DBEAFE;color:#1D4ED8;font-size:.7rem;">Nam</span>`
           : s.gender === 'Nữ'
-          ? `<span class="badge rounded-pill" style="background:#FCE7F3;color:#9D174D;font-size:.7rem;">Nữ</span>`
+          ? `<span class="badge rounded-pill" style="background:#EFF6FF;color:#1D4ED8;font-size:.7rem;">Nữ</span>`
           : `<span class="text-muted" style="font-size:.75rem;">—</span>`;
         const ec = s.enrolled_count;
         const ecBadge = `<span class="badge rounded-pill ${ec===0?'bg-light text-muted border':ec>=5?'bg-success':'bg-warning text-dark'}" style="font-size:.7rem;min-width:28px;" data-student-enroll="${s.id}">${ec}</span>`;
@@ -1614,7 +1631,6 @@ function refreshHmStudents() {
         html += `<tr data-search="${s.full_name.toLowerCase()} ${s.cccd}" style="${visible?'':'display:none'}">
           <td class="text-muted" style="font-size:.72rem;">${i+1}</td>
           <td class="fw-semibold" style="font-size:.85rem;">${s.full_name}</td>
-          <td><code style="font-size:.76rem;">${s.cccd}</code></td>
           <td class="text-center">${genderBadge}</td>
           <td class="text-center">${ecBadge}</td>
           <td class="text-center" style="white-space:nowrap;">

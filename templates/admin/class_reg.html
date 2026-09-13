@@ -603,16 +603,36 @@ function openAssignModal(classId, subject, grade, dayLabel, sessionLabel, sessio
   new bootstrap.Modal(document.getElementById('assignTeacherModal')).show();
 }
 
-function _atLoadTeacherOptions(sel) {
+async function _atLoadTeacherOptions(sel) {
   if (sel.dataset.loaded) return;
   sel.dataset.loaded = '1';
-  const subject = _atSubject ? _atSubject.toLowerCase() : '';
-  const list = subject
-    ? _AT_TEACHERS.filter(t => t.subject_group.toLowerCase() === subject)
-    : _AT_TEACHERS;
-  sel.innerHTML = '<option value="">— Chọn giáo viên —</option>';
-  list.forEach(t => sel.add(new Option(t.full_name + (t.subject_group ? ' · ' + t.subject_group : ''), t.id)));
-  if (!list.length) sel.add(new Option('Không có giáo viên phù hợp', ''));
+  sel.innerHTML = '<option value="">Đang tải…</option>';
+  try {
+    const res  = await fetch(`/api/class-available-teachers/${_atClassId}`);
+    const data = await res.json();
+    if (!data.ok) throw new Error();
+    const subject = _atSubject ? _atSubject.toLowerCase() : '';
+    const matched = subject ? data.teachers.filter(t => t.subject_group.toLowerCase() === subject) : data.teachers;
+    const others  = subject ? data.teachers.filter(t => t.subject_group.toLowerCase() !== subject) : [];
+    sel.innerHTML = '<option value="">— Chọn giáo viên —</option>';
+    function _addOpts(list, grpLabel) {
+      if (!list.length) return;
+      const og = document.createElement('optgroup');
+      og.label = grpLabel;
+      list.forEach(t => {
+        const label = t.full_name + (t.has_conflict ? ' ⚠ trùng giờ' : '');
+        const opt = new Option(label, t.id, false, false);
+        if (t.has_conflict) { opt.disabled = true; opt.style.color = '#94A3B8'; }
+        og.appendChild(opt);
+      });
+      sel.appendChild(og);
+    }
+    if (matched.length) _addOpts(matched, `Cùng tổ bộ môn${subject ? ' – ' + _atSubject : ''}`);
+    if (others.length)  _addOpts(others,  'Giáo viên khác');
+    if (!data.teachers.length) sel.add(new Option('Không có giáo viên', ''));
+  } catch {
+    sel.innerHTML = '<option value="">Lỗi tải danh sách</option>';
+  }
 }
 
 function _atOnSelectTeacher(sel) {}
@@ -1115,34 +1135,42 @@ function openTeacherLog(teacherId, teacherName) {
 const _TEACHERS_JSON = {{ teachers_json | tojson }};
 let _reassignClassId = null, _reassignCurrentTeacherId = null;
 
-function openReassignModal(classId, subject, currentTeacherId) {
+async function openReassignModal(classId, subject, currentTeacherId) {
   _reassignClassId = classId;
   _reassignCurrentTeacherId = currentTeacherId;
   document.getElementById('reassignSubtitle').textContent = `Lớp #${classId} · ${subject}`;
   const sel = document.getElementById('reassignTeacherSel');
-  sel.innerHTML = '<option value="">— Chọn giáo viên —</option>';
-  // "Do trường phân công" option
-  sel.add(new Option('Do trường phân công', 'unassigned'));
-  // Same subject group teachers (exclude current)
-  const curTeacher = _TEACHERS_JSON.find(t => t.id === currentTeacherId);
-  const curGroup   = curTeacher ? curTeacher.subject_group : '';
-  const sameGroup  = _TEACHERS_JSON.filter(t => t.id !== currentTeacherId &&
-    (curGroup ? t.subject_group === curGroup : true));
-  const others     = _TEACHERS_JSON.filter(t => t.id !== currentTeacherId &&
-    (curGroup ? t.subject_group !== curGroup : false));
-  if (sameGroup.length) {
-    const og = document.createElement('optgroup');
-    og.label = `Cùng tổ ${curGroup || 'bộ môn'}`;
-    sameGroup.forEach(t => og.appendChild(new Option(t.full_name, t.id)));
-    sel.appendChild(og);
-  }
-  if (others.length) {
-    const og2 = document.createElement('optgroup');
-    og2.label = 'Giáo viên khác';
-    others.forEach(t => og2.appendChild(new Option(`${t.full_name} (${t.subject_group})`, t.id)));
-    sel.appendChild(og2);
-  }
+  sel.innerHTML = '<option value="">Đang tải…</option>';
   new bootstrap.Modal(document.getElementById('reassignModal')).show();
+  try {
+    const res  = await fetch(`/api/class-available-teachers/${classId}`);
+    const data = await res.json();
+    if (!data.ok) throw new Error();
+    sel.innerHTML = '<option value="">— Chọn giáo viên —</option>';
+    sel.add(new Option('Do trường phân công', 'unassigned'));
+    const curTeacher = data.teachers.find(t => t.id === currentTeacherId);
+    const curGroup   = curTeacher ? curTeacher.subject_group : '';
+    const sameGroup  = data.teachers.filter(t => t.id !== currentTeacherId &&
+      (curGroup ? t.subject_group === curGroup : true));
+    const others     = data.teachers.filter(t => t.id !== currentTeacherId &&
+      (curGroup ? t.subject_group !== curGroup : false));
+    function _addOpts(list, grpLabel) {
+      if (!list.length) return;
+      const og = document.createElement('optgroup');
+      og.label = grpLabel;
+      list.forEach(t => {
+        const label = t.full_name + (t.has_conflict ? ' ⚠ trùng giờ' : '');
+        const opt = new Option(label, t.id, false, false);
+        if (t.has_conflict) { opt.disabled = true; opt.style.color = '#94A3B8'; }
+        og.appendChild(opt);
+      });
+      sel.appendChild(og);
+    }
+    _addOpts(sameGroup, `Cùng tổ ${curGroup || 'bộ môn'}`);
+    _addOpts(others, 'Giáo viên khác');
+  } catch {
+    sel.innerHTML = '<option value="">Lỗi tải danh sách</option>';
+  }
 }
 
 async function confirmReassign() {

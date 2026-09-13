@@ -3767,6 +3767,37 @@ def admin_import_classes_template():
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
+@app.route("/api/class-available-teachers/<int:class_id>")
+@admin_required
+def api_class_available_teachers(class_id):
+    """Return all real teachers with a conflict flag for the given class's time slot."""
+    with engine.connect() as conn:
+        cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        if not cls:
+            return jsonify(ok=False, error="Không tìm thấy lớp"), 404
+        end_session = cls.start_session + cls.duration - 1
+        busy_ids = {r.teacher_id for r in conn.execute(
+            select(classes.c.teacher_id).where(and_(
+                classes.c.id != class_id,
+                classes.c.day_of_week == cls.day_of_week,
+                classes.c.session_type == cls.session_type,
+                classes.c.start_session <= end_session,
+                (classes.c.start_session + classes.c.duration - 1) >= cls.start_session,
+            ))
+        ).fetchall()}
+        all_teachers = conn.execute(
+            select(teachers)
+            .where(teachers.c.cccd != _UNASSIGNED_CCCD)
+            .order_by(teachers.c.subject_group, teachers.c.full_name)
+        ).fetchall()
+    return jsonify(ok=True, teachers=[{
+        "id": t.id,
+        "full_name": _name_fmt(t.full_name),
+        "subject_group": t.subject_group or "",
+        "has_conflict": t.id in busy_ids,
+    } for t in all_teachers])
+
+
 @app.route("/admin/classes/<int:class_id>/reassign-teacher", methods=["POST"])
 @admin_required
 def admin_class_reassign_teacher(class_id):
@@ -3793,6 +3824,20 @@ def admin_class_reassign_teacher(class_id):
             t = conn.execute(select(teachers).where(teachers.c.id == new_teacher_id)).fetchone()
             if not t:
                 return jsonify(ok=False, error="Không tìm thấy giáo viên.")
+            # Check teacher time conflict
+            end_session = cls.start_session + cls.duration - 1
+            conflict = conn.execute(
+                select(classes.c.id).where(and_(
+                    classes.c.id != class_id,
+                    classes.c.teacher_id == new_teacher_id,
+                    classes.c.day_of_week == cls.day_of_week,
+                    classes.c.session_type == cls.session_type,
+                    classes.c.start_session <= end_session,
+                    (classes.c.start_session + classes.c.duration - 1) >= cls.start_session,
+                ))
+            ).fetchone()
+            if conflict:
+                return jsonify(ok=False, error=f"{_name_fmt(t.full_name)} đã có lớp khác trong khung giờ này.")
             new_name = t.full_name
         conn.execute(update(classes).where(classes.c.id == class_id).values(teacher_id=new_teacher_id))
     _bump(event_type="class_update", grade=cls.grade)
@@ -3814,6 +3859,21 @@ def admin_class_assign_teacher(class_id):
         teacher_row = conn.execute(select(teachers).where(teachers.c.id == teacher_id)).fetchone()
         if not teacher_row:
             return jsonify(ok=False, error="Không tìm thấy giáo viên.")
+        # Check teacher time conflict
+        if teacher_row.cccd != _UNASSIGNED_CCCD:
+            end_session = cls.start_session + cls.duration - 1
+            t_conflict = conn.execute(
+                select(classes.c.id).where(and_(
+                    classes.c.id != class_id,
+                    classes.c.teacher_id == teacher_id,
+                    classes.c.day_of_week == cls.day_of_week,
+                    classes.c.session_type == cls.session_type,
+                    classes.c.start_session <= end_session,
+                    (classes.c.start_session + classes.c.duration - 1) >= cls.start_session,
+                ))
+            ).fetchone()
+            if t_conflict:
+                return jsonify(ok=False, error=f"{_name_fmt(teacher_row.full_name)} đã có lớp khác trong khung giờ này.")
         if location:
             end_session = cls.start_session + cls.duration - 1
             conflict = conn.execute(

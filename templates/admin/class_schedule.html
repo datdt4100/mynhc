@@ -200,6 +200,53 @@
     margin-top: 2px;
   }
   .cls-item-time i { font-size: .6rem; margin-right: 2px; }
+  .cls-item-location {
+    margin-top: 4px;
+    font-size: .7rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .loc-badge {
+    background: #F0FDF4;
+    color: #16A34A;
+    border: 1px solid #BBF7D0;
+    border-radius: 6px;
+    padding: 1px 7px;
+    font-size: .68rem;
+    font-weight: 600;
+  }
+  .loc-pending {
+    background: #FFF7ED;
+    color: #92400E;
+    border: 1px solid #FED7AA;
+    border-radius: 6px;
+    padding: 1px 7px;
+    font-size: .68rem;
+    font-weight: 600;
+  }
+  .enroll-pill {
+    background: #F1F5F9;
+    color: #475569;
+    border-radius: 6px;
+    padding: 1px 7px;
+    font-size: .68rem;
+    font-weight: 600;
+  }
+  .btn-assign-room {
+    font-size: .68rem;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 7px;
+    border: 1.5px solid #0EA5E9;
+    color: #0EA5E9;
+    background: #F0F9FF;
+    cursor: pointer;
+    transition: background .12s;
+    white-space: nowrap;
+  }
+  .btn-assign-room:hover { background: #BAE6FD; }
 </style>
 {% endblock %}
 
@@ -247,6 +294,32 @@
       </div>
       <div class="modal-body p-0">
         <div id="detailModalBody" style="padding:14px;overflow-x:auto;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Room assign modal -->
+<div class="modal fade" id="roomAssignModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+    <div class="modal-content">
+      <div class="modal-header" style="background:linear-gradient(135deg,#0EA5E9,#38BDF8);border:none;padding:12px 18px;">
+        <div>
+          <div class="fw-bold text-white" style="font-size:.9rem;"><i class="bi bi-geo-alt-fill me-2"></i>Xếp phòng</div>
+          <div id="raSubtitle" class="text-white" style="font-size:.72rem;opacity:.85;margin-top:1px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:16px 18px;">
+        <div id="raRoomList" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+          <div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Đang tải…</div>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding:10px 16px;border-top:1.5px solid #E2E8F0;gap:8px;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" style="font-size:.8rem;">Hủy</button>
+        <button class="btn btn-sm btn-primary" id="raConfirmBtn" onclick="confirmRoomAssign()"
+                style="font-size:.8rem;background:#0EA5E9;border-color:#0EA5E9;" disabled>
+          <i class="bi bi-check2 me-1"></i>Xác nhận
+        </button>
       </div>
     </div>
   </div>
@@ -332,7 +405,14 @@ function openDetail(day, slot, ses) {
   let h = '<div class="cls-list">';
   items.forEach((c, i) => {
     const noTime = !c.created_at;
-    h += `<div class="cls-item cls-item-${c.grade}${noTime ? ' cls-item-no-time' : ''}">
+    const enrollPill = `<span class="enroll-pill" id="enroll-pill-${c.id}"><i class="bi bi-people me-1"></i>${c.enrollment}${c.max_capacity ? '/' + c.max_capacity : ''} HS</span>`;
+    const locHtml = c.location
+      ? `<span class="loc-badge"><i class="bi bi-geo-alt-fill me-1"></i>${c.location}</span>`
+      : `<span class="loc-pending"><i class="bi bi-hourglass-split me-1"></i>Đang sắp xếp</span>
+         <button class="btn-assign-room" onclick="openRoomAssign(${c.id},'${c.teacher.replace(/'/g,"\\'")}','K${c.grade} ${c.subject}',${c.day_of_week},'${c.session_type}',${c.start_session},${c.duration})">
+           <i class="bi bi-geo-alt me-1"></i>Xếp phòng
+         </button>`;
+    h += `<div class="cls-item cls-item-${c.grade}${noTime ? ' cls-item-no-time' : ''}" id="cls-item-${c.id}">
       <div class="cls-item-rank">${i + 1}</div>
       <div class="cls-item-body">
         <div class="cls-item-teacher"><i class="bi bi-person-fill me-1" style="font-size:.7rem;opacity:.6;"></i>${c.teacher}</div>
@@ -340,6 +420,7 @@ function openDetail(day, slot, ses) {
           <span class="cls-item-grade-pill">K${c.grade}</span>
           <span class="cls-item-subj">${c.subject}</span>
         </div>
+        <div class="cls-item-location">${enrollPill}${locHtml}</div>
       </div>
       <div class="cls-item-time">
         ${c.created_at
@@ -356,5 +437,99 @@ function openDetail(day, slot, ses) {
 
 document.getElementById('inner-morning').innerHTML   = _buildGrid('morning');
 document.getElementById('inner-afternoon').innerHTML = _buildGrid('afternoon');
+
+// ── Room assignment ──
+let _raClassId = null, _raSelectedRoom = null;
+
+async function openRoomAssign(classId, teacher, label, day, ses, start, dur) {
+  _raClassId = classId;
+  _raSelectedRoom = null;
+  document.getElementById('raSubtitle').textContent = `${teacher} · ${label}`;
+  document.getElementById('raConfirmBtn').disabled = true;
+  document.getElementById('raRoomList').innerHTML =
+    '<div class="text-center text-muted py-3"><i class="bi bi-hourglass-split me-1"></i>Đang tải phòng trống…</div>';
+  const raModal = new bootstrap.Modal(document.getElementById('roomAssignModal'));
+  raModal.show();
+  try {
+    const res  = await fetch(`/api/available-rooms?day_of_week=${day}&session_type=${ses}&start_session=${start}&duration=${dur}&grade=0`);
+    const data = await res.json();
+    const rooms = Array.isArray(data) ? data : (data.rooms || []);
+    if (!rooms.length) {
+      document.getElementById('raRoomList').innerHTML =
+        '<p class="text-muted text-center py-3">Không có phòng trống trong khung giờ này.</p>';
+      return;
+    }
+    let h = '';
+    rooms.forEach(r => {
+      h += `<div class="ra-room-option" data-room="${r}"
+              style="padding:9px 14px;border-radius:9px;border:1.5px solid #E2E8F0;cursor:pointer;
+                     display:flex;align-items:center;gap:8px;font-size:.83rem;font-weight:600;color:#374151;
+                     transition:border-color .12s,background .12s;"
+              onclick="selectRoom(this,'${r.replace(/'/g,"\\'")}')">
+              <i class="bi bi-building" style="color:#64748B;"></i>${r}
+            </div>`;
+    });
+    document.getElementById('raRoomList').innerHTML = h;
+  } catch {
+    document.getElementById('raRoomList').innerHTML =
+      '<p class="text-danger text-center py-3">Lỗi kết nối.</p>';
+  }
+}
+
+function selectRoom(el, room) {
+  document.querySelectorAll('.ra-room-option').forEach(o => {
+    o.style.borderColor = '#E2E8F0';
+    o.style.background  = '';
+    o.style.color       = '#374151';
+  });
+  el.style.borderColor = '#0EA5E9';
+  el.style.background  = '#F0F9FF';
+  el.style.color       = '#0369A1';
+  _raSelectedRoom = room;
+  document.getElementById('raConfirmBtn').disabled = false;
+}
+
+async function confirmRoomAssign() {
+  if (!_raClassId || !_raSelectedRoom) return;
+  const btn = document.getElementById('raConfirmBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Đang lưu…';
+  try {
+    const res  = await fetch(`/admin/classes/${_raClassId}/assign-room`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({location: _raSelectedRoom})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('roomAssignModal'))?.hide();
+      // Update cls-item in detail modal
+      const item = document.getElementById(`cls-item-${_raClassId}`);
+      if (item) {
+        const locDiv = item.querySelector('.cls-item-location');
+        if (locDiv) {
+          const pill = locDiv.querySelector('.enroll-pill');
+          locDiv.innerHTML = (pill ? pill.outerHTML : '') +
+            `<span class="loc-badge"><i class="bi bi-geo-alt-fill me-1"></i>${_raSelectedRoom}</span>`;
+        }
+      }
+      // Update GRID data so re-open shows updated info
+      for (const ses in GRID) {
+        for (const key in GRID[ses]) {
+          const c = GRID[ses][key].find(x => x.id === _raClassId);
+          if (c) { c.location = _raSelectedRoom; break; }
+        }
+      }
+    } else {
+      alert(data.error || 'Không thể xếp phòng.');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Xác nhận';
+    }
+  } catch {
+    alert('Lỗi kết nối.');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Xác nhận';
+  }
+}
 </script>
 {% endblock %}

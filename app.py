@@ -3514,7 +3514,35 @@ def admin_class_update(class_id):
     if not updates:
         return jsonify(ok=True)
     with engine.begin() as conn:
-        row = conn.execute(select(classes.c.grade).where(classes.c.id == class_id)).fetchone()
+        row = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        if not row:
+            return jsonify(ok=False, error="Không tìm thấy lớp.")
+        if updates.get("location"):
+            location = updates["location"]
+            end_session = row.start_session + row.duration - 1
+            conflict = conn.execute(
+                select(classes.c.id).where(and_(
+                    classes.c.id != class_id,
+                    classes.c.day_of_week  == row.day_of_week,
+                    classes.c.session_type == row.session_type,
+                    classes.c.location     == location,
+                    classes.c.start_session <= end_session,
+                    (classes.c.start_session + classes.c.duration - 1) >= row.start_session,
+                ))
+            ).fetchone()
+            if conflict:
+                return jsonify(ok=False, error=f"Phòng {location} đã được xếp cho lớp khác trong khung giờ này.")
+            ext_conflict = conn.execute(
+                select(room_external_busy.c.id).where(and_(
+                    room_external_busy.c.room_name   == location,
+                    room_external_busy.c.day_of_week == row.day_of_week,
+                    room_external_busy.c.session_type == row.session_type,
+                    room_external_busy.c.tiet >= row.start_session,
+                    room_external_busy.c.tiet <= end_session,
+                ))
+            ).fetchone()
+            if ext_conflict:
+                return jsonify(ok=False, error=f"Phòng {location} đang bận (lịch ngoài) trong khung giờ này.")
         conn.execute(update(classes).where(classes.c.id == class_id).values(**updates))
     grade = row.grade if row else None
     _bump(event_type="class_update", grade=grade)
@@ -3580,6 +3608,38 @@ def admin_import_classes_template():
     return send_file(buf, as_attachment=True,
                      download_name="mau_import_lop.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/admin/classes/<int:class_id>/reassign-teacher", methods=["POST"])
+@admin_required
+def admin_class_reassign_teacher(class_id):
+    """Move a class to another teacher (or to 'Do truong phan cong') without changing room/capacity."""
+    data = request.get_json(force=True)
+    raw = data.get("teacher_id")
+    with engine.begin() as conn:
+        cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        if not cls:
+            return jsonify(ok=False, error="Không tìm thấy lớp.")
+        if raw == "unassigned":
+            ua = conn.execute(
+                select(teachers).where(teachers.c.cccd == _UNASSIGNED_CCCD)
+            ).fetchone()
+            if not ua:
+                return jsonify(ok=False, error="Không tìm thấy bản ghi 'Do trường phân công'.")
+            new_teacher_id = ua.id
+            new_name = ua.full_name
+        else:
+            try:
+                new_teacher_id = int(raw)
+            except (TypeError, ValueError):
+                return jsonify(ok=False, error="Thiếu ID giáo viên.")
+            t = conn.execute(select(teachers).where(teachers.c.id == new_teacher_id)).fetchone()
+            if not t:
+                return jsonify(ok=False, error="Không tìm thấy giáo viên.")
+            new_name = t.full_name
+        conn.execute(update(classes).where(classes.c.id == class_id).values(teacher_id=new_teacher_id))
+    _bump(event_type="class_update", grade=cls.grade)
+    return jsonify(ok=True, new_teacher_name=new_name)
 
 
 @app.route("/admin/classes/<int:class_id>/assign-teacher", methods=["POST"])
@@ -4118,6 +4178,13 @@ def admin_class_schedule():
             .join(teachers, classes.c.teacher_id == teachers.c.id)
             .order_by(classes.c.grade, teachers.c.subject_group, classes.c.start_session)
         ).fetchall()
+        enrollment_counts = {
+            r.class_id: r.cnt
+            for r in conn.execute(
+                select(enrollments.c.class_id, func.count().label("cnt"))
+                .group_by(enrollments.c.class_id)
+            ).fetchall()
+        }
     # Build JSON-serialisable grid for JS: {ses: {"{day}_{start}": [...]}}
     grid_json = {}
     for ses in ("morning", "afternoon"):
@@ -4128,7 +4195,6 @@ def admin_class_schedule():
     for c in all_classes:
         key = f"{c.day_of_week}_{c.start_session}"
         if key in grid_json.get(c.session_type, {}):
-            # Format created_at as "dd/mm, HH:MM" for compact display
             ca_raw = getattr(c, "created_at", None)
             if ca_raw:
                 try:
@@ -4143,6 +4209,13 @@ def admin_class_schedule():
                 "grade": c.grade,
                 "subject": c.subject_group or c.subject or "",
                 "teacher": c.teacher_name,
+                "location": c.location or "",
+                "enrollment": enrollment_counts.get(c.id, 0),
+                "max_capacity": c.max_capacity or 0,
+                "day_of_week": c.day_of_week,
+                "session_type": c.session_type,
+                "start_session": c.start_session,
+                "duration": c.duration,
                 "created_at": ca_fmt,
                 "created_at_raw": str(ca_raw) if ca_raw else "",
             })

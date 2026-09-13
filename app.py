@@ -290,7 +290,8 @@ def init_db():
                            ("allow_multi_class", "1"),
                            ("require_5_subjects", "1"),
                            ("require_email_check", "0"),
-                           ("teacher_view_enrollments", "0")]:
+                           ("teacher_view_enrollments", "0"),
+                           ("teacher_room_select", "0")]:
             try:
                 conn.execute(
                     insert(settings_table).values(key=key, value=value)
@@ -1067,6 +1068,7 @@ def teacher_dashboard():
     maintenance = get_setting("maintenance_mode", "0") == "1"
     schedule_constraint = get_setting("schedule_constraint", "1") == "1"
     teacher_view_enrollments = get_setting("teacher_view_enrollments", "0") == "1"
+    teacher_room_select = get_setting("teacher_room_select", "0") == "1"
     return render_template(
         "teacher/dashboard.html",
         teacher=teacher_row,
@@ -1077,6 +1079,7 @@ def teacher_dashboard():
         maintenance=maintenance,
         schedule_constraint=schedule_constraint,
         teacher_view_enrollments=teacher_view_enrollments,
+        teacher_room_select=teacher_room_select,
         day_name=day_name,
         session_label=session_label,
     )
@@ -2513,6 +2516,7 @@ def admin_index():
     require_5_subjects = get_setting("require_5_subjects", "1") == "1"
     require_email_check = get_setting("require_email_check", "0") == "1"
     teacher_view_enrollments = get_setting("teacher_view_enrollments", "0") == "1"
+    teacher_room_select = get_setting("teacher_room_select", "0") == "1"
     with engine.connect() as conn2:
         busy_room_count = conn2.execute(
             select(func.count()).select_from(room_external_busy)
@@ -2541,6 +2545,7 @@ def admin_index():
         require_5_subjects=require_5_subjects,
         require_email_check=require_email_check,
         teacher_view_enrollments=teacher_view_enrollments,
+        teacher_room_select=teacher_room_select,
         room_list=room_list,
         room_count=room_count,
         busy_room_count=busy_room_count,
@@ -3842,6 +3847,51 @@ def admin_class_assign_room(class_id):
     return jsonify(ok=True)
 
 
+@app.route("/teacher/classes/<int:class_id>/assign-room", methods=["POST"])
+@teacher_required
+def teacher_class_assign_room(class_id):
+    """Allow teacher to self-assign a room when teacher_room_select setting is on."""
+    if get_setting("teacher_room_select", "0") != "1":
+        return jsonify(ok=False, error="Chức năng chọn phòng chưa được bật.")
+    data     = request.get_json(force=True)
+    location = (data.get("location") or "").strip() or None
+    teacher_id = session["user_id"]
+    with engine.begin() as conn:
+        cls = conn.execute(
+            select(classes).where(and_(classes.c.id == class_id, classes.c.teacher_id == teacher_id))
+        ).fetchone()
+        if not cls:
+            return jsonify(ok=False, error="Không tìm thấy lớp.")
+        if location:
+            end_session = cls.start_session + cls.duration - 1
+            conflict = conn.execute(
+                select(classes.c.id).where(and_(
+                    classes.c.id != class_id,
+                    classes.c.day_of_week  == cls.day_of_week,
+                    classes.c.session_type == cls.session_type,
+                    classes.c.location     == location,
+                    classes.c.start_session <= end_session,
+                    (classes.c.start_session + classes.c.duration - 1) >= cls.start_session,
+                ))
+            ).fetchone()
+            if conflict:
+                return jsonify(ok=False, error=f"Phòng {location} đã được xếp cho lớp khác trong khung giờ này.")
+            ext_conflict = conn.execute(
+                select(room_external_busy.c.id).where(and_(
+                    room_external_busy.c.room_name    == location,
+                    room_external_busy.c.day_of_week  == cls.day_of_week,
+                    room_external_busy.c.session_type == cls.session_type,
+                    room_external_busy.c.tiet >= cls.start_session,
+                    room_external_busy.c.tiet <= end_session,
+                ))
+            ).fetchone()
+            if ext_conflict:
+                return jsonify(ok=False, error=f"Phòng {location} đang bận (lịch ngoài) trong khung giờ này.")
+        conn.execute(update(classes).where(classes.c.id == class_id).values(location=location))
+    _bump(event_type="class", grade=cls.grade)
+    return jsonify(ok=True)
+
+
 @app.route("/admin/classes/add-manual", methods=["POST"])
 @admin_required
 def admin_add_class_manual():
@@ -4435,6 +4485,15 @@ def admin_teacher_view_enrollments_toggle():
     current = get_setting("teacher_view_enrollments", "0")
     new_val = "0" if current == "1" else "1"
     set_setting("teacher_view_enrollments", new_val)
+    return jsonify(ok=True, on=new_val == "1")
+
+
+@app.route("/admin/teacher-room-select/toggle", methods=["POST"])
+@admin_required
+def admin_teacher_room_select_toggle():
+    current = get_setting("teacher_room_select", "0")
+    new_val = "0" if current == "1" else "1"
+    set_setting("teacher_room_select", new_val)
     return jsonify(ok=True, on=new_val == "1")
 
 

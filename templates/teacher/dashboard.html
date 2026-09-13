@@ -398,7 +398,7 @@
                               data-class-id="{{ cls.id }}" data-max="{{ cls.max_capacity or '' }}"
                               {% if cls.max_capacity and cnt >= cls.max_capacity %}title="Lớp đã đầy"{% endif %}>{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
                         {% if teacher_view_enrollments %}
-                        <button class="cal-detail-inline" onclick="openEnrollDetail({{ cls.id }}, 'Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}', '{{ day_name(cls.day_of_week) }} Sáng', event)" title="Xem danh sách đăng ký">
+                        <button class="cal-detail-inline" onclick="openEnrollDetail({{ cls.id }}, 'Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}', '{{ day_name(cls.day_of_week) }} Sáng', event, {{ cls.day_of_week }}, 'morning', {{ cls.start_session }}, {{ cls.duration }}, {{ (cls.location or '')|tojson }})" title="Xem danh sách đăng ký">
                           <i class="bi bi-people-fill"></i> Chi tiết
                         </button>
                         {% else %}
@@ -449,7 +449,7 @@
                               data-class-id="{{ cls.id }}" data-max="{{ cls.max_capacity or '' }}"
                               {% if cls.max_capacity and cnt >= cls.max_capacity %}title="Lớp đã đầy"{% endif %}>{{ cnt }} HS{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}</span>
                         {% if teacher_view_enrollments %}
-                        <button class="cal-detail-inline" onclick="openEnrollDetail({{ cls.id }}, 'Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}', '{{ day_name(cls.day_of_week) }} Chiều', event)" title="Xem danh sách đăng ký">
+                        <button class="cal-detail-inline" onclick="openEnrollDetail({{ cls.id }}, 'Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}', '{{ day_name(cls.day_of_week) }} Chiều', event, {{ cls.day_of_week }}, 'afternoon', {{ cls.start_session }}, {{ cls.duration }}, {{ (cls.location or '')|tojson }})" title="Xem danh sách đăng ký">
                           <i class="bi bi-people-fill"></i> Chi tiết
                         </button>
                         {% else %}
@@ -628,7 +628,25 @@
         <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body p-0">
-        <div id="enrollDetailBody" style="padding:12px 16px;max-height:420px;overflow-y:auto;">
+        {% if teacher_room_select %}
+        <div id="enrollRoomArea" style="padding:12px 16px 10px;border-bottom:1.5px solid #E2E8F0;background:#F8FAFC;">
+          <div style="font-size:.78rem;font-weight:700;color:#0369A1;margin-bottom:6px;">
+            <i class="bi bi-geo-alt-fill me-1"></i>Phòng học
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <select id="enrollRoomSelect" class="form-select form-select-sm" style="font-size:.8rem;max-width:220px;">
+              <option value="">— Đang tải phòng trống —</option>
+            </select>
+            <button id="enrollRoomSaveBtn" class="btn btn-sm"
+                    style="background:#0EA5E9;color:#fff;border:none;border-radius:8px;font-size:.78rem;padding:4px 14px;white-space:nowrap;"
+                    onclick="saveEnrollRoom()">
+              <i class="bi bi-check2 me-1"></i>Lưu phòng
+            </button>
+            <span id="enrollRoomStatus" style="font-size:.75rem;color:#64748B;"></span>
+          </div>
+        </div>
+        {% endif %}
+        <div id="enrollDetailBody" style="padding:12px 16px;max-height:{% if teacher_room_select %}340px{% else %}420px{% endif %};overflow-y:auto;">
           <div class="text-center text-muted py-4">
             <i class="bi bi-hourglass-split" style="font-size:1.4rem;display:block;margin-bottom:8px;"></i>Đang tải…
           </div>
@@ -1259,12 +1277,35 @@ async function exportTKBTeacher(fmt) {
 }
 
 /* ── Enroll detail modal ── */
-async function openEnrollDetail(classId, classLabel, slotLabel, event) {
+let _enrollClassMeta = null;  // {id, day, session, start, duration, location}
+
+async function openEnrollDetail(classId, classLabel, slotLabel, event, day, ses, start, dur, location) {
   if (event) event.stopPropagation();
+  _enrollClassMeta = {id: classId, day, ses, start, dur, location: location || ''};
   document.getElementById('enrollDetailInfo').textContent = classLabel + ' · ' + slotLabel;
   document.getElementById('enrollDetailBody').innerHTML =
     '<div class="text-center text-muted py-4"><i class="bi bi-hourglass-split" style="font-size:1.4rem;display:block;margin-bottom:8px;"></i>Đang tải…</div>';
   new bootstrap.Modal(document.getElementById('enrollDetailModal')).show();
+  // Load room options if panel is visible
+  const roomArea = document.getElementById('enrollRoomArea');
+  if (roomArea && day) {
+    const sel    = document.getElementById('enrollRoomSelect');
+    const status = document.getElementById('enrollRoomStatus');
+    sel.innerHTML = '<option value="">— Đang tải —</option>';
+    status.textContent = location ? `Phòng hiện tại: ${location}` : 'Chưa xếp phòng';
+    try {
+      const res  = await fetch(`/api/available-rooms?day_of_week=${day}&session_type=${ses}&start_session=${start}&duration=${dur}&grade=0&exclude_class_id=${classId}`);
+      const data = await res.json();
+      let rooms = Array.isArray(data) ? data : (data.rooms || []);
+      sel.innerHTML = '<option value="">— Giữ nguyên / chưa chọn —</option>';
+      if (location && !rooms.includes(location)) rooms = [location, ...rooms];
+      rooms.forEach(r => {
+        const opt = new Option(r, r, false, r === location);
+        sel.appendChild(opt);
+      });
+      if (!rooms.length) sel.innerHTML = '<option value="">Không có phòng trống</option>';
+    } catch { sel.innerHTML = '<option value="">Lỗi tải phòng</option>'; }
+  }
   try {
     const res  = await fetch('/teacher/classes/' + classId + '/students');
     const data = await res.json();
@@ -1308,6 +1349,40 @@ async function openEnrollDetail(classId, classLabel, slotLabel, event) {
   } catch {
     document.getElementById('enrollDetailBody').innerHTML = '<p class="text-danger p-3">Lỗi kết nối.</p>';
   }
+}
+
+async function saveEnrollRoom() {
+  if (!_enrollClassMeta) return;
+  const sel    = document.getElementById('enrollRoomSelect');
+  const status = document.getElementById('enrollRoomStatus');
+  const btn    = document.getElementById('enrollRoomSaveBtn');
+  const room   = sel.value.trim();
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Đang lưu…';
+  try {
+    const res  = await fetch('/teacher/classes/' + _enrollClassMeta.id + '/assign-room', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({location: room || null})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _enrollClassMeta.location = room;
+      status.textContent = room ? `Đã lưu: ${room}` : 'Đã xóa phòng';
+      status.style.color = '#16A34A';
+      // Update badge on calendar
+      const badge = document.querySelector('.room-badge[data-class-id="' + _enrollClassMeta.id + '"]');
+      if (badge) badge.textContent = room || '';
+    } else {
+      status.textContent = data.error || 'Không thể lưu.';
+      status.style.color = '#EF4444';
+    }
+  } catch {
+    status.textContent = 'Lỗi kết nối.';
+    status.style.color = '#EF4444';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Lưu phòng';
 }
 </script>
 {% endblock %}

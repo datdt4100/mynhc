@@ -1075,6 +1075,28 @@ def teacher_dashboard():
             ).scalar()
             enrollment_counts[c.id] = cnt
 
+        # GVCN: find homeroom class for this teacher
+        homeroom_class = None
+        homeroom_students = []
+        enrolled_counts_by_student = {}
+        if teacher_row:
+            hroom = conn.execute(
+                select(homeroom_classes).where(homeroom_classes.c.gvcn_name == teacher_row.full_name)
+            ).fetchone()
+            if hroom:
+                homeroom_class = hroom
+                hs = conn.execute(
+                    select(students)
+                    .where(students.c.class_name == hroom.class_name)
+                    .order_by(students.c.full_name)
+                ).fetchall()
+                homeroom_students = hs
+                for s in hs:
+                    cnt = conn.execute(
+                        select(func.count()).where(enrollments.c.student_id == s.id)
+                    ).scalar()
+                    enrolled_counts_by_student[s.id] = cnt
+
     # Build schedule grid for Outlook-style calendar
     schedule = {}
     for c in teacher_classes:
@@ -1099,6 +1121,9 @@ def teacher_dashboard():
         schedule_constraint=schedule_constraint,
         teacher_view_enrollments=teacher_view_enrollments,
         teacher_room_select=teacher_room_select,
+        homeroom_class=homeroom_class,
+        homeroom_students=homeroom_students,
+        enrolled_counts_by_student=enrolled_counts_by_student,
         day_name=day_name,
         session_label=session_label,
     )
@@ -4016,6 +4041,125 @@ def teacher_class_assign_room(class_id):
         conn.execute(update(classes).where(classes.c.id == class_id).values(location=location))
     _bump(event_type="class", grade=cls.grade)
     return jsonify(ok=True)
+
+
+@app.route("/api/teacher/homeroom-students")
+@teacher_required
+def api_teacher_homeroom_students():
+    """Return homeroom students with enrollment counts for real-time refresh."""
+    teacher_id = session["user_id"]
+    with engine.connect() as conn:
+        teacher_row = conn.execute(select(teachers).where(teachers.c.id == teacher_id)).fetchone()
+        if not teacher_row:
+            return jsonify(ok=False, error="Không tìm thấy giáo viên"), 404
+        hroom = conn.execute(
+            select(homeroom_classes).where(homeroom_classes.c.gvcn_name == teacher_row.full_name)
+        ).fetchone()
+        if not hroom:
+            return jsonify(ok=False, error="Không phải GVCN"), 403
+        hs = conn.execute(
+            select(students)
+            .where(students.c.class_name == hroom.class_name)
+            .order_by(students.c.full_name)
+        ).fetchall()
+        result = []
+        for s in hs:
+            cnt = conn.execute(
+                select(func.count()).where(enrollments.c.student_id == s.id)
+            ).scalar()
+            result.append({
+                "id": s.id,
+                "full_name": _name_fmt(s.full_name),
+                "cccd": s.cccd,
+                "gender": s.gender or "—",
+                "enrolled_count": cnt,
+                "last_seen_at": s.last_seen_at,
+            })
+    return jsonify(ok=True, class_name=hroom.class_name, students=result)
+
+
+@app.route("/api/teacher/student/<int:student_id>/schedule")
+@teacher_required
+def api_teacher_student_schedule(student_id):
+    """Return student's enrolled schedule. Verifies student is in teacher's homeroom."""
+    teacher_id = session["user_id"]
+    with engine.connect() as conn:
+        teacher_row = conn.execute(select(teachers).where(teachers.c.id == teacher_id)).fetchone()
+        st = conn.execute(select(students).where(students.c.id == student_id)).fetchone()
+        if not st:
+            return jsonify(ok=False, error="Không tìm thấy học sinh"), 404
+        # verify homeroom ownership
+        hroom = conn.execute(
+            select(homeroom_classes).where(homeroom_classes.c.gvcn_name == teacher_row.full_name)
+        ).fetchone()
+        if not hroom or st.class_name != hroom.class_name:
+            return jsonify(ok=False, error="Không có quyền xem học sinh này"), 403
+        enrolled = conn.execute(
+            select(
+                classes.c.id.label("class_id"),
+                classes.c.grade, classes.c.day_of_week, classes.c.session_type,
+                classes.c.start_session, classes.c.duration, classes.c.subject, classes.c.location,
+                teachers.c.full_name.label("teacher_name"), teachers.c.subject_group,
+                enrollments.c.enrolled_at,
+            )
+            .join(enrollments, classes.c.id == enrollments.c.class_id)
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .where(enrollments.c.student_id == student_id)
+            .order_by(classes.c.day_of_week, classes.c.session_type, classes.c.start_session)
+        ).fetchall()
+    schedule = [{
+        "class_id": e.class_id,
+        "subject": e.subject or e.subject_group or "—",
+        "teacher": _name_fmt(e.teacher_name),
+        "day_label": day_name(e.day_of_week),
+        "session_type": e.session_type,
+        "session_label": "Sáng" if e.session_type == "morning" else "Chiều",
+        "start_session": e.start_session,
+        "end_session": e.start_session + e.duration - 1,
+        "location": e.location or "—",
+    } for e in enrolled]
+    return jsonify(ok=True, student={
+        "id": st.id, "full_name": _name_fmt(st.full_name),
+        "cccd": st.cccd, "class_name": st.class_name, "grade": st.grade,
+    }, schedule=schedule)
+
+
+@app.route("/api/teacher/student/<int:student_id>/log")
+@teacher_required
+def api_teacher_student_log(student_id):
+    """Return student activity log. Verifies student is in teacher's homeroom."""
+    teacher_id = session["user_id"]
+    with engine.connect() as conn:
+        teacher_row = conn.execute(select(teachers).where(teachers.c.id == teacher_id)).fetchone()
+        st = conn.execute(select(students).where(students.c.id == student_id)).fetchone()
+        if not st:
+            return jsonify(ok=False, error="Không tìm thấy học sinh"), 404
+        hroom = conn.execute(
+            select(homeroom_classes).where(homeroom_classes.c.gvcn_name == teacher_row.full_name)
+        ).fetchone()
+        if not hroom or st.class_name != hroom.class_name:
+            return jsonify(ok=False, error="Không có quyền"), 403
+        rows = conn.execute(
+            select(student_enroll_log, classes.c.day_of_week, classes.c.session_type,
+                   classes.c.start_session, classes.c.duration, classes.c.subject,
+                   teachers.c.full_name.label("teacher_name"), teachers.c.subject_group)
+            .outerjoin(classes, student_enroll_log.c.class_id == classes.c.id)
+            .outerjoin(teachers, classes.c.teacher_id == teachers.c.id)
+            .where(student_enroll_log.c.student_id == student_id)
+            .order_by(student_enroll_log.c.id.desc()).limit(200)
+        ).fetchall()
+    result = []
+    for r in rows:
+        subject = r.subject or r.subject_group or "—"
+        slot_label = (session_label(r.session_type, r.start_session, r.duration) + f" – {day_name(r.day_of_week)}") if r.day_of_week else "—"
+        result.append({
+            "action": _ENROLL_LABEL.get(r.action, r.action),
+            "subject": subject,
+            "teacher": _name_fmt(r.teacher_name) if r.teacher_name else "—",
+            "slot": slot_label,
+            "ts": r.ts,
+        })
+    return jsonify(ok=True, log=result)
 
 
 @app.route("/admin/classes/add-manual", methods=["POST"])

@@ -264,12 +264,74 @@
   .cal-cell { height: 60px; }
   .cal-subject { display: none; }
 }
+
+/* ── Main tab navigation ── */
+.main-tab-bar {
+  display: flex; gap: 4px; background: #fff;
+  border: 1.5px solid #E2E8F0; border-radius: 12px;
+  padding: 4px; width: fit-content;
+}
+.main-tab-btn {
+  padding: 8px 20px; border-radius: 9px; border: none;
+  font-size: .84rem; font-weight: 600; cursor: pointer;
+  background: transparent; color: #64748B; transition: all .15s;
+}
+.main-tab-btn.active {
+  background: linear-gradient(135deg, #0c4a6e, #0EA5E9);
+  color: #fff; box-shadow: 0 2px 8px rgba(14,165,233,.25);
+}
+
+/* ── Homeroom student table ── */
+.hm-table { font-size: .82rem; min-width: 520px; }
+.hm-table thead th {
+  background: linear-gradient(135deg, #9D174D 0%, #EC4899 60%, #F9A8D4 100%);
+  color: #fff; font-weight: 700; border: none; padding: 11px 10px;
+  white-space: nowrap; position: sticky; top: 0; z-index: 2;
+}
+.hm-table tbody tr:hover { background: rgba(252,231,243,.35); }
+.hm-table td { vertical-align: middle; padding: 9px 10px; }
+
+.hm-icon-btn {
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 7px; border: 1.5px solid; background: transparent; cursor: pointer;
+  font-size: .82rem; transition: all .12s; padding: 0;
+}
+.hm-icon-btn.btn-info   { color: #0E7490; border-color: #0E7490; }
+.hm-icon-btn.btn-info:hover   { background: #0E7490; color: #fff; }
+.hm-icon-btn.btn-purple { color: #7C3AED; border-color: #C4B5FD; }
+.hm-icon-btn.btn-purple:hover { background: #7C3AED; color: #fff; }
+
+.hm-sched-table { font-size: .8rem; width: 100%; border-collapse: collapse; }
+.hm-sched-table th { background: #F8FAFC; padding: 7px 10px; font-weight: 700; color: #475569; border-bottom: 1.5px solid #E2E8F0; white-space: nowrap; }
+.hm-sched-table td { padding: 8px 10px; border-bottom: 1px solid #F1F5F9; }
+.hm-sched-table tbody tr:hover { background: #FDF4FF; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="main-content">
   <div class="container-fluid px-3" style="max-width:1100px; margin:0 auto;">
+
+    {% if homeroom_class %}
+    <!-- Tab navigation (GVCN only) -->
+    <div class="d-flex align-items-center gap-3 mb-3 pt-1 flex-wrap">
+      <div class="main-tab-bar">
+        <button class="main-tab-btn active" id="main-tab-sched" onclick="switchMainTab('sched')">
+          <i class="bi bi-calendar-week me-1"></i>Đăng ký mở lớp
+        </button>
+        <button class="main-tab-btn" id="main-tab-hm" onclick="switchMainTab('hm')">
+          <i class="bi bi-people-fill me-1"></i>Quản Lý Học Sinh
+          <span id="hmStudentCount" class="badge ms-1" style="background:rgba(255,255,255,.25); color:inherit; font-size:.7rem; border-radius:10px; padding:2px 7px;">{{ homeroom_students | length }}</span>
+        </button>
+      </div>
+      <span style="font-size:.8rem; color:#9D174D; font-weight:600; background:#FDF2F8; border:1.5px solid #F9A8D4; border-radius:20px; padding:4px 12px;">
+        <i class="bi bi-person-hearts me-1"></i>GVCN – {{ homeroom_class.class_name }}
+      </span>
+    </div>
+    {% endif %}
+
+    <!-- ═══ PANE: Đăng ký mở lớp ═══ -->
+    <div id="pane-sched">
 
     <!-- Teacher info card -->
     <div class="d-flex align-items-center gap-3 flex-wrap mb-3 p-3 rounded-3"
@@ -491,6 +553,81 @@
       </div>
     </div>
 
+    </div>{# /pane-sched #}
+
+    {% if homeroom_class %}
+    <!-- ═══ PANE: Quản Lý Học Sinh ═══ -->
+    <div id="pane-hm" style="display:none;">
+      <div class="section-card mb-4" style="border-radius:16px; border:1.5px solid #F9A8D4;">
+        <div class="section-card-header" style="background:linear-gradient(90deg,#FDF2F8,#FCE7F3); border-bottom-color:#F9A8D4;">
+          <i class="bi bi-people-fill" style="color:#9D174D;"></i>
+          <span style="color:#9D174D;">Danh sách học sinh lớp {{ homeroom_class.class_name }}</span>
+          <span id="hmCountBadge" class="badge ms-1" style="background:#FCE7F3; color:#9D174D; border:1px solid #F9A8D4; font-size:.72rem; font-weight:700;">{{ homeroom_students | length }}</span>
+          <span class="ms-auto text-muted d-none d-md-inline" style="font-size:.75rem; font-weight:400;">
+            <i class="bi bi-arrow-repeat me-1"></i>Cập nhật theo thời gian thực
+          </span>
+        </div>
+        <!-- Search toolbar -->
+        <div style="padding:10px 16px; background:#FFF9FB; border-bottom:1.5px solid #F9A8D4; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <div style="position:relative; display:flex; align-items:center;">
+            <i class="bi bi-search" style="position:absolute; left:10px; color:#94A3B8; font-size:.82rem; pointer-events:none;"></i>
+            <input type="search" id="hmSearchInput" placeholder="Tìm tên, mã đăng nhập…"
+                   oninput="filterHmStudents()"
+                   style="padding:6px 10px 6px 30px; border:1.5px solid #F9A8D4; border-radius:8px; font-size:.8rem; background:#FFF; width:220px;">
+          </div>
+          <span class="ms-auto text-muted" style="font-size:.78rem;" id="hmSearchHint"></span>
+        </div>
+        <div style="overflow-x:auto; overflow-y:auto; max-height:560px;">
+          <table class="table hm-table mb-0" id="hmStudentTable">
+            <thead>
+              <tr>
+                <th style="width:38px;">STT</th>
+                <th>Họ và tên</th>
+                <th>Mã đăng nhập</th>
+                <th class="text-center">Giới tính</th>
+                <th class="text-center">Số môn ĐK</th>
+                <th class="text-center" style="width:80px;">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="hmStudentTbody">
+              {% for s in homeroom_students %}
+              <tr data-search="{{ s.full_name | lower }} {{ s.cccd }}">
+                <td class="text-muted" style="font-size:.72rem;">{{ loop.index }}</td>
+                <td class="fw-semibold" style="font-size:.85rem;">{{ s.full_name | name_fmt }}</td>
+                <td><code style="font-size:.76rem;">{{ s.cccd }}</code></td>
+                <td class="text-center">
+                  {% if s.gender == 'Nam' %}
+                  <span class="badge rounded-pill" style="background:#DBEAFE; color:#1D4ED8; font-size:.7rem;">Nam</span>
+                  {% elif s.gender == 'Nữ' %}
+                  <span class="badge rounded-pill" style="background:#FCE7F3; color:#9D174D; font-size:.7rem;">Nữ</span>
+                  {% else %}
+                  <span class="text-muted" style="font-size:.75rem;">—</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  {% set ec = enrolled_counts_by_student.get(s.id, 0) %}
+                  <span class="badge rounded-pill {% if ec == 0 %}bg-light text-muted border{% elif ec >= 5 %}bg-success{% else %}bg-warning text-dark{% endif %}"
+                        style="font-size:.7rem; min-width:28px;" data-student-enroll="{{ s.id }}">{{ ec }}</span>
+                </td>
+                <td class="text-center" style="white-space:nowrap;">
+                  <button class="hm-icon-btn btn-info" onclick="viewHmStudentDetail({{ s.id }}, '{{ s.full_name | name_fmt | e }}')" title="Xem môn đã đăng ký">
+                    <i class="bi bi-eye"></i>
+                  </button>
+                  <button class="hm-icon-btn btn-purple ms-1" onclick="viewHmStudentLog({{ s.id }}, '{{ s.full_name | name_fmt | e }}')" title="Lịch sử thao tác">
+                    <i class="bi bi-clock-history"></i>
+                  </button>
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="6" class="text-center text-muted py-5">Chưa có học sinh nào trong lớp {{ homeroom_class.class_name }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
   </div>
 </div>
 
@@ -611,6 +748,51 @@
     </div>
   </div>
 </div>
+
+{% if homeroom_class %}
+<!-- Homeroom: Student detail modal -->
+<div class="modal fade" id="hmDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#9D174D,#EC4899); border:none; padding:14px 20px;">
+        <div>
+          <h5 class="modal-title fw-bold text-white mb-0" id="hmDetailName">Chi tiết học sinh</h5>
+          <div id="hmDetailSub" style="font-size:.78rem; color:rgba(255,255,255,.75); margin-top:2px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="hmDetailLoading" class="text-center py-5 text-muted">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Đang tải...
+        </div>
+        <div id="hmDetailBody" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Homeroom: Student log modal -->
+<div class="modal fade" id="hmLogModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:580px;">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#5B21B6,#8B5CF6); border:none; padding:12px 18px;">
+        <div>
+          <h5 class="modal-title fw-bold text-white mb-0" style="font-size:.92rem;">
+            <i class="bi bi-clock-history me-2"></i>Lịch sử thao tác
+          </h5>
+          <div id="hmLogName" class="text-white" style="font-size:.78rem; opacity:.85; margin-top:2px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="hmLogBody" style="max-height:440px; overflow-y:auto; padding:14px 16px;">
+          <div class="text-center text-muted py-4"><i class="bi bi-hourglass-split" style="font-size:1.5rem; display:block; margin-bottom:8px;"></i>Đang tải…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -1384,5 +1566,161 @@ async function saveEnrollRoom() {
   btn.disabled = false;
   btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Lưu phòng';
 }
+
+{% if homeroom_class %}
+/* ══ GVCN: Tab switch ══ */
+function switchMainTab(tab) {
+  const showSched = tab === 'sched';
+  document.getElementById('pane-sched').style.display = showSched ? '' : 'none';
+  document.getElementById('pane-hm').style.display    = showSched ? 'none' : '';
+  document.getElementById('main-tab-sched').classList.toggle('active', showSched);
+  document.getElementById('main-tab-hm').classList.toggle('active', !showSched);
+  if (!showSched) refreshHmStudents();
+}
+
+/* ══ GVCN: Real-time refresh via SSE ══ */
+let _hmLastChange = 0;
+const _hmEvt = new EventSource('/stream/changes');
+_hmEvt.onmessage = function(e) {
+  try {
+    const d = JSON.parse(e.data);
+    if (d.t && d.t > _hmLastChange) {
+      _hmLastChange = d.t;
+      if (document.getElementById('pane-hm').style.display !== 'none') {
+        refreshHmStudents();
+      }
+    }
+  } catch {}
+};
+
+function refreshHmStudents() {
+  fetch('/api/teacher/homeroom-students')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) return;
+      const tbody = document.getElementById('hmStudentTbody');
+      if (!tbody) return;
+      const q = (document.getElementById('hmSearchInput')?.value || '').toLowerCase();
+      let html = '';
+      data.students.forEach((s, i) => {
+        const genderBadge = s.gender === 'Nam'
+          ? `<span class="badge rounded-pill" style="background:#DBEAFE;color:#1D4ED8;font-size:.7rem;">Nam</span>`
+          : s.gender === 'Nữ'
+          ? `<span class="badge rounded-pill" style="background:#FCE7F3;color:#9D174D;font-size:.7rem;">Nữ</span>`
+          : `<span class="text-muted" style="font-size:.75rem;">—</span>`;
+        const ec = s.enrolled_count;
+        const ecBadge = `<span class="badge rounded-pill ${ec===0?'bg-light text-muted border':ec>=5?'bg-success':'bg-warning text-dark'}" style="font-size:.7rem;min-width:28px;" data-student-enroll="${s.id}">${ec}</span>`;
+        const visible = !q || (s.full_name.toLowerCase().includes(q) || s.cccd.includes(q));
+        html += `<tr data-search="${s.full_name.toLowerCase()} ${s.cccd}" style="${visible?'':'display:none'}">
+          <td class="text-muted" style="font-size:.72rem;">${i+1}</td>
+          <td class="fw-semibold" style="font-size:.85rem;">${s.full_name}</td>
+          <td><code style="font-size:.76rem;">${s.cccd}</code></td>
+          <td class="text-center">${genderBadge}</td>
+          <td class="text-center">${ecBadge}</td>
+          <td class="text-center" style="white-space:nowrap;">
+            <button class="hm-icon-btn btn-info" onclick="viewHmStudentDetail(${s.id},'${s.full_name.replace(/'/g,"\\'")}')"><i class="bi bi-eye"></i></button>
+            <button class="hm-icon-btn btn-purple ms-1" onclick="viewHmStudentLog(${s.id},'${s.full_name.replace(/'/g,"\\'")}')"><i class="bi bi-clock-history"></i></button>
+          </td>
+        </tr>`;
+      });
+      tbody.innerHTML = html || `<tr><td colspan="6" class="text-center text-muted py-5">Chưa có học sinh nào</td></tr>`;
+      const total = data.students.length;
+      const cntEl = document.getElementById('hmCountBadge');
+      if (cntEl) cntEl.textContent = total;
+      const cntEl2 = document.getElementById('hmStudentCount');
+      if (cntEl2) cntEl2.textContent = total;
+    }).catch(() => {});
+}
+
+function filterHmStudents() {
+  const q = (document.getElementById('hmSearchInput')?.value || '').toLowerCase();
+  let visible = 0;
+  document.querySelectorAll('#hmStudentTbody tr[data-search]').forEach(tr => {
+    const show = !q || tr.dataset.search.includes(q);
+    tr.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const hint = document.getElementById('hmSearchHint');
+  if (hint) hint.textContent = q ? `${visible} kết quả` : '';
+}
+
+/* ══ GVCN: Student detail modal ══ */
+function viewHmStudentDetail(studentId, studentName) {
+  document.getElementById('hmDetailName').textContent = studentName;
+  document.getElementById('hmDetailSub').textContent = '';
+  document.getElementById('hmDetailLoading').style.display = 'block';
+  document.getElementById('hmDetailBody').style.display = 'none';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('hmDetailModal')).show();
+  fetch('/api/teacher/student/' + studentId + '/schedule')
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('hmDetailLoading').style.display = 'none';
+      const body = document.getElementById('hmDetailBody');
+      body.style.display = 'block';
+      if (!data.ok) { body.innerHTML = '<p class="text-danger p-3">Lỗi tải dữ liệu.</p>'; return; }
+      document.getElementById('hmDetailSub').textContent = `Lớp ${data.student.class_name} · Khối ${data.student.grade} · ${data.student.cccd}`;
+      if (!data.schedule.length) {
+        body.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-calendar-x" style="font-size:1.8rem;display:block;margin-bottom:8px;"></i>Học sinh chưa đăng ký môn nào.</div>';
+        return;
+      }
+      let html = `<p class="text-muted mb-2 px-3 pt-3" style="font-size:.78rem;"><strong>${data.schedule.length}</strong> môn đã đăng ký</p>
+        <div style="overflow:auto; max-height:400px; padding:0 12px 12px;">
+        <table class="hm-sched-table"><thead><tr>
+          <th>Môn học</th><th>Giáo viên</th><th>Ngày</th><th>Buổi</th><th>Tiết</th><th>Phòng</th>
+        </tr></thead><tbody>`;
+      data.schedule.forEach(c => {
+        html += `<tr>
+          <td class="fw-semibold">${c.subject}</td>
+          <td>${c.teacher}</td>
+          <td style="white-space:nowrap;">${c.day_label}</td>
+          <td><span class="badge ${c.session_type==='morning'?'bg-warning text-dark':'bg-primary'}" style="font-size:.68rem;">${c.session_label}</span></td>
+          <td>${c.start_session}${c.end_session>c.start_session?'–'+c.end_session:''}</td>
+          <td style="color:#64748B;">${c.location}</td>
+        </tr>`;
+      });
+      body.innerHTML = html + '</tbody></table></div>';
+    })
+    .catch(() => {
+      document.getElementById('hmDetailLoading').style.display = 'none';
+      document.getElementById('hmDetailBody').innerHTML = '<p class="text-danger p-3">Lỗi kết nối.</p>';
+      document.getElementById('hmDetailBody').style.display = 'block';
+    });
+}
+
+/* ══ GVCN: Student log modal ══ */
+function viewHmStudentLog(studentId, studentName) {
+  document.getElementById('hmLogName').textContent = studentName;
+  const body = document.getElementById('hmLogBody');
+  body.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-hourglass-split" style="font-size:1.5rem;display:block;margin-bottom:8px;"></i>Đang tải…</div>';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('hmLogModal')).show();
+  fetch('/api/teacher/student/' + studentId + '/log')
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok || !d.log.length) {
+        body.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-calendar-x" style="font-size:1.8rem;display:block;margin-bottom:8px;"></i>Chưa có lịch sử.</div>';
+        return;
+      }
+      const ACTION_COLOR = { 'Đăng ký': '#059669', 'Hủy đăng ký': '#EF4444' };
+      let html = '<table style="width:100%;border-collapse:collapse;font-size:.82rem;">'
+        + '<thead><tr style="background:#F8FAFC;font-size:.74rem;color:#64748B;">'
+        + '<th style="padding:7px 8px;">Hành động</th><th style="padding:7px 8px;">Môn học</th>'
+        + '<th style="padding:7px 8px;">Giáo viên</th><th style="padding:7px 8px;">Giờ học</th>'
+        + '<th style="padding:7px 8px;white-space:nowrap;">Thời điểm</th></tr></thead><tbody>';
+      d.log.forEach((r, i) => {
+        const bg = i % 2 ? '#FAFAFA' : '#fff';
+        const col = ACTION_COLOR[r.action] || '#64748B';
+        html += `<tr style="background:${bg};border-bottom:1px solid #F1F5F9;">
+          <td style="padding:7px 8px;"><span style="color:${col};font-weight:600;">${r.action}</span></td>
+          <td style="padding:7px 8px;">${r.subject}</td>
+          <td style="padding:7px 8px;color:#475569;">${r.teacher}</td>
+          <td style="padding:7px 8px;white-space:nowrap;color:#475569;font-size:.78rem;">${r.slot}</td>
+          <td style="padding:7px 8px;font-size:.74rem;color:#94A3B8;white-space:nowrap;">${r.ts ? r.ts.slice(0,19) : '—'}</td>
+        </tr>`;
+      });
+      body.innerHTML = html + '</tbody></table>';
+    })
+    .catch(() => { body.innerHTML = '<div class="text-center text-muted py-4">Không thể tải dữ liệu.</div>'; });
+}
+{% endif %}
 </script>
 {% endblock %}

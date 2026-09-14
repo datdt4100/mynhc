@@ -1134,6 +1134,7 @@ def teacher_dashboard():
         homeroom_class=homeroom_class,
         homeroom_students=homeroom_students,
         enrolled_counts_by_student=enrolled_counts_by_student,
+        gvcn_col_settings=get_gvcn_col_settings(),
         day_name=day_name,
         session_label=session_label,
     )
@@ -2622,6 +2623,7 @@ def admin_index():
         homeroom_list=homeroom_list,
         class_stats=class_stats,
         homeroom_map=homeroom_map,
+        gvcn_col_settings=get_gvcn_col_settings(),
         room_count=room_count,
         busy_room_count=busy_room_count,
         subject_groups=subject_groups,
@@ -3203,6 +3205,199 @@ def admin_homeroom_toggle_student_tab_all():
     with engine.begin() as conn:
         conn.execute(update(homeroom_classes).values(show_student_tab=new_val))
     return jsonify(ok=True, enabled=bool(new_val))
+
+
+_GVCN_COL_DEFAULTS = {
+    "gender": True,
+    "dob": False,
+    "email": False,
+    "status": True,
+    "enrolled_count": True,
+    "schedule": True,
+}
+
+def get_gvcn_col_settings():
+    import json as _json
+    raw = get_setting("gvcn_visible_columns", None)
+    if raw:
+        try:
+            d = _json.loads(raw)
+            return {k: d.get(k, v) for k, v in _GVCN_COL_DEFAULTS.items()}
+        except Exception:
+            pass
+    return dict(_GVCN_COL_DEFAULTS)
+
+
+@app.route("/admin/homeroom/column-settings", methods=["POST"])
+@admin_required
+def admin_homeroom_column_settings():
+    import json as _json
+    data = request.get_json(force=True)
+    cols = {k: bool(data.get(k, _GVCN_COL_DEFAULTS[k])) for k in _GVCN_COL_DEFAULTS}
+    set_setting("gvcn_visible_columns", _json.dumps(cols))
+    return jsonify(ok=True, cols=cols)
+
+
+@app.route("/api/teacher/homeroom-students/export")
+@teacher_required
+def api_teacher_homeroom_export():
+    """Export homeroom student list as Excel per admin-configured columns."""
+    import json as _json
+    from openpyxl import Workbook as _WB
+    from openpyxl.styles import Font as _Font, PatternFill as _PF, Alignment as _Align, Border as _Border, Side as _Side
+    from io import BytesIO as _BIO
+
+    teacher_id = session["user_id"]
+    cols = get_gvcn_col_settings()
+
+    with engine.connect() as conn:
+        teacher_row = conn.execute(select(teachers).where(teachers.c.id == teacher_id)).fetchone()
+        if not teacher_row:
+            return jsonify(ok=False, error="Không tìm thấy giáo viên"), 404
+        hroom = conn.execute(
+            select(homeroom_classes).where(and_(
+                homeroom_classes.c.gvcn_name == teacher_row.full_name,
+                homeroom_classes.c.show_student_tab == 1,
+            ))
+        ).fetchone()
+        if not hroom:
+            return jsonify(ok=False, error="Không có quyền"), 403
+
+        hs = conn.execute(
+            select(students).where(students.c.class_name == hroom.class_name)
+            .order_by(students.c.full_name)
+        ).fetchall()
+
+        # Enrollment details per student
+        enroll_details = {}
+        enroll_counts = {}
+        if cols["schedule"] or cols["enrolled_count"]:
+            for s in hs:
+                rows = conn.execute(
+                    select(enrollments, classes, teachers.c.full_name.label("teacher_name"))
+                    .join(classes, enrollments.c.class_id == classes.c.id)
+                    .join(teachers, classes.c.teacher_id == teachers.c.id)
+                    .where(enrollments.c.student_id == s.id)
+                    .order_by(classes.c.day_of_week, classes.c.start_session)
+                ).fetchall()
+                enroll_details[s.id] = rows
+                enroll_counts[s.id] = len(rows)
+
+    wb = _WB()
+    HDR_FILL = _PF(patternType="solid", fgColor="1D4ED8")
+    HDR_FONT = _Font(bold=True, color="FFFFFF", size=10)
+    SUB_FILL = _PF(patternType="solid", fgColor="DBEAFE")
+    SUB_FONT = _Font(bold=True, color="1D4ED8", size=10)
+    thin = _Border(
+        left=_Side(style="thin", color="D1D5DB"),
+        right=_Side(style="thin", color="D1D5DB"),
+        top=_Side(style="thin", color="D1D5DB"),
+        bottom=_Side(style="thin", color="D1D5DB"),
+    )
+    DAY_NAMES = {1:"Thứ 2",2:"Thứ 3",3:"Thứ 4",4:"Thứ 5",5:"Thứ 6",6:"Thứ 7",7:"Chủ nhật"}
+
+    # ── Sheet 1: Danh sách học sinh ──────────────────────────────────────
+    ws1 = wb.active
+    ws1.title = "Danh sách HS"
+    title_row = [f"Danh sách học sinh lớp {hroom.class_name} — GVCN: {hroom.gvcn_name}"]
+    ws1.append(title_row)
+    ws1.merge_cells(start_row=1, start_column=1, end_row=1, end_column=9)
+    ws1["A1"].font = _Font(bold=True, size=12, color="1D4ED8")
+    ws1["A1"].alignment = _Align(horizontal="center")
+    ws1.append([])
+
+    hdrs = ["STT", "Họ và tên"]
+    if cols["gender"]:        hdrs.append("Giới tính")
+    if cols["dob"]:           hdrs.append("Ngày sinh")
+    if cols["email"]:         hdrs.append("Email")
+    if cols["status"]:        hdrs.append("Trạng thái TK")
+    if cols["enrolled_count"]: hdrs.append("Số môn ĐK")
+    ws1.append(hdrs)
+    hdr_row = 3
+    for ci, _ in enumerate(hdrs, 1):
+        c = ws1.cell(hdr_row, ci)
+        c.fill = HDR_FILL; c.font = HDR_FONT
+        c.alignment = _Align(horizontal="center", vertical="center")
+        c.border = thin
+
+    for i, s in enumerate(hs, 1):
+        row = [i, _name_fmt(s.full_name)]
+        if cols["gender"]:        row.append(s.gender or "")
+        if cols["dob"]:           row.append(s.dob or "")
+        if cols["email"]:         row.append(s.email or "")
+        if cols["status"]:
+            row.append("Đã kích hoạt" if (s.password_hash and not s.is_first_login) else "Chưa kích hoạt")
+        if cols["enrolled_count"]: row.append(enroll_counts.get(s.id, 0))
+        ws1.append(row)
+        for ci in range(1, len(row)+1):
+            c = ws1.cell(ws1.max_row, ci)
+            c.border = thin
+            c.alignment = _Align(vertical="center")
+            if i % 2 == 0:
+                c.fill = _PF(patternType="solid", fgColor="F0F9FF")
+
+    ws1.column_dimensions["A"].width = 5
+    ws1.column_dimensions["B"].width = 28
+    for ci in range(3, len(hdrs)+1):
+        ws1.column_dimensions[ws1.cell(hdr_row, ci).column_letter].width = 18
+
+    # ── Sheet 2: Chi tiết đăng ký ────────────────────────────────────────
+    if cols["schedule"]:
+        ws2 = wb.create_sheet("Chi tiết đăng ký")
+        ws2.append([f"Chi tiết đăng ký môn học — Lớp {hroom.class_name}"])
+        ws2.merge_cells(start_row=1, start_column=1, end_row=1, end_column=8)
+        ws2["A1"].font = _Font(bold=True, size=12, color="1D4ED8")
+        ws2["A1"].alignment = _Align(horizontal="center")
+        ws2.append([])
+
+        hdrs2 = ["STT", "Họ và tên", "Môn học", "Giáo viên", "Thứ", "Buổi", "Tiết BĐ", "Phòng"]
+        ws2.append(hdrs2)
+        for ci, _ in enumerate(hdrs2, 1):
+            c = ws2.cell(3, ci)
+            c.fill = HDR_FILL; c.font = HDR_FONT
+            c.alignment = _Align(horizontal="center", vertical="center")
+            c.border = thin
+
+        row_num = 4
+        stt = 0
+        prev_name = None
+        for s in hs:
+            details = enroll_details.get(s.id, [])
+            if not details:
+                continue
+            name = _name_fmt(s.full_name)
+            for d in details:
+                stt += 1
+                buoi = "Sáng" if d.session_type == "morning" else "Chiều"
+                row_data = [
+                    stt, name, d.subject, d.teacher_name,
+                    DAY_NAMES.get(d.day_of_week, d.day_of_week),
+                    buoi, d.start_session, d.location or ""
+                ]
+                ws2.append(row_data)
+                fill = _PF(patternType="solid", fgColor="F0F9FF") if name == prev_name else None
+                for ci, val in enumerate(row_data, 1):
+                    c = ws2.cell(row_num, ci)
+                    c.border = thin
+                    c.alignment = _Align(vertical="center")
+                    if name != prev_name:
+                        c.fill = _PF(patternType="solid", fgColor="EFF6FF")
+                        c.font = _Font(bold=(ci == 2))
+                prev_name = name
+                row_num += 1
+
+        for ci, w in zip("ABCDEFGH", [5, 28, 18, 26, 8, 7, 8, 16]):
+            ws2.column_dimensions[ci].width = w
+
+    buf = _BIO()
+    wb.save(buf)
+    buf.seek(0)
+    import unicodedata as _ud
+    safe_class = _ud.normalize("NFC", hroom.class_name)
+    filename = f"DanhSach_{safe_class}.xlsx"
+    from flask import send_file as _sf
+    return _sf(buf, as_attachment=True, download_name=filename,
+               mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.route("/admin/homeroom/template")

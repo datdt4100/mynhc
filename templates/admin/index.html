@@ -723,6 +723,12 @@
                  onchange="toggleAllGVCNStudentTab(this)"
                  style="width:2.4em;height:1.25em;cursor:pointer;">
         </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold"
+                onclick="openGVCNColSettings()"
+                style="border-radius:7px;font-size:.75rem;padding:3px 9px;"
+                title="Điều chỉnh cột thông tin GVCN được xem">
+          <i class="bi bi-sliders me-1"></i>Điều chỉnh
+        </button>
       </div>
       <form method="POST" action="{{ url_for('admin_homeroom_clear') }}" class="mb-0">
         <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px;font-size:.78rem;"
@@ -799,6 +805,56 @@
     <div class="p-3 text-muted" style="font-size:.82rem;"><i class="bi bi-info-circle me-1"></i>Chưa có dữ liệu GVCN. Upload file Excel để thêm.</div>
     {% endif %}
   </div>
+
+<!-- ════ GVCN Column Settings Modal ════ -->
+<div class="modal fade" id="gvcnColModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+    <div class="modal-content" style="border-radius:14px;border:none;box-shadow:0 8px 32px rgba(0,0,0,.15);">
+      <div class="modal-header" style="background:#1D4ED8;border-radius:14px 14px 0 0;padding:14px 20px;">
+        <h6 class="modal-title text-white fw-bold mb-0"><i class="bi bi-sliders me-2"></i>Điều chỉnh cột GVCN được xem</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:20px 24px;">
+        <p class="text-muted mb-3" style="font-size:.78rem;">Các cột được bật sẽ hiển thị trong trang quản lý học sinh của GVCN và được phép tải về Excel.</p>
+        <div class="d-flex flex-column gap-2">
+          {% set cols = gvcn_col_settings %}
+          <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+            <span style="font-size:.85rem;font-weight:600;color:#374151;"><i class="bi bi-person me-2 text-primary"></i>Họ và tên</span>
+            <span class="badge" style="background:#E5E7EB;color:#6B7280;font-size:.7rem;">Luôn hiển thị</span>
+          </div>
+          {% for col_key, col_label, col_icon in [
+              ('gender','Giới tính','bi-gender-ambiguous'),
+              ('dob','Ngày sinh','bi-calendar3'),
+              ('email','Email','bi-envelope'),
+              ('status','Trạng thái tài khoản','bi-shield-check'),
+              ('enrolled_count','Số môn đăng ký','bi-book'),
+              ('schedule','Chi tiết lịch học (Sheet 2)','bi-table'),
+          ] %}
+          <div class="d-flex justify-content-between align-items-center py-2 {% if not loop.last %}border-bottom{% endif %}">
+            <label for="gvcnCol_{{ col_key }}" class="mb-0" style="font-size:.85rem;color:#374151;cursor:pointer;">
+              <i class="bi {{ col_icon }} me-2 text-primary"></i>{{ col_label }}
+            </label>
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" role="switch" id="gvcnCol_{{ col_key }}"
+                     data-col="{{ col_key }}"
+                     {{ 'checked' if cols.get(col_key, False) else '' }}
+                     style="width:2.2em;height:1.15em;cursor:pointer;">
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer" style="padding:12px 20px;border-top:1px solid #E5E7EB;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+        <button class="btn btn-sm fw-semibold text-white" id="btnSaveGVCNCols"
+                onclick="saveGVCNColSettings()"
+                style="background:#1D4ED8;border:none;border-radius:7px;">
+          <i class="bi bi-check2 me-1"></i>Lưu cài đặt
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
   {% set teacher_groups = teacher_list | rejectattr('subject_group', 'equalto', '') | map(attribute='subject_group') | unique | sort | list %}
   <div class="section-card">
@@ -2439,6 +2495,36 @@ function toggleSideNav(navId, btn) {
   const open = nav.classList.toggle('nav-open');
   btn.classList.toggle('active', open);
   btn.querySelector('i').className = open ? 'bi bi-layout-sidebar-reverse' : 'bi bi-layout-sidebar';
+}
+
+function openGVCNColSettings() {
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('gvcnColModal')).show();
+}
+
+async function saveGVCNColSettings() {
+  const btn = document.getElementById('btnSaveGVCNCols');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Đang lưu…';
+  const cols = {};
+  document.querySelectorAll('#gvcnColModal input[data-col]').forEach(cb => {
+    cols[cb.dataset.col] = cb.checked;
+  });
+  try {
+    const res = await fetch('{{ url_for("admin_homeroom_column_settings") }}', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(cols)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('gvcnColModal')).hide();
+      showAlert('Đã lưu cài đặt cột.', 'success');
+    } else {
+      showAlert(data.error || 'Lỗi lưu cài đặt.', 'error');
+    }
+  } catch { showAlert('Lỗi kết nối.', 'error'); }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Lưu cài đặt';
 }
 
 async function toggleAllGVCNStudentTab(checkbox) {

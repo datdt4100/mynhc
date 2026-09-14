@@ -3117,22 +3117,44 @@ def admin_homeroom_upload():
     try:
         wb = openpyxl.load_workbook(f, data_only=True)
         ws = wb.active
-        rows = list(ws.iter_rows(min_row=2, values_only=True))
+        all_rows = list(ws.iter_rows(min_row=1, values_only=True))
     except Exception:
         flash("Không đọc được file Excel.", "error")
         return redirect(url_for("admin_index") + "#gvcn")
 
+    # Detect column positions by header names (row 1)
+    # Fallback to positional detection if headers not found
+    _lop_idx = _gvcn_idx = _to_idx = None
+    if all_rows:
+        header_row = [str(v).strip().lower() if v else "" for v in all_rows[0]]
+        for i, h in enumerate(header_row):
+            if _lop_idx is None and ("lớp" in h or "class" in h):
+                _lop_idx = i
+            if _gvcn_idx is None and ("gvcn" in h or "họ và tên" in h or "tên gvcn" in h or "giáo viên" in h):
+                _gvcn_idx = i
+            if _to_idx is None and ("tổ" in h or "bộ môn" in h or "môn" in h):
+                _to_idx = i
+    _has_headers = _lop_idx is not None and _gvcn_idx is not None
+    data_start = 2 if _has_headers else 1  # skip header row if found
+    rows = all_rows[data_start - 1:]
+
     inserted = updated = 0
     with engine.begin() as conn:
         for row in rows:
-            if not row or not row[0]:
+            if not row or not any(row):
                 continue
-            # Detect format: if col A is a number (STT), use col B=Lớp, col D=GVCN, col E=TổBM
-            if isinstance(row[0], (int, float)):
+            if _has_headers:
+                # Header-based extraction (most reliable)
+                class_name    = str(row[_lop_idx]).strip() if _lop_idx < len(row) and row[_lop_idx] else ""
+                gvcn_name     = str(row[_gvcn_idx]).strip() if _gvcn_idx < len(row) and row[_gvcn_idx] else ""
+                subject_group = str(row[_to_idx]).strip() if _to_idx is not None and _to_idx < len(row) and row[_to_idx] else ""
+            elif isinstance(row[0], (int, float)):
+                # STT-prefixed positional: A=STT, B=Lớp, C=skip, D=GVCN, E=Tổ
                 class_name    = str(row[1]).strip() if len(row) > 1 and row[1] else ""
                 gvcn_name     = str(row[3]).strip() if len(row) > 3 and row[3] else ""
                 subject_group = str(row[4]).strip() if len(row) > 4 and row[4] else ""
             else:
+                # Simple positional: A=Lớp, B=GVCN, C=Tổ
                 class_name    = str(row[0]).strip()
                 gvcn_name     = str(row[1]).strip() if len(row) > 1 and row[1] else ""
                 subject_group = str(row[2]).strip() if len(row) > 2 and row[2] else ""
@@ -3301,7 +3323,7 @@ def api_teacher_homeroom_export():
                 enroll_counts[r.student_id] = enroll_counts.get(r.student_id, 0) + 1
 
     # ── Style helpers ────────────────────────────────────────────────────
-    DAY = {1:"Thứ 2",2:"Thứ 3",3:"Thứ 4",4:"Thứ 5",5:"Thứ 6",6:"Thứ 7",7:"CN"}
+    DAY = {2:"Thứ 2", 3:"Thứ 3", 4:"Thứ 4", 5:"Thứ 5", 6:"Thứ 6", 7:"Thứ 7"}
     def _thin_border(color="D1D5DB"):
         s = _Side(style="thin", color=color)
         return _Border(left=s, right=s, top=s, bottom=s)

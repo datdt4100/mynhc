@@ -3456,7 +3456,9 @@ def api_teacher_homeroom_export():
     wb.save(buf)
     buf.seek(0)
     import unicodedata as _ud
-    filename = f"DanhSach_{_ud.normalize('NFC', hroom.class_name)}.xlsx"
+    from datetime import datetime as _dt
+    _ts = _dt.now().strftime("%Y%m%d_%H%M")
+    filename = f"DanhSach_{_ud.normalize('NFC', hroom.class_name)}_{_ts}.xlsx"
     from flask import send_file as _sf
     return _sf(buf, as_attachment=True, download_name=filename,
                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

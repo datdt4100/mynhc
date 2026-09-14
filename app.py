@@ -231,6 +231,16 @@ student_enroll_log = Table(
 # DB init
 # ---------------------------------------------------------------------------
 
+from sqlalchemy import Index as _Index
+_Index("ix_enrollments_student_id", enrollments.c.student_id)
+_Index("ix_enrollments_class_id",   enrollments.c.class_id)
+_Index("ix_students_class_name",    students.c.class_name)
+_Index("ix_students_grade",         students.c.grade)
+_Index("ix_classes_teacher_id",     classes.c.teacher_id)
+_Index("ix_classes_is_published",   classes.c.is_published)
+_Index("ix_classes_grade",          classes.c.grade)
+_Index("ix_student_enroll_log_student_id", student_enroll_log.c.student_id)
+
 def init_db():
     metadata.create_all(engine)
     with engine.connect() as conn:
@@ -1101,11 +1111,14 @@ def teacher_dashboard():
                     .order_by(students.c.full_name)
                 ).fetchall()
                 homeroom_students = hs
-                for s in hs:
-                    cnt = conn.execute(
-                        select(func.count()).where(enrollments.c.student_id == s.id)
-                    ).scalar()
-                    enrolled_counts_by_student[s.id] = cnt
+                if hs:
+                    _stu_ids = [s.id for s in hs]
+                    _cnt_rows = conn.execute(
+                        select(enrollments.c.student_id, func.count().label("cnt"))
+                        .where(enrollments.c.student_id.in_(_stu_ids))
+                        .group_by(enrollments.c.student_id)
+                    ).fetchall()
+                    enrolled_counts_by_student = {r.student_id: r.cnt for r in _cnt_rows}
 
     # Build schedule grid for Outlook-style calendar
     schedule = {}
@@ -2539,20 +2552,21 @@ def api_room_schedule():
 @admin_required
 def admin_index():
     with engine.connect() as conn:
-        teacher_count = conn.execute(select(func.count()).select_from(teachers)).scalar()
-        student_count = conn.execute(select(func.count()).select_from(students)).scalar()
-        class_count = conn.execute(select(func.count()).select_from(classes)).scalar()
-        enrollment_count = conn.execute(select(func.count()).select_from(enrollments)).scalar()
-        teacher_active = conn.execute(
-            select(func.count()).select_from(teachers).where(
-                and_(teachers.c.is_first_login == 0, teachers.c.password_hash.isnot(None))
-            )
-        ).scalar()
-        student_active = conn.execute(
-            select(func.count()).select_from(students).where(
-                and_(students.c.is_first_login == 0, students.c.password_hash.isnot(None))
-            )
-        ).scalar()
+        _counts = conn.execute(text("""
+            SELECT
+                (SELECT COUNT(*) FROM teachers) as teacher_count,
+                (SELECT COUNT(*) FROM students)  as student_count,
+                (SELECT COUNT(*) FROM classes)   as class_count,
+                (SELECT COUNT(*) FROM enrollments) as enrollment_count,
+                (SELECT COUNT(*) FROM teachers WHERE is_first_login=0 AND password_hash IS NOT NULL) as teacher_active,
+                (SELECT COUNT(*) FROM students  WHERE is_first_login=0 AND password_hash IS NOT NULL) as student_active
+        """)).fetchone()
+        teacher_count   = _counts.teacher_count
+        student_count   = _counts.student_count
+        class_count     = _counts.class_count
+        enrollment_count = _counts.enrollment_count
+        teacher_active  = _counts.teacher_active
+        student_active  = _counts.student_active
 
         teacher_list = conn.execute(
             select(teachers).order_by(teachers.c.full_name)
@@ -3836,12 +3850,11 @@ def admin_class_reg():
             .order_by(teachers.c.subject_group, teachers.c.full_name, classes.c.start_session)
         ).fetchall()
 
-        enrollment_counts = {}
-        for c in all_classes_raw:
-            cnt = conn.execute(
-                select(func.count()).where(enrollments.c.class_id == c.id)
-            ).scalar()
-            enrollment_counts[c.id] = cnt
+        _ecnt_rows = conn.execute(
+            select(enrollments.c.class_id, func.count().label("cnt"))
+            .group_by(enrollments.c.class_id)
+        ).fetchall()
+        enrollment_counts = {r.class_id: r.cnt for r in _ecnt_rows}
 
     unassigned_classes = sorted(
         [c for c in all_classes_raw if c.teacher_cccd == _UNASSIGNED_CCCD],
@@ -4469,11 +4482,18 @@ def api_teacher_homeroom_students():
             .where(students.c.class_name == hroom.class_name)
             .order_by(students.c.full_name)
         ).fetchall()
+        _cnt_map = {}
+        if hs:
+            _stu_ids = [s.id for s in hs]
+            _cnt_rows = conn.execute(
+                select(enrollments.c.student_id, func.count().label("cnt"))
+                .where(enrollments.c.student_id.in_(_stu_ids))
+                .group_by(enrollments.c.student_id)
+            ).fetchall()
+            _cnt_map = {r.student_id: r.cnt for r in _cnt_rows}
         result = []
         for s in hs:
-            cnt = conn.execute(
-                select(func.count()).where(enrollments.c.student_id == s.id)
-            ).scalar()
+            cnt = _cnt_map.get(s.id, 0)
             result.append({
                 "id": s.id,
                 "full_name": _name_fmt(s.full_name),
@@ -5281,12 +5301,11 @@ def admin_enrollment():
                       classes.c.session_type, classes.c.start_session)
         ).fetchall()
 
-        enrollment_counts = {}
-        for c in published_classes:
-            cnt = conn.execute(
-                select(func.count()).where(enrollments.c.class_id == c.id)
-            ).scalar()
-            enrollment_counts[c.id] = cnt
+        _ecnt_rows = conn.execute(
+            select(enrollments.c.class_id, func.count().label("cnt"))
+            .group_by(enrollments.c.class_id)
+        ).fetchall()
+        enrollment_counts = {r.class_id: r.cnt for r in _ecnt_rows}
 
         student_list_raw = conn.execute(
             select(students).order_by(students.c.grade, students.c.class_name, students.c.full_name)

@@ -3241,10 +3241,14 @@ def admin_homeroom_column_settings():
 @app.route("/api/teacher/homeroom-students/export")
 @teacher_required
 def api_teacher_homeroom_export():
-    """Export homeroom student list as Excel per admin-configured columns."""
-    import json as _json
+    """Export homeroom student list as Excel.
+    Sheet 1: student overview.
+    Sheet 2..N: one sheet per subject, grouped by class section with header row.
+    """
     from openpyxl import Workbook as _WB
     from openpyxl.styles import Font as _Font, PatternFill as _PF, Alignment as _Align, Border as _Border, Side as _Side
+    from openpyxl.utils import get_column_letter as _gcl
+    from collections import defaultdict as _dd
     from io import BytesIO as _BIO
 
     teacher_id = session["user_id"]
@@ -3263,138 +3267,195 @@ def api_teacher_homeroom_export():
         if not hroom:
             return jsonify(ok=False, error="Không có quyền"), 403
 
-        hs = conn.execute(
+        hs_list = conn.execute(
             select(students).where(students.c.class_name == hroom.class_name)
             .order_by(students.c.full_name)
         ).fetchall()
+        hs_by_id = {s.id: s for s in hs_list}
 
-        # Enrollment details per student
-        enroll_details = {}
-        enroll_counts = {}
-        if cols["schedule"] or cols["enrolled_count"]:
-            for s in hs:
-                rows = conn.execute(
-                    select(enrollments, classes, teachers.c.full_name.label("teacher_name"))
-                    .join(classes, enrollments.c.class_id == classes.c.id)
-                    .join(teachers, classes.c.teacher_id == teachers.c.id)
-                    .where(enrollments.c.student_id == s.id)
-                    .order_by(classes.c.day_of_week, classes.c.start_session)
-                ).fetchall()
-                enroll_details[s.id] = rows
-                enroll_counts[s.id] = len(rows)
+        # All enrollments for homeroom students, with class + teacher info
+        all_enrolls = []
+        enroll_counts = {s.id: 0 for s in hs_list}
+        if hs_list:
+            student_ids = [s.id for s in hs_list]
+            rows = conn.execute(
+                select(
+                    enrollments.c.student_id,
+                    classes.c.id.label("class_id"),
+                    classes.c.subject,
+                    classes.c.day_of_week,
+                    classes.c.session_type,
+                    classes.c.start_session,
+                    classes.c.duration,
+                    classes.c.location,
+                    teachers.c.full_name.label("teacher_name"),
+                )
+                .join(classes, enrollments.c.class_id == classes.c.id)
+                .join(teachers, classes.c.teacher_id == teachers.c.id)
+                .where(enrollments.c.student_id.in_(student_ids))
+                .order_by(classes.c.subject, classes.c.day_of_week, classes.c.start_session)
+            ).fetchall()
+            for r in rows:
+                all_enrolls.append(r)
+                enroll_counts[r.student_id] = enroll_counts.get(r.student_id, 0) + 1
+
+    # ── Style helpers ────────────────────────────────────────────────────
+    DAY = {1:"Thứ 2",2:"Thứ 3",3:"Thứ 4",4:"Thứ 5",5:"Thứ 6",6:"Thứ 7",7:"CN"}
+    def _thin_border(color="D1D5DB"):
+        s = _Side(style="thin", color=color)
+        return _Border(left=s, right=s, top=s, bottom=s)
+    THIN = _thin_border()
+    HDR_F  = _PF(patternType="solid", fgColor="1D4ED8")
+    HDR_FN = _Font(bold=True, color="FFFFFF", size=10)
+    CLS_F  = _PF(patternType="solid", fgColor="DBEAFE")   # class header: light blue
+    CLS_FN = _Font(bold=True, color="1E3A8A", size=9)
+    ALT_F  = _PF(patternType="solid", fgColor="F0F9FF")   # alternating row
+    CTR    = _Align(horizontal="center", vertical="center")
+    MID    = _Align(vertical="center")
+
+    def _style_row(ws, row_idx, ncols, fill=None, font=None, border=THIN, align=MID):
+        for ci in range(1, ncols+1):
+            c = ws.cell(row_idx, ci)
+            if fill:  c.fill  = fill
+            if font:  c.font  = font
+            c.border = border
+            c.alignment = align
 
     wb = _WB()
-    HDR_FILL = _PF(patternType="solid", fgColor="1D4ED8")
-    HDR_FONT = _Font(bold=True, color="FFFFFF", size=10)
-    SUB_FILL = _PF(patternType="solid", fgColor="DBEAFE")
-    SUB_FONT = _Font(bold=True, color="1D4ED8", size=10)
-    thin = _Border(
-        left=_Side(style="thin", color="D1D5DB"),
-        right=_Side(style="thin", color="D1D5DB"),
-        top=_Side(style="thin", color="D1D5DB"),
-        bottom=_Side(style="thin", color="D1D5DB"),
-    )
-    DAY_NAMES = {1:"Thứ 2",2:"Thứ 3",3:"Thứ 4",4:"Thứ 5",5:"Thứ 6",6:"Thứ 7",7:"Chủ nhật"}
 
-    # ── Sheet 1: Danh sách học sinh ──────────────────────────────────────
+    # ══ Sheet 1: Danh sách học sinh ════════════════════════════════════════
     ws1 = wb.active
     ws1.title = "Danh sách HS"
-    title_row = [f"Danh sách học sinh lớp {hroom.class_name} — GVCN: {hroom.gvcn_name}"]
-    ws1.append(title_row)
-    ws1.merge_cells(start_row=1, start_column=1, end_row=1, end_column=9)
+    ncols1 = 2 + sum([cols["gender"], cols["dob"], cols["email"], cols["status"], cols["enrolled_count"]])
+    ws1.append([f"Danh sách học sinh lớp {hroom.class_name}  —  GVCN: {hroom.gvcn_name}"])
+    ws1.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols1)
     ws1["A1"].font = _Font(bold=True, size=12, color="1D4ED8")
-    ws1["A1"].alignment = _Align(horizontal="center")
+    ws1["A1"].alignment = CTR
     ws1.append([])
 
-    hdrs = ["STT", "Họ và tên"]
-    if cols["gender"]:        hdrs.append("Giới tính")
-    if cols["dob"]:           hdrs.append("Ngày sinh")
-    if cols["email"]:         hdrs.append("Email")
-    if cols["status"]:        hdrs.append("Trạng thái TK")
-    if cols["enrolled_count"]: hdrs.append("Số môn ĐK")
-    ws1.append(hdrs)
-    hdr_row = 3
-    for ci, _ in enumerate(hdrs, 1):
-        c = ws1.cell(hdr_row, ci)
-        c.fill = HDR_FILL; c.font = HDR_FONT
-        c.alignment = _Align(horizontal="center", vertical="center")
-        c.border = thin
+    hdrs1 = ["STT", "Họ và tên"]
+    if cols["gender"]:         hdrs1.append("Giới tính")
+    if cols["dob"]:            hdrs1.append("Ngày sinh")
+    if cols["email"]:          hdrs1.append("Email")
+    if cols["status"]:         hdrs1.append("Trạng thái TK")
+    if cols["enrolled_count"]: hdrs1.append("Số môn ĐK")
+    ws1.append(hdrs1)
+    _style_row(ws1, 3, len(hdrs1), fill=HDR_F, font=HDR_FN, align=CTR)
 
-    for i, s in enumerate(hs, 1):
+    for i, s in enumerate(hs_list, 1):
         row = [i, _name_fmt(s.full_name)]
-        if cols["gender"]:        row.append(s.gender or "")
-        if cols["dob"]:           row.append(s.dob or "")
-        if cols["email"]:         row.append(s.email or "")
+        if cols["gender"]:         row.append(s.gender or "")
+        if cols["dob"]:            row.append(s.dob or "")
+        if cols["email"]:          row.append(s.email or "")
         if cols["status"]:
             row.append("Đã kích hoạt" if (s.password_hash and not s.is_first_login) else "Chưa kích hoạt")
         if cols["enrolled_count"]: row.append(enroll_counts.get(s.id, 0))
         ws1.append(row)
-        for ci in range(1, len(row)+1):
-            c = ws1.cell(ws1.max_row, ci)
-            c.border = thin
-            c.alignment = _Align(vertical="center")
-            if i % 2 == 0:
-                c.fill = _PF(patternType="solid", fgColor="F0F9FF")
+        _style_row(ws1, ws1.max_row, len(row),
+                   fill=ALT_F if i % 2 == 0 else None)
 
     ws1.column_dimensions["A"].width = 5
     ws1.column_dimensions["B"].width = 28
-    for ci in range(3, len(hdrs)+1):
-        ws1.column_dimensions[ws1.cell(hdr_row, ci).column_letter].width = 18
+    for ci in range(3, len(hdrs1)+1):
+        ws1.column_dimensions[_gcl(ci)].width = 18
+    ws1.row_dimensions[1].height = 22
+    ws1.row_dimensions[3].height = 18
 
-    # ── Sheet 2: Chi tiết đăng ký ────────────────────────────────────────
-    if cols["schedule"]:
-        ws2 = wb.create_sheet("Chi tiết đăng ký")
-        ws2.append([f"Chi tiết đăng ký môn học — Lớp {hroom.class_name}"])
-        ws2.merge_cells(start_row=1, start_column=1, end_row=1, end_column=8)
-        ws2["A1"].font = _Font(bold=True, size=12, color="1D4ED8")
-        ws2["A1"].alignment = _Align(horizontal="center")
-        ws2.append([])
+    # ══ Sheet 2..N: Theo môn học ═══════════════════════════════════════════
+    if cols["schedule"] and all_enrolls:
+        # Group enrollments: subject → class_id → [student_id, ...]
+        by_subject = _dd(lambda: _dd(list))   # subject → class_id → [student_ids]
+        class_info = {}                        # class_id → row (day, session, start, dur, loc, teacher)
+        for r in all_enrolls:
+            by_subject[r.subject][r.class_id].append(r.student_id)
+            if r.class_id not in class_info:
+                class_info[r.class_id] = r
 
-        hdrs2 = ["STT", "Họ và tên", "Môn học", "Giáo viên", "Thứ", "Buổi", "Tiết BĐ", "Phòng"]
-        ws2.append(hdrs2)
-        for ci, _ in enumerate(hdrs2, 1):
-            c = ws2.cell(3, ci)
-            c.fill = HDR_FILL; c.font = HDR_FONT
-            c.alignment = _Align(horizontal="center", vertical="center")
-            c.border = thin
+        stu_hdrs = ["STT", "Họ và tên"]
+        if cols["gender"]:  stu_hdrs.append("Giới tính")
+        if cols["dob"]:     stu_hdrs.append("Ngày sinh")
+        if cols["status"]:  stu_hdrs.append("Trạng thái TK")
+        ncols_s = len(stu_hdrs)
 
-        row_num = 4
-        stt = 0
-        prev_name = None
-        for s in hs:
-            details = enroll_details.get(s.id, [])
-            if not details:
-                continue
-            name = _name_fmt(s.full_name)
-            for d in details:
-                stt += 1
-                buoi = "Sáng" if d.session_type == "morning" else "Chiều"
-                row_data = [
-                    stt, name, d.subject, d.teacher_name,
-                    DAY_NAMES.get(d.day_of_week, d.day_of_week),
-                    buoi, d.start_session, d.location or ""
-                ]
-                ws2.append(row_data)
-                fill = _PF(patternType="solid", fgColor="F0F9FF") if name == prev_name else None
-                for ci, val in enumerate(row_data, 1):
-                    c = ws2.cell(row_num, ci)
-                    c.border = thin
-                    c.alignment = _Align(vertical="center")
-                    if name != prev_name:
-                        c.fill = _PF(patternType="solid", fgColor="EFF6FF")
-                        c.font = _Font(bold=(ci == 2))
-                prev_name = name
-                row_num += 1
+        for subject in sorted(by_subject.keys()):
+            # Truncate sheet name to 31 chars (Excel limit)
+            sheet_name = subject[:31]
+            ws = wb.create_sheet(sheet_name)
+            # Sheet title
+            ws.append([f"{subject}  —  Lớp {hroom.class_name}  —  GVCN: {hroom.gvcn_name}"])
+            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols_s)
+            ws["A1"].font = _Font(bold=True, size=12, color="1D4ED8")
+            ws["A1"].alignment = CTR
+            ws.row_dimensions[1].height = 22
+            cur_row = 2
 
-        for ci, w in zip("ABCDEFGH", [5, 28, 18, 26, 8, 7, 8, 16]):
-            ws2.column_dimensions[ci].width = w
+            cls_map = by_subject[subject]
+            # Sort classes by day then start_session
+            sorted_classes = sorted(cls_map.keys(),
+                key=lambda cid: (class_info[cid].day_of_week, class_info[cid].start_session))
+
+            for cls_idx, class_id in enumerate(sorted_classes):
+                ci_row = class_info[class_id]
+                buoi = "Sáng" if ci_row.session_type == "morning" else "Chiều"
+                day_str = DAY.get(ci_row.day_of_week, str(ci_row.day_of_week))
+                tiet_str = f"Tiết {ci_row.start_session}–{ci_row.start_session + ci_row.duration - 1}"
+                loc_str = ci_row.location or "Chưa xếp phòng"
+                cls_header = (
+                    f"GV: {ci_row.teacher_name}   |   "
+                    f"{day_str} – {buoi} – {tiet_str}   |   "
+                    f"Phòng: {loc_str}"
+                )
+                # Blank separator between classes (except first)
+                if cls_idx > 0:
+                    ws.append([""])
+                    cur_row += 1
+
+                # Class header row (merged)
+                ws.append([cls_header])
+                ws.merge_cells(start_row=cur_row, start_column=1, end_row=cur_row, end_column=ncols_s)
+                for ci in range(1, ncols_s+1):
+                    c = ws.cell(cur_row, ci)
+                    c.fill = CLS_F; c.font = CLS_FN
+                    c.border = _thin_border("93C5FD")
+                    c.alignment = MID
+                ws.row_dimensions[cur_row].height = 18
+                cur_row += 1
+
+                # Column header row
+                ws.append(stu_hdrs)
+                _style_row(ws, cur_row, ncols_s, fill=HDR_F, font=HDR_FN, align=CTR)
+                ws.row_dimensions[cur_row].height = 16
+                cur_row += 1
+
+                # Student rows
+                student_ids_in_class = cls_map[class_id]
+                # Sort by name
+                stu_rows = sorted(
+                    [hs_by_id[sid] for sid in student_ids_in_class if sid in hs_by_id],
+                    key=lambda s: s.full_name
+                )
+                for stt, s in enumerate(stu_rows, 1):
+                    row = [stt, _name_fmt(s.full_name)]
+                    if cols["gender"]:  row.append(s.gender or "")
+                    if cols["dob"]:     row.append(s.dob or "")
+                    if cols["status"]:
+                        row.append("Đã KH" if (s.password_hash and not s.is_first_login) else "Chưa KH")
+                    ws.append(row)
+                    _style_row(ws, cur_row, ncols_s,
+                               fill=ALT_F if stt % 2 == 0 else None)
+                    cur_row += 1
+
+            # Column widths
+            ws.column_dimensions["A"].width = 5
+            ws.column_dimensions["B"].width = 28
+            for ci in range(3, ncols_s+1):
+                ws.column_dimensions[_gcl(ci)].width = 16
 
     buf = _BIO()
     wb.save(buf)
     buf.seek(0)
     import unicodedata as _ud
-    safe_class = _ud.normalize("NFC", hroom.class_name)
-    filename = f"DanhSach_{safe_class}.xlsx"
+    filename = f"DanhSach_{_ud.normalize('NFC', hroom.class_name)}.xlsx"
     from flask import send_file as _sf
     return _sf(buf, as_attachment=True, download_name=filename,
                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

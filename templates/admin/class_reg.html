@@ -1081,18 +1081,21 @@ function toggleTeacherReg() {
   .finally(() => { btn.disabled = false; });
 }
 
-/* ── SSE: show refresh bar when teacher modifies classes ── */
+/* ── Polling: hiện bar khi có thay đổi lớp ── */
 (function() {
   const bar = document.getElementById('cls-change-bar');
   if (!bar) return;
-  const sse = new EventSource('/stream/changes');
-  sse.onmessage = function(e) {
+  let _lastTs = 0;
+  setInterval(async function() {
     try {
-      const d = JSON.parse(e.data);
-      if (d.type === 'class') { bar.style.display = 'flex'; sse.close(); }
+      const res = await fetch('/api/change-ts');
+      const d = await res.json();
+      if (d.ts && d.ts > _lastTs) {
+        if (_lastTs > 0) bar.style.display = 'flex';
+        _lastTs = d.ts;
+      }
     } catch(_) {}
-  };
-  sse.onerror = function() { sse.close(); };
+  }, 12000);
 })();
 
 /* ── Teacher activity log ── */

@@ -1618,20 +1618,12 @@ function switchMainTab(tab) {
   if (!showSched) refreshHmStudents();
 }
 
-/* ══ GVCN: Real-time refresh via SSE ══ */
-let _hmLastChange = 0;
-const _hmEvt = new EventSource('/stream/changes');
-_hmEvt.onmessage = function(e) {
-  try {
-    const d = JSON.parse(e.data);
-    if (d.t && d.t > _hmLastChange) {
-      _hmLastChange = d.t;
-      if (document.getElementById('pane-hm').style.display !== 'none') {
-        refreshHmStudents();
-      }
-    }
-  } catch {}
-};
+/* ══ GVCN: Polling refresh mỗi 12s ══ */
+setInterval(function() {
+  if (document.getElementById('pane-hm').style.display !== 'none') {
+    refreshHmStudents();
+  }
+}, 12000);
 
 function refreshHmStudents() {
   fetch('/api/teacher/homeroom-students')

@@ -1000,18 +1000,7 @@ async function submitEmail() {
 }
 {% endif %}
 
-/* ── SSE: auto-refresh when admin changes classes or enrollment ── */
-(function() {
-  var _sse = new EventSource('/stream/changes');
-  _sse.onmessage = function(e) {
-    try {
-      var d = JSON.parse(e.data);
-      if (d.type === 'class' || d.type === 'class_update' || d.type === 'schedule') {
-        refreshStudentSchedule();
-      }
-    } catch(_) {}
-  };
-  _sse.onerror = function() { _sse.close(); };
-})();
+/* ── Polling: auto-refresh khi admin thay đổi lớp/đăng ký ── */
+setInterval(refreshStudentSchedule, 12000);
 </script>
 {% endblock %}

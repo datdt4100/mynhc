@@ -552,48 +552,39 @@ function _applyLocationUpdate(classId, newLocation) {
   }
 }
 
-// ── SSE real-time sync ──
+// ── Polling: sync lịch phòng mỗi 12s ──
 (function() {
   let _refreshPending = false;
-  const sse = new EventSource('/stream/changes');
-  sse.onmessage = async function(e) {
+  async function _pollSchedule() {
+    if (_refreshPending) return;
+    _refreshPending = true;
     try {
-      const d = JSON.parse(e.data);
-      if (d.type && d.type !== 'ping' && !_refreshPending) {
-        _refreshPending = true;
-        setTimeout(async () => {
-          try {
-            const res  = await fetch('/api/class-schedule-data');
-            const data = await res.json();
-            if (data.grid) {
-              // Merge location+enrollment updates into GRID
-              for (const ses in data.grid) {
-                for (const key in data.grid[ses]) {
-                  const fresh = data.grid[ses][key];
-                  const current = (GRID[ses] || {})[key] || [];
-                  fresh.forEach(fc => {
-                    const existing = current.find(c => c.id === fc.id);
-                    if (existing) {
-                      existing.location    = fc.location;
-                      existing.enrollment  = fc.enrollment;
-                      existing.max_capacity = fc.max_capacity;
-                    }
-                  });
-                  // Also update loc-badges for any open modal items
-                  fresh.forEach(fc => {
-                    const badge = document.getElementById(`loc-badge-${fc.id}`);
-                    if (badge) _applyLocationUpdate(fc.id, fc.location);
-                  });
-                }
+      const res  = await fetch('/api/class-schedule-data');
+      const data = await res.json();
+      if (data.grid) {
+        for (const ses in data.grid) {
+          for (const key in data.grid[ses]) {
+            const fresh = data.grid[ses][key];
+            const current = (GRID[ses] || {})[key] || [];
+            fresh.forEach(fc => {
+              const existing = current.find(c => c.id === fc.id);
+              if (existing) {
+                existing.location    = fc.location;
+                existing.enrollment  = fc.enrollment;
+                existing.max_capacity = fc.max_capacity;
               }
-            }
-          } catch {}
-          _refreshPending = false;
-        }, 800);
+            });
+            fresh.forEach(fc => {
+              const badge = document.getElementById(`loc-badge-${fc.id}`);
+              if (badge) _applyLocationUpdate(fc.id, fc.location);
+            });
+          }
+        }
       }
     } catch {}
-  };
-  sse.onerror = function() { sse.close(); };
+    _refreshPending = false;
+  }
+  setInterval(_pollSchedule, 12000);
 })();
 
 // Auto fix existing conflicts on page load (silent)

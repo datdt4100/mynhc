@@ -822,6 +822,12 @@ def stream_changes():
     )
 
 
+@app.route("/api/change-ts")
+def api_change_ts():
+    """Lightweight timestamp endpoint for polling-based change detection."""
+    return jsonify(ts=_change_ts[0])
+
+
 @app.route("/login")
 def login_page():
     maintenance = get_setting("maintenance_mode", "0") == "1"

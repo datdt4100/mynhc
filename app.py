@@ -1,3 +1,9 @@
+try:
+    from gevent import monkey as _monkey
+    _monkey.patch_all()
+except ImportError:
+    pass
+
 import os
 import re
 import json
@@ -88,8 +94,8 @@ if DATABASE_URL.startswith("postgres://"):
 _engine_kwargs = {"future": True, "pool_pre_ping": True}
 if not DATABASE_URL.startswith("sqlite"):
     _engine_kwargs.update({
-        "pool_size": 5,        # safe for free-tier DB (max ~5 connections)
-        "max_overflow": 2,     # burst headroom
+        "pool_size": 5,        # 5 per worker × 2 workers = 10 steady-state connections
+        "max_overflow": 5,     # burst: up to 10 per worker = 20 total, well under PG limit
         "pool_recycle": 300,
         "pool_timeout": 10,    # fail fast instead of long queue
         "connect_args": {"sslmode": "require"},

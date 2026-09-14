@@ -1,9 +1,3 @@
-try:
-    from gevent import monkey as _monkey
-    _monkey.patch_all()
-except ImportError:
-    pass
-
 import os
 import re
 import json

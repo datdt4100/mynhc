@@ -804,8 +804,9 @@ def index():
 def stream_changes():
     """SSE: push a JSON event whenever the schedule or class list changes."""
     def gen():
-        last = _change_ts[0]  # snapshot at connect time; only send future changes
-        while True:
+        last = _change_ts[0]
+        deadline = time.time() + 25  # release thread after 25s; EventSource auto-reconnects
+        while time.time() < deadline:
             ts = _change_ts[0]
             if ts != last:
                 last = ts

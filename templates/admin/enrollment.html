@@ -343,7 +343,7 @@
                   <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.7rem;">{{ s.class_name }}</span></td>
                   <td class="text-center">
                     {% set ec = enrolled_counts_by_student.get(s.id, 0) %}
-                    <span class="badge rounded-pill {% if ec == 0 %}bg-light text-muted border{% elif ec >= 5 %}bg-success{% else %}bg-warning text-dark{% endif %}" style="font-size:.7rem; min-width:28px;">{{ ec }}</span>
+                    <span id="stu-enroll-{{ s.id }}" class="badge rounded-pill {% if ec == 0 %}bg-light text-muted border{% elif ec >= 5 %}bg-success{% else %}bg-warning text-dark{% endif %}" style="font-size:.7rem; min-width:28px;">{{ ec }}</span>
                   </td>
                   <td class="text-center" style="white-space:nowrap;">
                     <button class="adm-icon-btn btn-outline-primary"
@@ -723,16 +723,73 @@ function renderDetailPane() {
     return;
   }
   let html = `<p class="text-muted mb-2" style="font-size:.78rem;"><strong>${items.length}</strong> môn đã đăng ký</p>
-    <table class="sched-table"><thead><tr><th>Môn học</th><th>Giáo viên</th><th>Ngày</th><th>Buổi</th><th>Tiết</th><th>Phòng</th></tr></thead><tbody>`;
+    <table class="sched-table"><thead><tr><th>Môn học</th><th>Giáo viên</th><th>Ngày</th><th>Buổi</th><th>Tiết</th><th>Phòng</th><th style="width:52px;"></th></tr></thead><tbody>`;
   items.forEach(c => {
-    html += `<tr><td class="fw-semibold">${c.subject}</td>
+    html += `<tr id="enroll-row-${c.enrollment_id}">
+      <td class="fw-semibold">${c.subject}</td>
       <td>${c.teacher}</td>
       <td style="white-space:nowrap;">${c.day_label}</td>
       <td><span class="badge ${c.session_type==='morning'?'bg-warning text-dark':'bg-primary'}" style="font-size:.68rem;">${c.session_label}</span></td>
       <td>${c.start_session}${c.end_session>c.start_session?'–'+c.end_session:''}</td>
-      <td style="color:#64748B;">${c.location}</td></tr>`;
+      <td style="color:#64748B;">${c.location}</td>
+      <td style="text-align:center;">
+        <button class="btn btn-sm p-0" style="color:#EF4444;background:none;border:none;opacity:.75;"
+                title="Xoá đăng ký này"
+                onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.75"
+                onclick="adminDeleteEnrollment(${c.enrollment_id}, '${c.subject.replace(/'/g,"\\'")}', this)">
+          <i class="bi bi-trash3"></i>
+        </button>
+      </td>
+    </tr>`;
   });
   bodyEl.innerHTML = html + '</tbody></table>';
+}
+
+/* ── Admin delete single enrollment ── */
+function adminDeleteEnrollment(enrollmentId, subject, btn) {
+  showConfirm(
+    `Xoá đăng ký môn "${subject}"?`,
+    'Học sinh sẽ mất đăng ký môn này. Hành động này được ghi vào lịch sử.',
+    async function() {
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/admin/enrollment/${enrollmentId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.ok) {
+          // Remove row from modal table
+          const row = document.getElementById(`enroll-row-${enrollmentId}`);
+          if (row) row.remove();
+          // Update count in header
+          if (_detailData) {
+            _detailData.schedule = _detailData.schedule.filter(e => e.enrollment_id !== enrollmentId);
+            const countEl = document.querySelector('#dpane-sched-body p strong');
+            if (countEl) countEl.textContent = _detailData.schedule.length;
+            if (_detailData.schedule.length === 0) renderDetailPane();
+          }
+          // Update enrollment count badge in student table
+          const badge = document.getElementById(`stu-enroll-${data.student_id}`);
+          if (badge) {
+            const cur = Math.max(0, parseInt(badge.textContent) - 1);
+            badge.textContent = cur;
+            badge.className = badge.className.replace(/bg-success|bg-warning|bg-light|text-muted|border|text-dark/g, '').trim();
+            if (cur === 0) badge.classList.add('bg-light', 'text-muted', 'border');
+            else if (cur >= 5) badge.classList.add('bg-success');
+            else badge.classList.add('bg-warning', 'text-dark');
+          }
+          // Refresh class count badge immediately (uses existing refreshCounts())
+          refreshCounts();
+          showAlert(`Đã xoá đăng ký môn "${subject}".`, 'success');
+        } else {
+          showAlert(data.error || 'Không thể xoá.', 'error');
+          btn.disabled = false;
+        }
+      } catch {
+        showAlert('Lỗi kết nối.', 'error');
+        btn.disabled = false;
+      }
+    },
+    { confirmText: 'Xoá', confirmClass: 'btn-danger' }
+  );
 }
 
 /* ── Toggle student reg ── */

@@ -5599,6 +5599,7 @@ def api_admin_student_schedule(student_id):
 
         enrolled = conn.execute(
             select(
+                enrollments.c.id.label("enrollment_id"),
                 classes.c.id.label("class_id"),
                 classes.c.grade,
                 classes.c.day_of_week,
@@ -5620,6 +5621,7 @@ def api_admin_student_schedule(student_id):
     schedule = []
     for e in enrolled:
         schedule.append({
+            "enrollment_id": e.enrollment_id,
             "class_id": e.class_id,
             "subject": e.subject or e.subject_group or "—",
             "teacher": _name_fmt(e.teacher_name),
@@ -5643,6 +5645,31 @@ def api_admin_student_schedule(student_id):
         "class_name": st.class_name,
         "grade": st.grade,
     }, schedule=schedule, log=log)
+
+
+@app.route("/api/admin/enrollment/<int:enrollment_id>", methods=["DELETE"])
+@admin_required
+def api_admin_enrollment_delete(enrollment_id):
+    """Admin deletes a single enrollment. Syncs SSE and logs."""
+    with engine.begin() as conn:
+        row = conn.execute(
+            select(enrollments).where(enrollments.c.id == enrollment_id)
+        ).fetchone()
+        if not row:
+            return jsonify(ok=False, error="Không tìm thấy đăng ký."), 404
+        student_id = row.student_id
+        class_id   = row.class_id
+        # Log the removal
+        conn.execute(insert(student_enroll_log).values(
+            student_id=student_id,
+            class_id=class_id,
+            action="D",
+            ts=now_vn(),
+        ))
+        conn.execute(delete(enrollments).where(enrollments.c.id == enrollment_id))
+    _bump()
+    return jsonify(ok=True, enrollment_id=enrollment_id,
+                   student_id=student_id, class_id=class_id)
 
 
 @app.route("/admin/enrollment/<int:class_id>/students")

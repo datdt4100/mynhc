@@ -602,7 +602,7 @@
                 {% if cols.get('gender') %}<th class="text-center">Giới tính</th>{% endif %}
                 {% if cols.get('status') %}<th class="text-center">Tài khoản</th>{% endif %}
                 {% if cols.get('enrolled_count') %}<th class="text-center">Số môn ĐK</th>{% endif %}
-                <th class="text-center" style="width:80px;">Thao tác</th>
+                {% if cols.get('schedule') or cols.get('activity_log') %}<th class="text-center" style="width:80px;">Thao tác</th>{% endif %}
               </tr>
             </thead>
             <tbody id="hmStudentTbody">
@@ -637,14 +637,20 @@
                         style="font-size:.7rem; min-width:28px;" data-student-enroll="{{ s.id }}">{{ ec }}</span>
                 </td>
                 {% endif %}
+                {% if cols.get('schedule') or cols.get('activity_log') %}
                 <td class="text-center" style="white-space:nowrap;">
+                  {% if cols.get('schedule') %}
                   <button class="hm-icon-btn btn-info" onclick="viewHmStudentDetail({{ s.id }}, '{{ s.full_name | name_fmt | e }}')" title="Xem môn đã đăng ký">
                     <i class="bi bi-eye"></i>
                   </button>
-                  <button class="hm-icon-btn btn-purple ms-1" onclick="viewHmStudentLog({{ s.id }}, '{{ s.full_name | name_fmt | e }}')" title="Lịch sử thao tác">
+                  {% endif %}
+                  {% if cols.get('activity_log') %}
+                  <button class="hm-icon-btn btn-purple {% if cols.get('schedule') %}ms-1{% endif %}" onclick="viewHmStudentLog({{ s.id }}, '{{ s.full_name | name_fmt | e }}')" title="Lịch sử thao tác">
                     <i class="bi bi-clock-history"></i>
                   </button>
+                  {% endif %}
                 </td>
+                {% endif %}
               </tr>
               {% else %}
               <tr><td colspan="{{ 3 + cols.get('gender',False)|int + cols.get('status',False)|int + cols.get('enrolled_count',False)|int }}" class="text-center text-muted py-5">Chưa có học sinh nào trong lớp {{ homeroom_class.class_name }}</td></tr>
@@ -1654,10 +1660,11 @@ function refreshHmStudents() {
           ${_GVCN_COLS.gender ? `<td class="text-center">${genderBadge}</td>` : ''}
           ${_GVCN_COLS.status ? `<td class="text-center">${activatedBadge}</td>` : ''}
           ${_GVCN_COLS.enrolled_count ? `<td class="text-center">${ecBadge}</td>` : ''}
+          ${(_GVCN_COLS.schedule || _GVCN_COLS.activity_log) ? `
           <td class="text-center" style="white-space:nowrap;">
-            <button class="hm-icon-btn btn-info" onclick="viewHmStudentDetail(${s.id},'${s.full_name.replace(/'/g,"\\'")}')"><i class="bi bi-eye"></i></button>
-            <button class="hm-icon-btn btn-purple ms-1" onclick="viewHmStudentLog(${s.id},'${s.full_name.replace(/'/g,"\\'")}')"><i class="bi bi-clock-history"></i></button>
-          </td>
+            ${_GVCN_COLS.schedule ? `<button class="hm-icon-btn btn-info" onclick="viewHmStudentDetail(${s.id},'${s.full_name.replace(/'/g,"\\'")}')"><i class="bi bi-eye"></i></button>` : ''}
+            ${_GVCN_COLS.activity_log ? `<button class="hm-icon-btn btn-purple${_GVCN_COLS.schedule?' ms-1':''}" onclick="viewHmStudentLog(${s.id},'${s.full_name.replace(/'/g,"\\'")}')"><i class="bi bi-clock-history"></i></button>` : ''}
+          </td>` : ''}
         </tr>`;
       });
       tbody.innerHTML = html || `<tr><td colspan="6" class="text-center text-muted py-5">Chưa có học sinh nào</td></tr>`;

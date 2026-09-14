@@ -3213,7 +3213,8 @@ _GVCN_COL_DEFAULTS = {
     "email": False,
     "status": True,
     "enrolled_count": True,
-    "schedule": True,
+    "schedule": True,       # chi tiết lịch học (nút xem + Excel sheet 2..N)
+    "activity_log": True,   # lịch sử thao tác (nút đồng hồ)
 }
 
 def get_gvcn_col_settings():

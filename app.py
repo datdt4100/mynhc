@@ -3324,10 +3324,18 @@ def api_teacher_homeroom_export():
 
     wb = _WB()
 
+    # Build subject list per student (sorted) for Sheet 1 "Môn học" column
+    subjects_by_student = {}
+    if cols["schedule"]:
+        _subj_map = _dd(set)
+        for r in all_enrolls:
+            _subj_map[r.student_id].add(r.subject)
+        subjects_by_student = {sid: " - ".join(sorted(subjs)) for sid, subjs in _subj_map.items()}
+
     # ══ Sheet 1: Danh sách học sinh ════════════════════════════════════════
     ws1 = wb.active
     ws1.title = "Danh sách HS"
-    ncols1 = 2 + sum([cols["gender"], cols["dob"], cols["email"], cols["status"], cols["enrolled_count"]])
+    ncols1 = 2 + sum([cols["gender"], cols["dob"], cols["email"], cols["status"], cols["enrolled_count"], cols["schedule"]])
     ws1.append([f"Danh sách học sinh lớp {hroom.class_name}  —  GVCN: {hroom.gvcn_name}"])
     ws1.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols1)
     ws1["A1"].font = _Font(bold=True, size=12, color="1D4ED8")
@@ -3340,6 +3348,7 @@ def api_teacher_homeroom_export():
     if cols["email"]:          hdrs1.append("Email")
     if cols["status"]:         hdrs1.append("Trạng thái TK")
     if cols["enrolled_count"]: hdrs1.append("Số môn ĐK")
+    if cols["schedule"]:       hdrs1.append("Môn học")
     ws1.append(hdrs1)
     _style_row(ws1, 3, len(hdrs1), fill=HDR_F, font=HDR_FN, align=CTR)
 
@@ -3351,6 +3360,7 @@ def api_teacher_homeroom_export():
         if cols["status"]:
             row.append("Đã kích hoạt" if (s.password_hash and not s.is_first_login) else "Chưa kích hoạt")
         if cols["enrolled_count"]: row.append(enroll_counts.get(s.id, 0))
+        if cols["schedule"]:       row.append(subjects_by_student.get(s.id, ""))
         ws1.append(row)
         _style_row(ws1, ws1.max_row, len(row),
                    fill=ALT_F if i % 2 == 0 else None)
@@ -3358,7 +3368,10 @@ def api_teacher_homeroom_export():
     ws1.column_dimensions["A"].width = 5
     ws1.column_dimensions["B"].width = 28
     for ci in range(3, len(hdrs1)+1):
-        ws1.column_dimensions[_gcl(ci)].width = 18
+        col_letter = _gcl(ci)
+        # wider for "Môn học" column (last one if schedule enabled)
+        is_mon_hoc = cols["schedule"] and ci == len(hdrs1)
+        ws1.column_dimensions[col_letter].width = 36 if is_mon_hoc else 18
     ws1.row_dimensions[1].height = 22
     ws1.row_dimensions[3].height = 18
 

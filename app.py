@@ -4647,13 +4647,14 @@ def api_admin_merge_options(class_id):
         all_rooms = sorted({r.location for r in all_rooms_rows} - busy_rooms)
 
     base_enrolled = cnt_map.get(class_id, 0)
+    base_subject_group = base_teacher.subject_group if base_teacher else ""
     return jsonify(
         ok=True,
         base={
             "id": base.id,
             "grade": base.grade,
             "subject": base.subject or "",
-            "subject_group": base.subject_group or "",
+            "subject_group": base_subject_group or "",
             "day_of_week": base.day_of_week,
             "session_type": base.session_type,
             "start_session": base.start_session,

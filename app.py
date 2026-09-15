@@ -227,6 +227,15 @@ student_enroll_log = Table(
     Column("ts", Text, nullable=False),
 )
 
+password_reset_tokens = Table("password_reset_tokens", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("token", Text, unique=True, nullable=False),
+    Column("user_type", Text, nullable=False),  # "teacher" or "student"
+    Column("user_id", Integer, nullable=False),
+    Column("expires_at", Text, nullable=False),  # ISO string UTC
+    Column("used", Integer, default=0),
+)
+
 # ---------------------------------------------------------------------------
 # DB init
 # ---------------------------------------------------------------------------
@@ -240,6 +249,7 @@ _Index("ix_classes_teacher_id",     classes.c.teacher_id)
 _Index("ix_classes_is_published",   classes.c.is_published)
 _Index("ix_classes_grade",          classes.c.grade)
 _Index("ix_student_enroll_log_student_id", student_enroll_log.c.student_id)
+_Index("ix_prt_token", password_reset_tokens.c.token)
 
 def init_db():
     metadata.create_all(engine)
@@ -292,6 +302,17 @@ def init_db():
         # Migrate: add show_student_tab column if missing (existing DBs)
         try:
             conn.execute(text("ALTER TABLE homeroom_classes ADD COLUMN show_student_tab INTEGER DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+        # Migrate: create password_reset_tokens table if not exists
+        try:
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS password_reset_tokens "
+                "(id INTEGER PRIMARY KEY, token TEXT UNIQUE NOT NULL, user_type TEXT NOT NULL, "
+                "user_id INTEGER NOT NULL, expires_at TEXT NOT NULL, used INTEGER DEFAULT 0)"
+            ))
             conn.commit()
         except Exception:
             conn.rollback()
@@ -791,6 +812,45 @@ def operator_required(f):
         return redirect(url_for("login_page"))
     return decorated
 
+
+def send_email(to_addr: str, subject: str, body_html: str) -> bool:
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    username = os.environ.get("MAIL_USERNAME", "")
+    password = os.environ.get("MAIL_PASSWORD", "")
+    from_name = os.environ.get("MAIL_FROM_NAME", "THPT Nguyễn Hữu Cầu")
+    if not username or not password:
+        return False
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{from_name} <{username}>"
+    msg["To"] = to_addr
+    msg.attach(MIMEText(body_html, "html", "utf-8"))
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as srv:
+            srv.login(username, password)
+            srv.sendmail(username, to_addr, msg.as_string())
+        return True
+    except Exception:
+        return False
+
+
+def _validate_password(pw: str) -> str:
+    """Return error message or empty string if valid."""
+    if len(pw) < 8:
+        return "Mật khẩu phải có ít nhất 8 ký tự."
+    if not re.search(r"[A-Z]", pw):
+        return "Mật khẩu phải có ít nhất 1 chữ hoa."
+    if not re.search(r"[a-z]", pw):
+        return "Mật khẩu phải có ít nhất 1 chữ thường."
+    if not re.search(r"[0-9]", pw):
+        return "Mật khẩu phải có ít nhất 1 chữ số."
+    if not re.search(r"[!@#$%^&*_+\-=]", pw):
+        return "Mật khẩu phải có ít nhất 1 ký tự đặc biệt (!@#$%^&*_+-=)."
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # Auth routes
 # ---------------------------------------------------------------------------
@@ -1073,6 +1133,125 @@ def change_password_submit():
 
     redirect_url = url_for("teacher_dashboard") if user_type == "teacher" else url_for("student_dashboard")
     return jsonify(ok=True, redirect=redirect_url)
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "GET":
+        return render_template("forgot_password.html")
+    email = (request.form.get("email") or "").strip().lower()
+    if not email:
+        flash("Vui lòng nhập email.", "warning")
+        return render_template("forgot_password.html")
+    with engine.begin() as conn:
+        user = conn.execute(select(teachers).where(func.lower(teachers.c.email) == email)).fetchone()
+        user_type = "teacher"
+        if not user:
+            user = conn.execute(select(students).where(func.lower(students.c.email) == email)).fetchone()
+            user_type = "student"
+        if not user:
+            flash("Nếu email này tồn tại trong hệ thống, bạn sẽ nhận được link đặt lại mật khẩu.", "info")
+            return render_template("forgot_password.html")
+        # Invalidate old tokens for this user
+        conn.execute(
+            update(password_reset_tokens)
+            .where(and_(
+                password_reset_tokens.c.user_type == user_type,
+                password_reset_tokens.c.user_id == user.id,
+                password_reset_tokens.c.used == 0,
+            ))
+            .values(used=1)
+        )
+        token = secrets.token_urlsafe(32)
+        expires = (datetime.now(timezone.utc) + timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S")
+        conn.execute(insert(password_reset_tokens).values(
+            token=token, user_type=user_type, user_id=user.id,
+            expires_at=expires, used=0,
+        ))
+    domain = os.environ.get("APP_DOMAIN", "https://mynhc-m7e0.onrender.com")
+    reset_url = f"{domain}/reset-password/{token}"
+    html = f"""
+    <p>Xin chào <b>{user.full_name}</b>,</p>
+    <p>Bạn đã yêu cầu đặt lại mật khẩu. Click vào link bên dưới để tiếp tục:</p>
+    <p><a href="{reset_url}" style="background:#0d6efd;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Đặt lại mật khẩu</a></p>
+    <p>Link có hiệu lực trong <b>30 phút</b>. Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>
+    <hr><small>THPT Nguyễn Hữu Cầu — Hệ thống đăng ký môn học</small>
+    """
+    send_email(email, "Đặt lại mật khẩu — THPT Nguyễn Hữu Cầu", html)
+    flash("Nếu email này tồn tại trong hệ thống, bạn sẽ nhận được link đặt lại mật khẩu.", "info")
+    return render_template("forgot_password.html")
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    with engine.connect() as conn:
+        row = conn.execute(
+            select(password_reset_tokens).where(
+                and_(password_reset_tokens.c.token == token,
+                     password_reset_tokens.c.used == 0)
+            )
+        ).fetchone()
+    if not row:
+        flash("Link đặt lại mật khẩu không hợp lệ hoặc đã được sử dụng.", "danger")
+        return redirect(url_for("login_page"))
+    expires = datetime.fromisoformat(row.expires_at).replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) > expires:
+        flash("Link đặt lại mật khẩu đã hết hạn. Vui lòng thử lại.", "warning")
+        return redirect(url_for("forgot_password"))
+    if request.method == "GET":
+        return render_template("reset_password.html", token=token)
+    pw = request.form.get("password", "")
+    pw2 = request.form.get("password2", "")
+    err = _validate_password(pw)
+    if err:
+        flash(err, "danger")
+        return render_template("reset_password.html", token=token)
+    if pw != pw2:
+        flash("Mật khẩu xác nhận không khớp.", "danger")
+        return render_template("reset_password.html", token=token)
+    table = teachers if row.user_type == "teacher" else students
+    with engine.begin() as conn:
+        conn.execute(update(table).where(table.c.id == row.user_id).values(
+            password_hash=generate_password_hash(pw),
+            is_first_login=0,
+            must_change_password=0,
+        ))
+        conn.execute(update(password_reset_tokens).where(
+            password_reset_tokens.c.id == row.id
+        ).values(used=1))
+    flash("Mật khẩu đã được đặt lại thành công. Vui lòng đăng nhập.", "success")
+    return redirect(url_for("login_page"))
+
+
+@app.route("/api/change-password", methods=["POST"])
+def api_change_password():
+    user_type = session.get("user_type")
+    uid = session.get("user_id")
+    if not user_type or not uid:
+        return jsonify(ok=False, error="Chưa đăng nhập."), 401
+    data = request.get_json(silent=True) or {}
+    old_pw  = data.get("old_password", "")
+    new_pw  = data.get("new_password", "")
+    new_pw2 = data.get("new_password2", "")
+    table = teachers if user_type == "teacher" else students
+    with engine.connect() as conn:
+        user = conn.execute(select(table).where(table.c.id == uid)).fetchone()
+    if not user or not check_password_hash(user.password_hash or "", old_pw):
+        return jsonify(ok=False, error="Mật khẩu hiện tại không đúng.")
+    err = _validate_password(new_pw)
+    if err:
+        return jsonify(ok=False, error=err)
+    if new_pw != new_pw2:
+        return jsonify(ok=False, error="Mật khẩu xác nhận không khớp.")
+    if old_pw == new_pw:
+        return jsonify(ok=False, error="Mật khẩu mới phải khác mật khẩu hiện tại.")
+    with engine.begin() as conn:
+        conn.execute(update(table).where(table.c.id == uid).values(
+            password_hash=generate_password_hash(new_pw),
+            must_change_password=0,
+        ))
+    return jsonify(ok=True)
+
 
 # ---------------------------------------------------------------------------
 # Teacher routes
@@ -1358,6 +1537,107 @@ def teacher_class_students(class_id):
         }
         for s in enrolled
     ])
+
+
+@app.route("/teacher/classes/<int:class_id>/students/export")
+@teacher_required
+def teacher_class_students_export(class_id):
+    teacher_id = session["user_id"]
+    with engine.connect() as conn:
+        cls = conn.execute(
+            select(classes).where(
+                and_(classes.c.id == class_id, classes.c.teacher_id == teacher_id)
+            )
+        ).fetchone()
+        if not cls:
+            return "Không tìm thấy lớp.", 404
+        enrolled = conn.execute(
+            select(students, enrollments.c.enrolled_at)
+            .join(enrollments, students.c.id == enrollments.c.student_id)
+            .where(enrollments.c.class_id == class_id)
+            .order_by(students.c.class_name, students.c.full_name)
+        ).fetchall()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    slot = session_label(cls.session_type, cls.start_session, cls.duration)
+    ws.title = "Danh sách"
+
+    # Header info rows
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    bold = Font(bold=True)
+    hdr_fill = PatternFill("solid", fgColor="1E40AF")
+    hdr_font = Font(bold=True, color="FFFFFF")
+    center = Alignment(horizontal="center", vertical="center")
+    thin = Side(style="thin", color="CBD5E1")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    title_row = [
+        f"Danh sách đăng ký — Khối {cls.grade}"
+        + (f" — {cls.subject}" if cls.subject else "")
+        + f" — {day_name(cls.day_of_week)} {slot}"
+        + (f" — Phòng: {cls.location}" if cls.location else "")
+    ]
+    ws.append(title_row)
+    ws.merge_cells("A1:E1")
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A1"].alignment = center
+
+    ws.append([f"Tổng số học sinh: {len(enrolled)}"])
+    ws.merge_cells("A2:E2")
+    ws["A2"].font = Font(italic=True, color="64748B")
+    ws["A2"].alignment = center
+
+    ws.append([])  # blank row
+
+    # Column headers
+    headers = ["STT", "Họ và tên", "Lớp", "Giới tính", "Thời gian đăng ký"]
+    ws.append(headers)
+    for col, _ in enumerate(headers, 1):
+        cell = ws.cell(row=4, column=col)
+        cell.font = hdr_font
+        cell.fill = hdr_fill
+        cell.alignment = center
+        cell.border = border
+
+    # Data rows
+    for i, s in enumerate(enrolled, 1):
+        ts = ""
+        if s.enrolled_at:
+            try:
+                dt = datetime.fromisoformat(str(s.enrolled_at))
+                ts = dt.strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                ts = str(s.enrolled_at)
+        row_data = [i, s.full_name, s.class_name or "", s.gender or "", ts]
+        ws.append(row_data)
+        row_num = ws.max_row
+        for col, _ in enumerate(row_data, 1):
+            cell = ws.cell(row=row_num, column=col)
+            cell.border = border
+            cell.alignment = Alignment(vertical="center",
+                                       horizontal="center" if col in (1, 3, 4) else "left")
+            if i % 2 == 0:
+                cell.fill = PatternFill("solid", fgColor="F8FAFC")
+
+    ws.column_dimensions["A"].width = 6
+    ws.column_dimensions["B"].width = 28
+    ws.column_dimensions["C"].width = 10
+    ws.column_dimensions["D"].width = 10
+    ws.column_dimensions["E"].width = 20
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    slug = f"Khoi{cls.grade}"
+    if cls.subject:
+        slug += f"_{cls.subject.replace(' ', '_')}"
+    slug += f"_{day_name(cls.day_of_week).replace(' ', '')}_{slot[:4].replace(',','').replace(' ','')}"
+    ts_str = now_vn().strftime("%Y%m%d_%H%M")
+    filename = f"DanhSach_{slug}_{ts_str}.xlsx"
+    return send_file(buf, as_attachment=True, download_name=filename,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 
 # ---------------------------------------------------------------------------
 # Student routes

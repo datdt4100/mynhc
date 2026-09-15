@@ -4565,6 +4565,211 @@ def admin_class_assign_teacher(class_id):
     return jsonify(ok=True, teacher_name=teacher_row.full_name, subject=teacher_row.subject_group)
 
 
+@app.route("/api/admin/merge-options/<int:class_id>")
+@admin_required
+def api_admin_merge_options(class_id):
+    with engine.connect() as conn:
+        base = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        if not base:
+            return jsonify(ok=False, error="Không tìm thấy lớp."), 404
+
+        # Mergeable classes: same grade, subject, day, session, start, duration — not the base itself
+        mergeable_raw = conn.execute(
+            select(classes, teachers.c.full_name.label("teacher_name"), teachers.c.cccd.label("teacher_cccd"))
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .where(and_(
+                classes.c.grade == base.grade,
+                classes.c.subject == base.subject,
+                classes.c.day_of_week == base.day_of_week,
+                classes.c.session_type == base.session_type,
+                classes.c.start_session == base.start_session,
+                classes.c.duration == base.duration,
+                classes.c.id != class_id,
+            ))
+        ).fetchall()
+
+        # Enrollment counts for mergeable classes
+        all_ids = [class_id] + [c.id for c in mergeable_raw]
+        cnt_rows = conn.execute(
+            select(enrollments.c.class_id, func.count().label("cnt"))
+            .where(enrollments.c.class_id.in_(all_ids))
+            .group_by(enrollments.c.class_id)
+        ).fetchall()
+        cnt_map = {r.class_id: r.cnt for r in cnt_rows}
+
+        # Available teachers: check conflicts
+        base_teacher = conn.execute(select(teachers).where(teachers.c.id == base.teacher_id)).fetchone()
+        subject_group = base_teacher.subject_group if base_teacher else None
+        all_teachers = conn.execute(
+            select(teachers).where(teachers.c.cccd != _UNASSIGNED_CCCD)
+            .order_by(teachers.c.subject_group, teachers.c.full_name)
+        ).fetchall()
+
+        # Check conflicts for each teacher
+        teacher_list = []
+        for t in all_teachers:
+            conflict = conn.execute(
+                select(classes.c.id).where(and_(
+                    classes.c.teacher_id == t.id,
+                    classes.c.day_of_week == base.day_of_week,
+                    classes.c.session_type == base.session_type,
+                    classes.c.start_session < base.start_session + base.duration,
+                    classes.c.start_session + classes.c.duration > base.start_session,
+                    classes.c.id != class_id,
+                ))
+            ).fetchone()
+            teacher_list.append({
+                "id": t.id, "full_name": t.full_name,
+                "subject_group": t.subject_group or "",
+                "same_group": t.subject_group == subject_group,
+                "has_conflict": conflict is not None,
+            })
+
+        # Available rooms: not occupied at same time slot
+        busy_rows = conn.execute(
+            select(classes.c.location).where(and_(
+                classes.c.location != None,
+                classes.c.location != '',
+                classes.c.day_of_week == base.day_of_week,
+                classes.c.session_type == base.session_type,
+                classes.c.start_session < base.start_session + base.duration,
+                classes.c.start_session + classes.c.duration > base.start_session,
+                classes.c.id != class_id,
+            ))
+        ).fetchall()
+        busy_rooms = {r.location for r in busy_rows}
+
+        all_rooms_rows = conn.execute(
+            select(classes.c.location).distinct().where(
+                and_(classes.c.location != None, classes.c.location != '')
+            )
+        ).fetchall()
+        all_rooms = sorted({r.location for r in all_rooms_rows} - busy_rooms)
+
+    base_enrolled = cnt_map.get(class_id, 0)
+    return jsonify(
+        ok=True,
+        base={
+            "id": base.id,
+            "grade": base.grade,
+            "subject": base.subject or "",
+            "subject_group": base.subject_group or "",
+            "day_of_week": base.day_of_week,
+            "session_type": base.session_type,
+            "start_session": base.start_session,
+            "duration": base.duration,
+            "max_capacity": base.max_capacity,
+            "location": base.location or "",
+            "teacher_id": base.teacher_id,
+            "enrolled": base_enrolled,
+        },
+        mergeable=[{
+            "id": c.id,
+            "teacher_name": c.teacher_name,
+            "teacher_cccd": c.teacher_cccd,
+            "max_capacity": c.max_capacity,
+            "location": c.location or "",
+            "enrolled": cnt_map.get(c.id, 0),
+        } for c in mergeable_raw],
+        teachers=teacher_list,
+        rooms=all_rooms,
+    )
+
+
+@app.route("/api/admin/merge-classes", methods=["POST"])
+@admin_required
+def api_admin_merge_classes():
+    data = request.get_json(silent=True) or {}
+    base_class_id   = data.get("base_class_id")
+    source_ids      = data.get("source_class_ids", [])  # classes to absorb
+    teacher_id_raw  = data.get("teacher_id", "unassigned")
+    location        = (data.get("location") or "").strip()
+    max_capacity    = data.get("max_capacity")
+
+    if not base_class_id or not source_ids:
+        return jsonify(ok=False, error="Thiếu thông tin lớp gộp."), 400
+
+    with engine.connect() as conn:
+        base = conn.execute(select(classes).where(classes.c.id == base_class_id)).fetchone()
+        if not base:
+            return jsonify(ok=False, error="Không tìm thấy lớp gốc."), 404
+
+        # Resolve teacher
+        if teacher_id_raw == "unassigned":
+            unassigned = conn.execute(
+                select(teachers).where(teachers.c.cccd == _UNASSIGNED_CCCD)
+            ).fetchone()
+            new_teacher_id = unassigned.id if unassigned else base.teacher_id
+        else:
+            try:
+                new_teacher_id = int(teacher_id_raw)
+            except (ValueError, TypeError):
+                new_teacher_id = base.teacher_id
+
+        # Validate source classes (must be same grade/subject/slot)
+        valid_sources = conn.execute(
+            select(classes).where(and_(
+                classes.c.id.in_(source_ids),
+                classes.c.grade == base.grade,
+                classes.c.subject == base.subject,
+                classes.c.day_of_week == base.day_of_week,
+                classes.c.session_type == base.session_type,
+                classes.c.start_session == base.start_session,
+            ))
+        ).fetchall()
+        valid_source_ids = [c.id for c in valid_sources]
+
+        # Count total enrolled (for capacity validation)
+        total_enrolled = conn.execute(
+            select(func.count()).where(
+                enrollments.c.class_id.in_([base_class_id] + valid_source_ids)
+            )
+        ).scalar() or 0
+
+        if max_capacity is not None and int(max_capacity) < total_enrolled:
+            return jsonify(ok=False, error=f"Sĩ số tối thiểu phải ≥ {total_enrolled} (tổng HS đăng ký)."), 400
+
+        # Get existing base enrollments to avoid duplicates
+        base_enrolled_ids = {r.student_id for r in conn.execute(
+            select(enrollments.c.student_id).where(enrollments.c.class_id == base_class_id)
+        ).fetchall()}
+
+    ts = now_vn()
+    with engine.begin() as conn:
+        # Move enrollments from source classes to base, skip duplicates
+        for src_id in valid_source_ids:
+            src_students = conn.execute(
+                select(enrollments).where(enrollments.c.class_id == src_id)
+            ).fetchall()
+            for row in src_students:
+                if row.student_id not in base_enrolled_ids:
+                    conn.execute(update(enrollments).where(enrollments.c.id == row.id).values(class_id=base_class_id))
+                    conn.execute(insert(student_enroll_log).values(
+                        student_id=row.student_id, class_id=base_class_id, action="A", ts=ts
+                    ))
+                    base_enrolled_ids.add(row.student_id)
+                else:
+                    # Duplicate: just delete from source
+                    conn.execute(delete(enrollments).where(enrollments.c.id == row.id))
+                conn.execute(insert(student_enroll_log).values(
+                    student_id=row.student_id, class_id=src_id, action="D", ts=ts
+                ))
+
+        # Delete source classes
+        conn.execute(delete(classes).where(classes.c.id.in_(valid_source_ids)))
+
+        # Update base class: teacher, location, max_capacity
+        update_vals = {"teacher_id": new_teacher_id}
+        if location and location != "Xếp sau":
+            update_vals["location"] = location
+        if max_capacity is not None:
+            update_vals["max_capacity"] = int(max_capacity)
+        conn.execute(update(classes).where(classes.c.id == base_class_id).values(**update_vals))
+
+    _bump(event_type="class", grade=base.grade)
+    return jsonify(ok=True, base_class_id=base_class_id, merged_count=len(valid_source_ids))
+
+
 @app.route("/admin/classes/<int:class_id>/split", methods=["POST"])
 @admin_required
 def admin_class_split(class_id):

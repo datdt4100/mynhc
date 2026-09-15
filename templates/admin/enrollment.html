@@ -248,9 +248,17 @@
                 </span>
               </td>
               {% for col in extra_columns %}<td style="font-size:.78rem;">{{ (cls.extra_data or {}).get(col, '—') }}</td>{% endfor %}
-              <td class="text-center">
+              <td class="text-center" style="white-space:nowrap;">
                 <button class="btn btn-sm btn-outline-primary fw-semibold" style="font-size:.72rem; border-radius:6px;" onclick="viewStudents({{ cls.id }})">
                   <i class="bi bi-people me-1"></i>Xem HS
+                </button>
+                <button class="btn btn-sm btn-outline-secondary fw-semibold ms-1" style="font-size:.72rem; border-radius:6px;"
+                        onclick="openReassignModal({{ cls.id }}, '{{ (cls.subject or cls.subject_group or '') | e }}', {{ cls.teacher_id }})">
+                  <i class="bi bi-arrow-left-right me-1"></i>Đổi GV
+                </button>
+                <button class="btn btn-sm btn-outline-warning fw-semibold ms-1" style="font-size:.72rem; border-radius:6px;"
+                        onclick="openMergeModal({{ cls.id }}, '{{ (cls.subject or cls.subject_group or '') | e }}', {{ cls.grade }}, {{ cls.day_of_week }}, '{{ cls.session_type }}', {{ cls.start_session }}, {{ cls.duration }})">
+                  <i class="bi bi-diagram-2 me-1"></i>Gộp lớp
                 </button>
               </td>
             </tr>
@@ -542,6 +550,115 @@
         <button type="button" id="btnDeleteAllConfirm" class="btn btn-danger btn-sm fw-semibold" disabled
                 onclick="execDeleteAll()" style="border-radius:8px;">
           <i class="bi bi-trash3 me-1"></i>Xóa toàn bộ
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Reassign Teacher Modal ── -->
+<div class="modal fade" id="reassignModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+    <div class="modal-content" style="border-radius:14px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#0EA5E9,#38BDF8);border:none;padding:12px 18px;">
+        <div>
+          <div class="fw-bold text-white" style="font-size:.9rem;"><i class="bi bi-arrow-left-right me-2"></i>Đổi giáo viên</div>
+          <div id="reassignSubtitle" style="font-size:.72rem;color:rgba(255,255,255,.85);margin-top:1px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:16px 18px;">
+        <label class="form-label fw-semibold" style="font-size:.82rem;color:#374151;">Chuyển lớp này sang giáo viên:</label>
+        <select id="reassignTeacherSel" class="form-select" style="font-size:.83rem;">
+          <option value="">— Đang tải —</option>
+        </select>
+        <p class="text-muted mt-2 mb-0" style="font-size:.72rem;">GV có xung đột lịch được hiển thị nhưng bị vô hiệu hoá.</p>
+      </div>
+      <div class="modal-footer" style="padding:10px 16px;border-top:1.5px solid #E2E8F0;gap:8px;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" style="font-size:.8rem;">Hủy</button>
+        <button class="btn btn-sm" id="reassignConfirmBtn" onclick="confirmReassign()"
+                style="font-size:.8rem;background:#0EA5E9;border:none;color:#fff;border-radius:8px;padding:5px 16px;">
+          <i class="bi bi-check2 me-1"></i>Xác nhận đổi
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Gộp lớp Modal ── -->
+<div class="modal fade" id="mergeModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#D97706,#F59E0B);border:none;padding:14px 20px;">
+        <div>
+          <div class="fw-bold text-white" style="font-size:.95rem;"><i class="bi bi-diagram-2 me-2"></i>Gộp lớp</div>
+          <div id="mergeSubtitle" style="font-size:.75rem;color:rgba(255,255,255,.85);margin-top:2px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <!-- Section 1: Thông tin lớp gộp mới -->
+        <div style="padding:16px 20px;border-bottom:2px solid #FEF3C7;background:#FFFBEB;">
+          <div class="fw-bold mb-3" style="font-size:.82rem;color:#92400E;letter-spacing:.3px;text-transform:uppercase;">
+            <i class="bi bi-info-circle me-1"></i>Thông tin lớp sau khi gộp
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6 col-md-3">
+              <label style="font-size:.75rem;font-weight:600;color:#64748B;">Khối</label>
+              <div id="merge-grade" class="fw-bold" style="font-size:.9rem;color:#1E293B;"></div>
+            </div>
+            <div class="col-6 col-md-3">
+              <label style="font-size:.75rem;font-weight:600;color:#64748B;">Môn học</label>
+              <div id="merge-subject" class="fw-bold" style="font-size:.9rem;color:#1E293B;"></div>
+            </div>
+            <div class="col-12 col-md-6">
+              <label style="font-size:.75rem;font-weight:600;color:#64748B;">Thời gian</label>
+              <div id="merge-time" class="fw-bold" style="font-size:.9rem;color:#1E293B;"></div>
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6 col-md-3">
+              <label style="font-size:.75rem;font-weight:600;color:#64748B;">Tổng HS đăng ký</label>
+              <div id="merge-total-enrolled" class="fw-bold" style="font-size:1rem;color:#059669;"></div>
+            </div>
+            <div class="col-6 col-md-3">
+              <label style="font-size:.75rem;font-weight:600;color:#64748B;">Sĩ số tối đa</label>
+              <input type="number" id="merge-capacity" class="form-control form-control-sm"
+                     style="font-size:.85rem;border-radius:8px;" min="1">
+            </div>
+            <div class="col-12 col-md-6">
+              <label style="font-size:.75rem;font-weight:600;color:#64748B;">Giáo viên</label>
+              <select id="merge-teacher" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+                <option value="unassigned">Do trường phân công</option>
+              </select>
+            </div>
+          </div>
+          <div class="row g-2">
+            <div class="col-12 col-md-6">
+              <label style="font-size:.75rem;font-weight:600;color:#64748B;">Địa điểm</label>
+              <select id="merge-room" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+                <option value="Xếp sau">Xếp sau</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <!-- Section 2: Danh sách lớp có thể gộp -->
+        <div style="padding:16px 20px;">
+          <div class="fw-bold mb-2" style="font-size:.82rem;color:#1E40AF;letter-spacing:.3px;text-transform:uppercase;">
+            <i class="bi bi-list-check me-1"></i>Chọn lớp để gộp vào
+          </div>
+          <div id="merge-class-list">
+            <div class="text-center text-muted py-3" style="font-size:.85rem;">Đang tải…</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding:12px 20px;border-top:1.5px solid #E2E8F0;gap:8px;">
+        <div id="merge-error" class="text-danger me-auto" style="font-size:.8rem;display:none;"></div>
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" style="font-size:.82rem;border-radius:8px;">Hủy</button>
+        <button id="merge-confirm-btn" class="btn btn-sm"
+                style="background:#D97706;border:none;color:#fff;border-radius:8px;font-size:.82rem;padding:6px 18px;"
+                onclick="confirmMerge()">
+          <i class="bi bi-diagram-2 me-1"></i>Hợp lớp
         </button>
       </div>
     </div>
@@ -880,6 +997,193 @@ function openStudentLog(studentId, studentName) {
       body.innerHTML = html + '</tbody></table>';
     })
     .catch(() => { body.innerHTML = '<div class="text-center text-muted py-4">Không thể tải dữ liệu.</div>'; });
+}
+
+/* ── Reassign Teacher ── */
+let _reassignClassId = null;
+async function openReassignModal(classId, subject, currentTeacherId) {
+  _reassignClassId = classId;
+  document.getElementById('reassignSubtitle').textContent = subject || 'Lớp #' + classId;
+  document.getElementById('reassignTeacherSel').innerHTML = '<option value="">— Đang tải —</option>';
+  new bootstrap.Modal(document.getElementById('reassignModal')).show();
+  try {
+    const res = await fetch('/api/class-available-teachers/' + classId);
+    const data = await res.json();
+    if (!data.ok) return;
+    const sel = document.getElementById('reassignTeacherSel');
+    sel.innerHTML = '<option value="unassigned">Do trường phân công</option><option disabled>──────────────</option>';
+    const sameGrp = data.teachers.filter(t => !t.has_conflict);
+    const conflict = data.teachers.filter(t => t.has_conflict);
+    if (sameGrp.length) {
+      const og = document.createElement('optgroup'); og.label = 'Có thể phân công';
+      sameGrp.forEach(t => { const o = new Option(t.full_name + (t.subject_group ? ' (' + t.subject_group + ')' : ''), t.id); og.appendChild(o); });
+      sel.appendChild(og);
+    }
+    if (conflict.length) {
+      const og = document.createElement('optgroup'); og.label = 'Xung đột lịch';
+      conflict.forEach(t => { const o = new Option('⚠ ' + t.full_name, t.id); o.disabled = true; og.appendChild(o); });
+      sel.appendChild(og);
+    }
+    sel.value = currentTeacherId || 'unassigned';
+  } catch { document.getElementById('reassignTeacherSel').innerHTML = '<option value="">Lỗi tải dữ liệu</option>'; }
+}
+async function confirmReassign() {
+  if (!_reassignClassId) return;
+  const teacherId = document.getElementById('reassignTeacherSel').value;
+  if (!teacherId) { alert('Vui lòng chọn giáo viên.'); return; }
+  const btn = document.getElementById('reassignConfirmBtn');
+  btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Đang lưu…';
+  try {
+    const res = await fetch('/admin/classes/' + _reassignClassId + '/reassign-teacher', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({teacher_id: teacherId})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('reassignModal')).hide();
+      setTimeout(() => location.reload(), 300);
+    } else { alert(data.error || 'Lỗi khi đổi giáo viên.'); }
+  } catch { alert('Lỗi kết nối.'); }
+  btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Xác nhận đổi';
+}
+
+/* ── Gộp lớp ── */
+const DAY_NAMES_VN = {2:'Thứ 2',3:'Thứ 3',4:'Thứ 4',5:'Thứ 5',6:'Thứ 6',7:'Thứ 7'};
+let _mergeBaseId = null;
+let _mergeBaseEnrolled = 0;
+let _mergeCheckedEnrolled = {};
+
+async function openMergeModal(classId, subject, grade, dayOfWeek, sessionType, startSession, duration) {
+  _mergeBaseId = classId;
+  _mergeCheckedEnrolled = {};
+  document.getElementById('mergeSubtitle').textContent = `Khối ${grade} — ${subject}`;
+  document.getElementById('merge-grade').textContent = `Khối ${grade}`;
+  document.getElementById('merge-subject').textContent = subject || '—';
+  const sesLabel = (sessionType === 'morning' ? 'Sáng' : 'Chiều') + `, tiết ${startSession}–${startSession + duration - 1}`;
+  document.getElementById('merge-time').textContent = (DAY_NAMES_VN[dayOfWeek] || dayOfWeek) + ' ' + sesLabel;
+  document.getElementById('merge-class-list').innerHTML = '<div class="text-center text-muted py-3" style="font-size:.85rem;">Đang tải…</div>';
+  document.getElementById('merge-error').style.display = 'none';
+  new bootstrap.Modal(document.getElementById('mergeModal')).show();
+
+  try {
+    const res = await fetch('/api/admin/merge-options/' + classId);
+    const data = await res.json();
+    if (!data.ok) { document.getElementById('merge-class-list').innerHTML = '<p class="text-danger p-2">' + (data.error || 'Lỗi') + '</p>'; return; }
+
+    _mergeBaseEnrolled = data.base.enrolled;
+    _updateMergeTotals();
+    document.getElementById('merge-capacity').value = data.base.max_capacity || '';
+    document.getElementById('merge-capacity').min = data.base.enrolled;
+
+    const tSel = document.getElementById('merge-teacher');
+    tSel.innerHTML = '<option value="unassigned">Do trường phân công</option><option disabled>──────</option>';
+    const sameGrp = data.teachers.filter(t => t.same_group && !t.has_conflict);
+    const otherFree = data.teachers.filter(t => !t.same_group && !t.has_conflict);
+    const conflict = data.teachers.filter(t => t.has_conflict);
+    if (sameGrp.length) {
+      const og = document.createElement('optgroup'); og.label = 'Cùng tổ bộ môn — Rảnh';
+      sameGrp.forEach(t => og.appendChild(new Option(t.full_name + ' (' + t.subject_group + ')', t.id)));
+      tSel.appendChild(og);
+    }
+    if (otherFree.length) {
+      const og = document.createElement('optgroup'); og.label = 'Tổ khác — Rảnh';
+      otherFree.forEach(t => og.appendChild(new Option(t.full_name + ' (' + (t.subject_group || '?') + ')', t.id)));
+      tSel.appendChild(og);
+    }
+    if (conflict.length) {
+      const og = document.createElement('optgroup'); og.label = 'Xung đột lịch';
+      conflict.forEach(t => { const o = new Option('⚠ ' + t.full_name, t.id); o.disabled = true; og.appendChild(o); });
+      tSel.appendChild(og);
+    }
+    if (data.base.teacher_id) tSel.value = data.base.teacher_id;
+
+    const rSel = document.getElementById('merge-room');
+    rSel.innerHTML = '<option value="Xếp sau">Xếp sau</option>';
+    if (data.rooms && data.rooms.length) {
+      const og = document.createElement('optgroup'); og.label = 'Phòng trống';
+      data.rooms.forEach(r => og.appendChild(new Option(r, r)));
+      rSel.appendChild(og);
+    }
+    if (data.base.location) rSel.value = data.base.location;
+
+    if (!data.mergeable.length) {
+      document.getElementById('merge-class-list').innerHTML =
+        '<p class="text-muted" style="font-size:.83rem;">Không có lớp nào cùng khối, môn, khung giờ để gộp.</p>';
+      return;
+    }
+    let html = '<div class="d-flex flex-column gap-2">';
+    data.mergeable.forEach(c => {
+      html += `<label class="d-flex align-items-center gap-3 p-2 rounded" style="cursor:pointer;border:1.5px solid #E2E8F0;background:#F8FAFC;">
+        <input type="checkbox" class="merge-cls-chk" data-id="${c.id}" data-enrolled="${c.enrolled}"
+               style="width:18px;height:18px;cursor:pointer;" onchange="_onMergeCheck(this)">
+        <div style="flex:1;font-size:.83rem;">
+          <span class="fw-semibold">Lớp #${c.id}</span>
+          <span class="text-muted ms-2">GV: ${c.teacher_name || '—'}</span>
+          ${c.location ? `<span class="text-muted ms-2"><i class="bi bi-geo-alt-fill" style="font-size:.7rem;"></i> ${c.location}</span>` : ''}
+        </div>
+        <span class="badge" style="background:#EFF6FF;color:#1D4ED8;border-radius:8px;font-size:.75rem;">${c.enrolled} HS</span>
+      </label>`;
+    });
+    html += '</div>';
+    document.getElementById('merge-class-list').innerHTML = html;
+  } catch(e) {
+    document.getElementById('merge-class-list').innerHTML = '<p class="text-danger p-2">Lỗi kết nối.</p>';
+  }
+}
+
+function _onMergeCheck(chk) {
+  const id = parseInt(chk.dataset.id);
+  const enrolled = parseInt(chk.dataset.enrolled);
+  if (chk.checked) _mergeCheckedEnrolled[id] = enrolled;
+  else delete _mergeCheckedEnrolled[id];
+  _updateMergeTotals();
+}
+
+function _updateMergeTotals() {
+  const total = _mergeBaseEnrolled + Object.values(_mergeCheckedEnrolled).reduce((a, b) => a + b, 0);
+  document.getElementById('merge-total-enrolled').textContent = total + ' học sinh';
+  const capInput = document.getElementById('merge-capacity');
+  capInput.min = total;
+  if (parseInt(capInput.value) < total) capInput.value = total;
+}
+
+async function confirmMerge() {
+  if (!_mergeBaseId) return;
+  const sourceIds = Object.keys(_mergeCheckedEnrolled).map(Number);
+  if (!sourceIds.length) {
+    document.getElementById('merge-error').textContent = 'Vui lòng chọn ít nhất 1 lớp để gộp.';
+    document.getElementById('merge-error').style.display = 'block';
+    return;
+  }
+  document.getElementById('merge-error').style.display = 'none';
+  const btn = document.getElementById('merge-confirm-btn');
+  btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Đang gộp…';
+
+  const payload = {
+    base_class_id: _mergeBaseId,
+    source_class_ids: sourceIds,
+    teacher_id: document.getElementById('merge-teacher').value,
+    location: document.getElementById('merge-room').value,
+    max_capacity: parseInt(document.getElementById('merge-capacity').value) || null,
+  };
+  try {
+    const res = await fetch('/api/admin/merge-classes', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('mergeModal')).hide();
+      setTimeout(() => location.reload(), 300);
+    } else {
+      document.getElementById('merge-error').textContent = data.error || 'Lỗi khi gộp lớp.';
+      document.getElementById('merge-error').style.display = 'block';
+    }
+  } catch {
+    document.getElementById('merge-error').textContent = 'Lỗi kết nối.';
+    document.getElementById('merge-error').style.display = 'block';
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="bi bi-diagram-2 me-1"></i>Hợp lớp';
 }
 </script>
 {% endblock %}

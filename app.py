@@ -1137,6 +1137,9 @@ def change_password_submit():
 
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
+    # Tạm thời tắt — sẽ bật lại sau khi cấu hình email
+    flash("Tính năng quên mật khẩu chưa được kích hoạt. Vui lòng liên hệ quản trị viên.", "warning")
+    return redirect(url_for("login_page"))
     if request.method == "GET":
         return render_template("forgot_password.html")
     email = (request.form.get("email") or "").strip().lower()
@@ -1184,6 +1187,9 @@ def forgot_password():
 
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
+    # Tạm thời tắt — sẽ bật lại sau khi cấu hình email
+    flash("Tính năng đặt lại mật khẩu chưa được kích hoạt.", "warning")
+    return redirect(url_for("login_page"))
     with engine.connect() as conn:
         row = conn.execute(
             select(password_reset_tokens).where(
@@ -1633,7 +1639,7 @@ def teacher_class_students_export(class_id):
     if cls.subject:
         slug += f"_{cls.subject.replace(' ', '_')}"
     slug += f"_{day_name(cls.day_of_week).replace(' ', '')}_{slot[:4].replace(',','').replace(' ','')}"
-    ts_str = now_vn().strftime("%Y%m%d_%H%M")
+    ts_str = datetime.now().strftime("%Y%m%d_%H%M")
     filename = f"DanhSach_{slug}_{ts_str}.xlsx"
     return send_file(buf, as_attachment=True, download_name=filename,
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

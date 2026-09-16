@@ -407,7 +407,7 @@ function openDetail(day, slot, ses) {
     const noTime = !c.created_at;
     const enrollPill = `<span class="enroll-pill" id="enroll-pill-${c.id}"><i class="bi bi-people me-1"></i>${c.enrollment}${c.max_capacity ? '/' + c.max_capacity : ''} HS</span>`;
     const escapedTeacher = c.teacher.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    const assignBtn = `<button class="btn-assign-room" onclick="openRoomAssign(${c.id},'${escapedTeacher}','K${c.grade} ${c.subject}',${c.day_of_week},'${c.session_type}',${c.start_session},${c.duration},${JSON.stringify(c.location)})">
+    const assignBtn = `<button class="btn-assign-room" onclick="openRoomAssign(${c.id},'${escapedTeacher}','K${c.grade} ${c.subject}',${c.day_of_week},'${c.session_type}',${c.start_session},${c.duration},${c.location ? "'" + c.location.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'" : 'null'})">
            <i class="bi bi-geo-alt me-1"></i>${c.location ? 'Đổi phòng' : 'Xếp phòng'}
          </button>`;
     const locHtml = c.location

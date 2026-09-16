@@ -212,6 +212,58 @@
     </div>
   </div>
 </div>
+
+<!-- ── Modal: danh sách học sinh ── -->
+<div class="modal fade" id="modalStudentList" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:520px;">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#065F46,#10B981);border:none;padding:12px 18px;">
+        <div style="flex:1;min-width:0;">
+          <h5 class="modal-title fw-bold text-white mb-0" style="font-size:.92rem;">
+            <i class="bi bi-people-fill me-2"></i>Danh sách học sinh
+          </h5>
+          <div id="slModalSubtitle" style="font-size:.73rem;color:rgba(255,255,255,.85);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+        </div>
+        <div class="d-flex align-items-center gap-2 ms-3">
+          <a id="slExportBtn" href="#" target="_blank"
+             style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:8px;
+                    background:rgba(255,255,255,.2);color:#fff;font-size:.75rem;font-weight:700;
+                    text-decoration:none;border:1.5px solid rgba(255,255,255,.4);transition:background .12s;"
+             onmouseenter="this.style.background='rgba(255,255,255,.32)'"
+             onmouseleave="this.style.background='rgba(255,255,255,.2)'">
+            <i class="bi bi-file-earmark-excel"></i><span class="rg-export-text">Excel</span>
+          </a>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+      </div>
+      <div class="modal-body" style="padding:0;">
+        <div id="slLoading" class="text-center text-muted py-4">
+          <div class="spinner-border spinner-border-sm me-2"></div>Đang tải…
+        </div>
+        <div id="slEmpty" class="text-center text-muted py-4" style="display:none;">
+          <i class="bi bi-inbox" style="font-size:1.5rem;display:block;margin-bottom:6px;"></i>Chưa có học sinh đăng ký
+        </div>
+        <div id="slTable" style="display:none;">
+          <div style="padding:8px 16px 6px;font-size:.72rem;color:#64748B;font-weight:600;border-bottom:1px solid #F1F5F9;"
+               id="slCount"></div>
+          <div style="overflow-y:auto;max-height:55vh;">
+            <table style="width:100%;border-collapse:collapse;font-size:.78rem;">
+              <thead>
+                <tr style="background:#F8FAFC;position:sticky;top:0;">
+                  <th style="padding:7px 10px;font-weight:700;color:#475569;border-bottom:1.5px solid #E2E8F0;width:36px;text-align:center;">STT</th>
+                  <th style="padding:7px 10px;font-weight:700;color:#475569;border-bottom:1.5px solid #E2E8F0;">Họ và tên</th>
+                  <th style="padding:7px 10px;font-weight:700;color:#475569;border-bottom:1.5px solid #E2E8F0;width:56px;text-align:center;">Lớp</th>
+                  <th style="padding:7px 10px;font-weight:700;color:#475569;border-bottom:1.5px solid #E2E8F0;width:48px;text-align:center;">GT</th>
+                </tr>
+              </thead>
+              <tbody id="slTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -327,7 +379,9 @@ function _renderGridView() {
         if (bk) {
           const gs = _RG_GRADE_ST[bk.grade] || {bg:'#F1F5F9',bdr:'#CBD5E1',txt:'#475569'};
           h += `<td style="${TD}vertical-align:top;">
-            <div style="${IH}background:${gs.bg};border:1.5px solid ${gs.bdr};padding:3px 5px 3px 4px;position:relative;">
+            <div style="${IH}background:${gs.bg};border:1.5px solid ${gs.bdr};padding:3px 5px 3px 4px;position:relative;cursor:pointer;transition:filter .12s;"
+                 onclick="openStudentListModal(${bk.class_id},event)"
+                 onmouseenter="this.style.filter='brightness(.94)'" onmouseleave="this.style.filter=''">
               <div style="font-size:.58rem;font-weight:800;color:${gs.txt};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">K${bk.grade} · ${_gesc(bk.subject)}</div>
               <div style="font-size:.56rem;color:#374151;line-height:1.3;margin-top:1px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${_gesc(bk.teacher)}</div>
               <button onclick="deleteGridClass(${bk.class_id},event)"
@@ -568,5 +622,48 @@ function deleteGridClass(classId, e) {
 }
 
 document.addEventListener('DOMContentLoaded', loadRoomGrid);
+
+// ── Student list popup ──
+async function openStudentListModal(classId, e) {
+  if (e) e.stopPropagation();
+  const modal = new bootstrap.Modal(document.getElementById('modalStudentList'));
+  document.getElementById('slLoading').style.display = '';
+  document.getElementById('slEmpty').style.display   = 'none';
+  document.getElementById('slTable').style.display   = 'none';
+  document.getElementById('slModalSubtitle').textContent = '';
+  document.getElementById('slExportBtn').href = _API.classBase + '/' + classId + '/students/export';
+  modal.show();
+  try {
+    const res  = await fetch(_API.classBase + '/' + classId + '/students');
+    const data = await res.json();
+    document.getElementById('slLoading').style.display = 'none';
+    if (!data.ok) { document.getElementById('slEmpty').style.display = ''; return; }
+    const ci = data.class_info;
+    const SES = {morning:'Sáng', afternoon:'Chiều'};
+    document.getElementById('slModalSubtitle').textContent =
+      `K${ci.grade} · ${ci.subject} · ${ci.teacher} · T${ci.day_of_week} ${SES[ci.session_type] || ''} T${ci.start_session}${ci.location ? ' · ' + ci.location : ''}`;
+    if (!data.students.length) {
+      document.getElementById('slEmpty').style.display = '';
+      return;
+    }
+    document.getElementById('slCount').textContent = `${data.students.length} học sinh đăng ký`;
+    const tbody = document.getElementById('slTbody');
+    tbody.innerHTML = data.students.map((s, i) => {
+      const gt = s.gender === 'Nam' ? '<span style="color:#1D4ED8;">Nam</span>'
+               : s.gender === 'Nữ'  ? '<span style="color:#BE185D;">Nữ</span>'  : '—';
+      const bg = i % 2 === 1 ? 'background:#F8FAFC;' : '';
+      return `<tr style="${bg}">
+        <td style="padding:6px 10px;text-align:center;color:#64748B;">${i + 1}</td>
+        <td style="padding:6px 10px;font-weight:600;color:#0c4a6e;">${_gesc(s.full_name)}</td>
+        <td style="padding:6px 10px;text-align:center;color:#374151;">${_gesc(s.class_name)}</td>
+        <td style="padding:6px 10px;text-align:center;font-size:.72rem;">${gt}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('slTable').style.display = '';
+  } catch {
+    document.getElementById('slLoading').style.display = 'none';
+    document.getElementById('slEmpty').style.display   = '';
+  }
+}
 </script>
 {% endblock %}

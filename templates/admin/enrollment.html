@@ -77,7 +77,22 @@
   .count-badge {
     display: inline-block; min-width: 52px; text-align: center;
     padding: 4px 10px; border-radius: 20px; font-size: .78rem; font-weight: 700; transition: background .3s, color .3s;
+    cursor: pointer; position: relative;
   }
+  .count-badge:hover::after {
+    content: '✏️'; font-size: .6rem; position: absolute; top: -4px; right: -4px;
+  }
+  /* Inline capacity popover */
+  .cap-popover {
+    position: absolute; z-index: 9999; background: #fff; border: 1.5px solid #C4B5FD;
+    border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.15);
+    padding: 10px 12px; min-width: 180px; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  }
+  .cap-popover input[type=number] {
+    width: 100%; border: 1.5px solid #E2E8F0; border-radius: 8px;
+    padding: 5px 8px; font-size: .82rem; font-weight: 700; text-align: center;
+  }
+  .cap-popover input[type=number]:focus { outline: none; border-color: #7C3AED; }
 
   .table-responsive-admin { overflow-x: auto; overflow-y: auto; -webkit-overflow-scrolling: touch; max-height: 540px; }
 
@@ -282,7 +297,8 @@
                 {% set crowded = mx and not full and cnt * 5 >= mx * 3 %}
                 <span class="count-badge {% if full %}count-badge-red{% elif crowded %}count-badge-yellow{% else %}count-badge-green{% endif %}"
                       data-class-id="{{ cls.id }}" id="count-{{ cls.id }}" data-max="{{ mx or '' }}"
-                      {% if full %}title="Lớp đã đầy"{% elif crowded %}title="Lớp đông"{% endif %}>
+                      onclick="openCapEditor(this, event)"
+                      title="Click để đặt sĩ số tối đa">
                   {% if crowded %}<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>{% endif %}
                   {{ cnt }}{% if mx %}/{{ mx }}{% endif %}
                 </span>
@@ -783,12 +799,80 @@ function refreshCounts() {
       const full = cap && cnt >= cap;
       const crowded = !full && cap && cnt * 5 >= cap * 3;
       el.className = 'count-badge ' + (full ? 'count-badge-red' : crowded ? 'count-badge-yellow' : 'count-badge-green');
-      el.title = full ? 'Lớp đã đầy' : crowded ? 'Lớp đông' : '';
+      el.title = 'Click để đặt sĩ số tối đa';
       el.innerHTML = (crowded ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>' : '') + (cap ? cnt + '/' + cap : String(cnt));
     });
   }).catch(() => {});
 }
 setInterval(refreshCounts, 5000);
+
+/* ── Inline capacity editor ── */
+let _capPopover = null;
+function _closeCapPopover() {
+  if (_capPopover) { _capPopover.remove(); _capPopover = null; }
+}
+document.addEventListener('click', function(e) {
+  if (_capPopover && !_capPopover.contains(e.target)) _closeCapPopover();
+}, true);
+
+function openCapEditor(badge, e) {
+  e.stopPropagation();
+  _closeCapPopover();
+  const classId = badge.dataset.classId;
+  const curMax  = badge.dataset.max ? parseInt(badge.dataset.max) : '';
+  const pop = document.createElement('div');
+  pop.className = 'cap-popover';
+  pop.innerHTML = `
+    <div style="font-size:.72rem;font-weight:700;color:#7C3AED;margin-bottom:6px;">
+      <i class="bi bi-people-fill me-1"></i>Sĩ số tối đa
+    </div>
+    <input type="number" id="cap-input" min="1" value="${curMax}" placeholder="VD: 45"
+           style="margin-bottom:8px;" onkeydown="if(event.key==='Enter')saveCapacity(this,${classId})">
+    <div class="d-flex gap-2 justify-content-end">
+      <button onclick="_closeCapPopover()" style="font-size:.72rem;padding:3px 10px;border-radius:6px;background:#F1F5F9;color:#475569;border:none;cursor:pointer;">Huỷ</button>
+      <button onclick="saveCapacity(document.getElementById('cap-input'),${classId})"
+              style="font-size:.72rem;padding:3px 10px;border-radius:6px;background:#7C3AED;color:#fff;border:none;cursor:pointer;font-weight:700;">Lưu</button>
+    </div>`;
+  badge.style.position = 'relative';
+  badge.appendChild(pop);
+  _capPopover = pop;
+  pop.querySelector('#cap-input').focus();
+  pop.querySelector('#cap-input').select();
+}
+
+async function saveCapacity(input, classId) {
+  const val = parseInt(input.value);
+  if (!val || val < 1) { input.style.borderColor = '#EF4444'; return; }
+  input.disabled = true;
+  try {
+    const res  = await fetch(`/admin/classes/${classId}`, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({max_capacity: val})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _closeCapPopover();
+      // Update badge immediately
+      const el = document.getElementById('count-' + classId);
+      if (el) {
+        el.dataset.max = val;
+        const cnt = parseInt(el.textContent) || 0;
+        const full = cnt >= val;
+        const crowded = !full && cnt * 5 >= val * 3;
+        el.className = 'count-badge ' + (full ? 'count-badge-red' : crowded ? 'count-badge-yellow' : 'count-badge-green');
+        el.title = full ? 'Lớp đã đầy — click để đổi' : 'Click để đặt sĩ số tối đa';
+        el.innerHTML = (crowded ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.68rem;"></i>' : '') + cnt + '/' + val;
+      }
+      showAlert('Đã cập nhật sĩ số tối đa.', 'success');
+    } else {
+      showAlert(data.error || 'Lỗi cập nhật.', 'error');
+      input.disabled = false;
+    }
+  } catch {
+    showAlert('Lỗi kết nối.', 'error');
+    input.disabled = false;
+  }
+}
 
 /* ── Student pane: grade filter ── */
 let _enrGrade = 'all';

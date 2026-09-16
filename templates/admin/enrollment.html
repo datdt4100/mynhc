@@ -3,22 +3,27 @@
 {% block hero %}{% endblock %}
 
 {% block header_right %}
-<button class="topbar-btn topbar-btn-solid" id="btn-toggle-enrollment" onclick="toggleStudentReg()"
-        style="{% if supplement_reg_open %}opacity:.5;{% endif %}">
-  {% if student_reg_open %}
-  <i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng GĐ2</span>
-  {% else %}
-  <i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở GĐ2</span>
-  {% endif %}
-</button>
-<button class="topbar-btn" id="btn-toggle-supplement" onclick="toggleSupplementReg()"
-        style="background:{% if supplement_reg_open %}#F59E0B{% else %}rgba(255,255,255,.15){% endif %};border-color:{% if supplement_reg_open %}#F59E0B{% else %}rgba(255,255,255,.3){% endif %};">
-  {% if supplement_reg_open %}
-  <i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng GĐ3</span>
-  {% else %}
-  <i class="bi bi-plus-square"></i><span class="d-none d-sm-inline">Mở GĐ3 (bổ sung)</span>
-  {% endif %}
-</button>
+<div class="d-flex align-items-center gap-2">
+  <button class="topbar-btn topbar-btn-solid" id="btn-toggle-enrollment" onclick="toggleStudentReg()"
+          style="{% if supplement_reg_open %}opacity:.45;{% endif %}">
+    {% if student_reg_open %}
+    <i class="bi bi-unlock-fill"></i><span class="d-none d-sm-inline">GĐ2 đang mở</span>
+    {% else %}
+    <i class="bi bi-lock-fill"></i><span class="d-none d-sm-inline">Mở GĐ2</span>
+    {% endif %}
+  </button>
+  <button class="topbar-btn" id="btn-toggle-supplement" onclick="toggleSupplementReg()"
+          style="background:{% if supplement_reg_open %}#F59E0B{% else %}rgba(255,255,255,.13){% endif %};
+                 border-color:{% if supplement_reg_open %}#D97706{% else %}rgba(255,255,255,.35){% endif %};
+                 color:{% if supplement_reg_open %}#fff{% else %}rgba(255,255,255,.92){% endif %};
+                 {% if student_reg_open %}opacity:.45;{% endif %}">
+    {% if supplement_reg_open %}
+    <i class="bi bi-plus-square-fill"></i><span class="d-none d-sm-inline">GĐ3 đang mở</span>
+    {% else %}
+    <i class="bi bi-plus-square"></i><span class="d-none d-sm-inline">Mở GĐ3 bổ sung</span>
+    {% endif %}
+  </button>
+</div>
 {% endblock %}
 
 {% block head %}
@@ -999,13 +1004,19 @@ function toggleStudentReg() {
   fetch('{{ url_for("admin_enrollment_toggle") }}', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'} })
   .then(r => r.json()).then(data => {
     const open = data.open;
-    btn.innerHTML = open ? '<i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng GĐ2</span>' : '<i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở GĐ2</span>';
-    btn.style.opacity = open ? '' : '';
+    btn.innerHTML = open
+      ? '<i class="bi bi-unlock-fill"></i><span class="d-none d-sm-inline">GĐ2 đang mở</span>'
+      : '<i class="bi bi-lock-fill"></i><span class="d-none d-sm-inline">Mở GĐ2</span>';
+    btn.style.opacity = '';
     // Opening phase 2 closes phase 3
     if (open) {
-      btn3.innerHTML = '<i class="bi bi-plus-square"></i><span class="d-none d-sm-inline">Mở GĐ3 (bổ sung)</span>';
-      btn3.style.background = 'rgba(255,255,255,.15)';
-      btn3.style.borderColor = 'rgba(255,255,255,.3)';
+      btn3.innerHTML = '<i class="bi bi-plus-square"></i><span class="d-none d-sm-inline">Mở GĐ3 bổ sung</span>';
+      btn3.style.background = 'rgba(255,255,255,.13)';
+      btn3.style.borderColor = 'rgba(255,255,255,.35)';
+      btn3.style.color = 'rgba(255,255,255,.92)';
+      btn3.style.opacity = '.45';
+    } else {
+      btn3.style.opacity = '';
     }
     _syncBadge(open, false);
   })
@@ -1021,13 +1032,18 @@ function toggleSupplementReg() {
   .then(r => r.json()).then(data => {
     const open = data.open;
     btn.innerHTML = open
-      ? '<i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng GĐ3</span>'
-      : '<i class="bi bi-plus-square"></i><span class="d-none d-sm-inline">Mở GĐ3 (bổ sung)</span>';
-    btn.style.background = open ? '#F59E0B' : 'rgba(255,255,255,.15)';
-    btn.style.borderColor = open ? '#F59E0B' : 'rgba(255,255,255,.3)';
+      ? '<i class="bi bi-plus-square-fill"></i><span class="d-none d-sm-inline">GĐ3 đang mở</span>'
+      : '<i class="bi bi-plus-square"></i><span class="d-none d-sm-inline">Mở GĐ3 bổ sung</span>';
+    btn.style.background    = open ? '#F59E0B' : 'rgba(255,255,255,.13)';
+    btn.style.borderColor   = open ? '#D97706' : 'rgba(255,255,255,.35)';
+    btn.style.color         = 'rgba(255,255,255,.92)';
+    btn.style.opacity       = '';
     // Opening phase 3 closes phase 2
     if (open) {
-      btn2.innerHTML = '<i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở GĐ2</span>';
+      btn2.innerHTML = '<i class="bi bi-lock-fill"></i><span class="d-none d-sm-inline">Mở GĐ2</span>';
+      btn2.style.opacity = '.45';
+    } else {
+      btn2.style.opacity = '';
     }
     _syncBadge(false, open);
   })

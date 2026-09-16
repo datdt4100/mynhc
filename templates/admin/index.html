@@ -543,13 +543,34 @@
           </div>
         </a>
         <div class="d-flex align-items-center justify-content-between pt-2" style="border-top:1.5px solid #E2E8F0;">
-          <span class="text-muted" style="font-size:.78rem; font-weight:600;">Giai đoạn 2</span>
+          <div>
+            <span class="text-muted" style="font-size:.78rem; font-weight:600;">Giai đoạn 2</span>
+            <span style="font-size:.71rem;color:#64748B;display:block;margin-top:1px;">HS đăng ký và huỷ tự do</span>
+          </div>
           <button id="btn-toggle-student"
                   class="reg-toggle {% if student_reg_open %}open{% else %}closed{% endif %}"
                   data-open="{{ 'true' if student_reg_open else 'false' }}"
-                  onclick="toggleReg('student')">
+                  onclick="toggleStudentIdx()">
             <span class="toggle-dot"></span>
             <span id="student-reg-label">{% if student_reg_open %}Đang mở{% else %}Đã đóng{% endif %}</span>
+          </button>
+        </div>
+        <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
+          <div>
+            <span style="font-size:.78rem; font-weight:600; color:#374151;">
+              <i class="bi bi-plus-square me-1" style="color:#F59E0B;"></i>Giai đoạn 3 (bổ sung)
+            </span>
+            <span id="supplement-desc" style="font-size:.71rem;color:#64748B;display:block;margin-top:1px;">
+              {% if supplement_reg_open %}HS đăng ký thêm, không huỷ lớp đã xếp phòng{% else %}Đăng ký bổ sung — lớp đã xếp phòng bị khoá{% endif %}
+            </span>
+          </div>
+          <button id="btn-toggle-supplement-idx"
+                  class="reg-toggle {% if supplement_reg_open %}open{% else %}closed{% endif %}"
+                  style="{% if supplement_reg_open %}background:#FEF3C7;border-color:#F59E0B;{% endif %}"
+                  data-open="{{ 'true' if supplement_reg_open else 'false' }}"
+                  onclick="toggleSupplementIdx()">
+            <span class="toggle-dot" style="{% if supplement_reg_open %}background:#F59E0B;{% endif %}"></span>
+            <span id="supplement-label">{% if supplement_reg_open %}Đang mở{% else %}Đã đóng{% endif %}</span>
           </button>
         </div>
         <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
@@ -1620,6 +1641,63 @@ function toggleReg(type) {
       btn.classList.toggle('open',   nowOpen);
       btn.classList.toggle('closed', !nowOpen);
       label.textContent = nowOpen ? 'Đang mở' : 'Đã đóng';
+    })
+    .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+    .finally(() => { btn.disabled = false; });
+}
+
+function toggleStudentIdx() {
+  const btn   = document.getElementById('btn-toggle-student');
+  const label = document.getElementById('student-reg-label');
+  const btn3  = document.getElementById('btn-toggle-supplement-idx');
+  const lbl3  = document.getElementById('supplement-label');
+  const desc3 = document.getElementById('supplement-desc');
+  btn.disabled = true;
+  fetch('{{ url_for("admin_enrollment_toggle") }}', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+    .then(r => r.json())
+    .then(data => {
+      const open = data.open;
+      btn.dataset.open = open ? 'true' : 'false';
+      btn.classList.toggle('open', open);
+      btn.classList.toggle('closed', !open);
+      label.textContent = open ? 'Đang mở' : 'Đã đóng';
+      // Opening GĐ2 closes GĐ3
+      if (open && btn3) {
+        btn3.classList.remove('open'); btn3.classList.add('closed');
+        btn3.style.background = ''; btn3.style.borderColor = '';
+        btn3.querySelector('.toggle-dot').style.background = '';
+        lbl3.textContent = 'Đã đóng';
+        if (desc3) desc3.textContent = 'Đăng ký bổ sung — lớp đã xếp phòng bị khoá';
+      }
+    })
+    .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+    .finally(() => { btn.disabled = false; });
+}
+
+function toggleSupplementIdx() {
+  const btn   = document.getElementById('btn-toggle-supplement-idx');
+  const label = document.getElementById('supplement-label');
+  const desc  = document.getElementById('supplement-desc');
+  const btn2  = document.getElementById('btn-toggle-student');
+  const lbl2  = document.getElementById('student-reg-label');
+  btn.disabled = true;
+  fetch('{{ url_for("admin_enrollment_toggle_supplement") }}', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+    .then(r => r.json())
+    .then(data => {
+      const open = data.open;
+      btn.dataset.open = open ? 'true' : 'false';
+      btn.classList.toggle('open', open);
+      btn.classList.toggle('closed', !open);
+      btn.style.background    = open ? '#FEF3C7' : '';
+      btn.style.borderColor   = open ? '#F59E0B' : '';
+      btn.querySelector('.toggle-dot').style.background = open ? '#F59E0B' : '';
+      label.textContent = open ? 'Đang mở' : 'Đã đóng';
+      if (desc) desc.textContent = open ? 'HS đăng ký thêm, không huỷ lớp đã xếp phòng' : 'Đăng ký bổ sung — lớp đã xếp phòng bị khoá';
+      // Opening GĐ3 closes GĐ2
+      if (open && btn2) {
+        btn2.classList.remove('open'); btn2.classList.add('closed');
+        lbl2.textContent = 'Đã đóng';
+      }
     })
     .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
     .finally(() => { btn.disabled = false; });

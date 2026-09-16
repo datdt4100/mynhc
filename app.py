@@ -3102,8 +3102,9 @@ def admin_index():
         class_stats = {r.class_name: {"total": r.total, "nam": r.nam, "nu": r.nu} for r in _stats_rows}
         homeroom_map = {h.class_name: h for h in homeroom_list}  # for template lookup
 
-    teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
-    student_reg_open = get_setting("student_reg_open", "0") == "1"
+    teacher_reg_open     = get_setting("teacher_reg_open", "0") == "1"
+    student_reg_open     = get_setting("student_reg_open", "0") == "1"
+    supplement_reg_open  = get_setting("supplement_reg_open", "0") == "1"
     maintenance = get_setting("maintenance_mode", "0") == "1"
     schedule_constraint = get_setting("schedule_constraint", "1") == "1"
     allow_multi_class = get_setting("allow_multi_class", "1") == "1"
@@ -3133,6 +3134,7 @@ def admin_index():
         student_list=student_list,
         teacher_reg_open=teacher_reg_open,
         student_reg_open=student_reg_open,
+        supplement_reg_open=supplement_reg_open,
         maintenance=maintenance,
         schedule_constraint=schedule_constraint,
         allow_multi_class=allow_multi_class,

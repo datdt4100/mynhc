@@ -1012,11 +1012,22 @@ async function openReassignModal(classId, subject, currentTeacherId) {
     if (!data.ok) return;
     const sel = document.getElementById('reassignTeacherSel');
     sel.innerHTML = '<option value="unassigned">Do trường phân công</option><option disabled>──────────────</option>';
-    const sameGrp = data.teachers.filter(t => !t.has_conflict);
+    const cls_subj = data.class_subject || '';
+    const avail    = data.teachers.filter(t => !t.has_conflict);
     const conflict = data.teachers.filter(t => t.has_conflict);
-    if (sameGrp.length) {
-      const og = document.createElement('optgroup'); og.label = 'Có thể phân công';
-      sameGrp.forEach(t => { const o = new Option(t.full_name + (t.subject_group ? ' (' + t.subject_group + ')' : ''), t.id); og.appendChild(o); });
+    // Same tổ bộ môn first, other subjects after
+    const sameSubj  = avail.filter(t => cls_subj && t.subject_group === cls_subj);
+    const otherSubj = avail.filter(t => !cls_subj || t.subject_group !== cls_subj);
+    if (sameSubj.length) {
+      const og = document.createElement('optgroup');
+      og.label = `Cùng tổ bộ môn (${cls_subj})`;
+      sameSubj.forEach(t => { const o = new Option(t.full_name, t.id); og.appendChild(o); });
+      sel.appendChild(og);
+    }
+    if (otherSubj.length) {
+      const og = document.createElement('optgroup');
+      og.label = sameSubj.length ? 'Tổ bộ môn khác' : 'Có thể phân công';
+      otherSubj.forEach(t => { const o = new Option(t.full_name + (t.subject_group ? ' (' + t.subject_group + ')' : ''), t.id); og.appendChild(o); });
       sel.appendChild(og);
     }
     if (conflict.length) {

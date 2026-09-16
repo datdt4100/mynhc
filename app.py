@@ -236,6 +236,16 @@ password_reset_tokens = Table("password_reset_tokens", metadata,
     Column("used", Integer, default=0),
 )
 
+admin_action_log = Table(
+    "admin_action_log", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("actor", Text, nullable=False),      # "Admin" hoặc tên quản trị phòng
+    Column("action", Text, nullable=False),     # create_class | delete_class | merge_class | split_class | reassign_teacher | assign_room | unassign_room | import_rooms | import_excel | clear_all
+    Column("class_id", Integer, nullable=True), # ID lớp bị ảnh hưởng (null với bulk ops)
+    Column("detail", Text, nullable=True),      # mô tả ngắn
+    Column("ts", Text, nullable=False),
+)
+
 # ---------------------------------------------------------------------------
 # DB init
 # ---------------------------------------------------------------------------
@@ -250,6 +260,7 @@ _Index("ix_classes_is_published",   classes.c.is_published)
 _Index("ix_classes_grade",          classes.c.grade)
 _Index("ix_student_enroll_log_student_id", student_enroll_log.c.student_id)
 _Index("ix_prt_token", password_reset_tokens.c.token)
+_Index("ix_admin_action_log_ts", admin_action_log.c.ts)
 
 def init_db():
     metadata.create_all(engine)
@@ -576,6 +587,22 @@ def _name_fmt(s):
     if not s:
         return ""
     return " ".join(s.strip().split()).lower().title()
+
+
+def _log_admin_action(conn, action: str, detail: str, class_id=None):
+    """Insert an admin_action_log row. Call inside an open transaction (conn)."""
+    if session.get("is_admin"):
+        actor = "Admin"
+    elif session.get("user_type") == "operator":
+        op_id = session.get("operator_id")
+        op = conn.execute(select(operators).where(operators.c.id == op_id)).fetchone() if op_id else None
+        actor = op.full_name if op else "Operator"
+    else:
+        actor = "System"
+    conn.execute(insert(admin_action_log).values(
+        actor=actor, action=action, detail=detail, class_id=class_id, ts=now_vn()
+    ))
+
 
 # Allowed special chars (excludes ' " ` ; \ which are DB-dangerous)
 _PW_ALLOWED_SPECIALS = r"!@#$%^&*()\-_+=\[\]{}|<>,.?/~"
@@ -4121,6 +4148,10 @@ def admin_register_class():
             )
         )
         class_id = result.inserted_primary_key[0]
+        ses_lbl = "Sáng" if session_type == "morning" else "Chiều"
+        _log_admin_action(conn, "create_class",
+            f"K{grade} · {_name_fmt(teacher.full_name)} · T{day_of_week} {ses_lbl} T{start_session}",
+            class_id=class_id)
     _bump(event_type="class", grade=grade)
     return jsonify(ok=True, class_id=class_id)
 
@@ -4443,7 +4474,8 @@ def api_class_available_teachers(class_id):
             .where(teachers.c.cccd != _UNASSIGNED_CCCD)
             .order_by(teachers.c.subject_group, teachers.c.full_name)
         ).fetchall()
-    return jsonify(ok=True, teachers=[{
+    class_subject = cls.subject or ""
+    return jsonify(ok=True, class_subject=class_subject, teachers=[{
         "id": t.id,
         "full_name": _name_fmt(t.full_name),
         "subject_group": t.subject_group or "",
@@ -4492,7 +4524,12 @@ def admin_class_reassign_teacher(class_id):
             if conflict:
                 return jsonify(ok=False, error=f"{_name_fmt(t.full_name)} đã có lớp khác trong khung giờ này.")
             new_name = t.full_name
+        old_t = conn.execute(select(teachers).where(teachers.c.id == cls.teacher_id)).fetchone() if cls.teacher_id else None
+        old_name = _name_fmt(old_t.full_name) if old_t else "—"
         conn.execute(update(classes).where(classes.c.id == class_id).values(teacher_id=new_teacher_id))
+        _log_admin_action(conn, "reassign_teacher",
+            f"#{class_id} K{cls.grade}: {old_name} → {_name_fmt(new_name)}",
+            class_id=class_id)
     _bump(event_type="class_update", grade=cls.grade)
     return jsonify(ok=True, new_teacher_name=new_name)
 
@@ -4766,6 +4803,10 @@ def api_admin_merge_classes():
         if max_capacity is not None:
             update_vals["max_capacity"] = int(max_capacity)
         conn.execute(update(classes).where(classes.c.id == base_class_id).values(**update_vals))
+        src_str = ", ".join(f"#{i}" for i in valid_source_ids)
+        _log_admin_action(conn, "merge_class",
+            f"Gộp {src_str} vào #{base_class_id} K{base.grade} ({total_enrolled} HS)",
+            class_id=base_class_id)
 
     _bump(event_type="class", grade=base.grade)
     return jsonify(ok=True, base_class_id=base_class_id, merged_count=len(valid_source_ids))
@@ -4850,6 +4891,10 @@ def admin_class_split(class_id):
             slot=f"T{cls.day_of_week}{s_code}{cls.start_session}x{cls.duration}|G{cls.grade}|{orig_subj}",
             ts=ts,
         ))
+        new_str = ", ".join(f"#{i}" for i in new_class_ids)
+        _log_admin_action(conn, "split_class",
+            f"Tách #{class_id} K{cls.grade} → {new_str} ({len(enroll_list)} HS phân chia)",
+            class_id=class_id)
     _bump(event_type="class", grade=cls.grade)
     return jsonify(ok=True, new_class_ids=new_class_ids)
 
@@ -4904,7 +4949,11 @@ def admin_class_unassign_room(class_id):
         cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
         if not cls:
             return jsonify(ok=False, error="Không tìm thấy lớp.")
+        old_room = cls.location or "—"
         conn.execute(update(classes).where(classes.c.id == class_id).values(location=None))
+        _log_admin_action(conn, "unassign_room",
+            f"#{class_id} K{cls.grade}: gỡ phòng {old_room}",
+            class_id=class_id)
         _bump("class_update", cls.grade)
     return jsonify(ok=True)
 
@@ -4937,6 +4986,10 @@ def admin_class_assign_room(class_id):
         conn.execute(
             update(classes).where(classes.c.id == class_id).values(location=location)
         )
+        old_room = cls.location or "—"
+        _log_admin_action(conn, "assign_room",
+            f"#{class_id} K{cls.grade}: {old_room} → {location}",
+            class_id=class_id)
     _bump(event_type="class", grade=cls.grade)
     return jsonify(ok=True)
 
@@ -5219,14 +5272,18 @@ def admin_add_class_manual():
             is_published  = 1,
             created_at    = now_vn(),
         ))
+        new_class_id = result.inserted_primary_key[0]
         if not school_assign:
-            new_class_id = result.inserted_primary_key[0]
             s_code = 'S' if session_type == 'morning' else 'C'
             conn.execute(insert(teacher_class_log).values(
                 teacher_id=teacher_row.id, class_id=new_class_id,
                 action='C', slot=f"T{day_of_week}{s_code}{start_session}x{duration}|G{grade}|{subject}",
                 ts=now_vn()
             ))
+        ses_lbl = "Sáng" if session_type == "morning" else "Chiều"
+        _log_admin_action(conn, "create_class",
+            f"K{grade} · {_name_fmt(teacher_row.full_name)} · T{day_of_week} {ses_lbl} T{start_session} (thủ công)",
+            class_id=new_class_id)
         conn.commit()
     return jsonify(ok=True)
 
@@ -5428,6 +5485,9 @@ def admin_import_classes_excel():
             except Exception as e:
                 errors_list.append(f"Dòng {i}: Lỗi không xác định — {e}")
 
+        if imported:
+            _log_admin_action(conn, "import_excel",
+                f"Nhập Excel: {imported}/{total_rows} lớp thành công, {len(errors_list)} lỗi")
         conn.commit()
 
     return jsonify(
@@ -5651,6 +5711,7 @@ def admin_classes_clear_all():
         deleted = conn.execute(text("SELECT COUNT(*) FROM classes")).scalar()
         conn.execute(text("DELETE FROM enrollments"))
         conn.execute(text("DELETE FROM classes"))
+        _log_admin_action(conn, "clear_all", f"Xóa toàn bộ {deleted} lớp")
     _bump(event_type="class")
     return jsonify(ok=True, deleted=deleted)
 
@@ -5752,14 +5813,22 @@ def admin_class_publish(class_id):
 def admin_class_delete(class_id):
     with engine.begin() as conn:
         cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        teacher_name = ""
         if cls and cls.teacher_id:
             t = conn.execute(select(teachers).where(teachers.c.id == cls.teacher_id)).fetchone()
-            if t and t.cccd != _UNASSIGNED_CCCD:
-                subj = cls.subject or t.subject_group or ""
-                conn.execute(insert(teacher_class_log).values(
-                    teacher_id=cls.teacher_id, class_id=None, action='D',
-                    slot=f"{_cls_slot(cls)}|G{cls.grade}|{subj}", ts=now_vn()
-                ))
+            if t:
+                teacher_name = _name_fmt(t.full_name)
+                if t.cccd != _UNASSIGNED_CCCD:
+                    subj = cls.subject or t.subject_group or ""
+                    conn.execute(insert(teacher_class_log).values(
+                        teacher_id=cls.teacher_id, class_id=None, action='D',
+                        slot=f"{_cls_slot(cls)}|G{cls.grade}|{subj}", ts=now_vn()
+                    ))
+        if cls:
+            ses_lbl = "Sáng" if cls.session_type == "morning" else "Chiều"
+            _log_admin_action(conn, "delete_class",
+                f"K{cls.grade} · {teacher_name} · T{cls.day_of_week} {ses_lbl} T{cls.start_session}",
+                class_id=class_id)
         conn.execute(delete(enrollments).where(enrollments.c.class_id == class_id))
         conn.execute(delete(classes).where(classes.c.id == class_id))
     return jsonify(ok=True)
@@ -6477,6 +6546,43 @@ def admin_diagnose_student(cccd):
         published_classes_for_grade=len(pub_classes),
         classes=cls_details,
     )
+
+
+# ---------------------------------------------------------------------------
+# Admin action log
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/logs")
+@admin_required
+def admin_logs():
+    page     = request.args.get("page", 1, type=int)
+    per_page = 50
+    action_filter = request.args.get("action", "")
+    with engine.connect() as conn:
+        q = select(admin_action_log).order_by(admin_action_log.c.id.desc())
+        if action_filter:
+            q = q.where(admin_action_log.c.action == action_filter)
+        total = conn.execute(
+            select(func.count()).select_from(
+                q.alias()
+            )
+        ).scalar() or 0
+        rows = conn.execute(q.offset((page - 1) * per_page).limit(per_page)).fetchall()
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    return render_template("admin/logs.html",
+                           logs=rows,
+                           page=page,
+                           total_pages=total_pages,
+                           total=total,
+                           action_filter=action_filter)
+
+
+@app.route("/api/admin/logs/clear", methods=["POST"])
+@admin_required
+def admin_logs_clear():
+    with engine.begin() as conn:
+        conn.execute(delete(admin_action_log))
+    return jsonify(ok=True)
 
 
 # ---------------------------------------------------------------------------

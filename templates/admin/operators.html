@@ -109,7 +109,10 @@
               </div>
             </td>
             <td class="py-2 text-center" style="white-space:nowrap;">
-              <button onclick="openEditPerms({{ op.id }}, '{{ op.full_name | e }}', {{ {'perm_room_assign': op.perm_room_assign, 'perm_room_swap': op.perm_room_swap, 'perm_student_view': op.perm_student_view, 'perm_student_export': op.perm_student_export, 'perm_manage_teachers': op.perm_manage_teachers, 'perm_manage_students': op.perm_manage_students} | tojson | e }})"
+              <button onclick="openEditPerms(this)"
+                      data-op-id="{{ op.id }}"
+                      data-op-name="{{ op.full_name | e }}"
+                      data-op-perms='{{ {'perm_room_assign': op.perm_room_assign, 'perm_room_swap': op.perm_room_swap, 'perm_student_view': op.perm_student_view, 'perm_student_export': op.perm_student_export, 'perm_manage_teachers': op.perm_manage_teachers, 'perm_manage_students': op.perm_manage_students} | tojson }}'
                       class="btn btn-sm" style="font-size:.72rem;padding:2px 8px;border-radius:6px;background:#F5F3FF;color:#7C3AED;border:1px solid #DDD6FE;">
                 <i class="bi bi-shield-check me-1"></i>Quyền
               </button>
@@ -371,10 +374,11 @@ function deleteOp(id, name) {
   }, { confirmText: 'Xóa', confirmClass: 'btn-danger' });
 }
 
-function openEditPerms(id, name, permsJson) {
-  _epOpId = id;
+function openEditPerms(btn) {
+  _epOpId = parseInt(btn.dataset.opId);
+  const name = btn.dataset.opName;
   let perms = {};
-  try { perms = typeof permsJson === 'string' ? JSON.parse(permsJson) : permsJson; } catch(e) {}
+  try { perms = JSON.parse(btn.dataset.opPerms); } catch(e) {}
   document.getElementById('permModalName').textContent = name;
   document.getElementById('ep_room_assign').checked      = !!perms.perm_room_assign;
   document.getElementById('ep_room_swap').checked        = !!perms.perm_room_swap;

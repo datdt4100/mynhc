@@ -136,6 +136,11 @@
   }
   .adm-icon-btn.btn-outline-primary { color: #2563EB; border-color: #2563EB; }
   .adm-icon-btn.btn-outline-primary:hover { background: #2563EB; color: #fff; }
+
+  /* ── Room picker cell ── */
+  .loc-cell { cursor: pointer; transition: background .12s; }
+  .loc-cell:hover { background: rgba(14,165,233,.08) !important; }
+  .loc-cell:hover .loc-edit-icon { color: #0EA5E9 !important; }
 </style>
 {% endblock %}
 
@@ -234,7 +239,23 @@
               <td style="white-space:nowrap; font-size:.78rem;">
                 {{ day_name(cls.day_of_week) }} - {{ "Sáng" if cls.session_type == "morning" else "Chiều" }} - Tiết {{ cls.start_session }}{% if cls.duration > 1 %}–{{ cls.start_session + cls.duration - 1 }}{% endif %}
               </td>
-              <td style="font-size:.8rem;">{{ cls.location or '—' }}</td>
+              <td class="loc-cell"
+                  data-class-id="{{ cls.id }}"
+                  data-day="{{ cls.day_of_week }}"
+                  data-session="{{ cls.session_type }}"
+                  data-start="{{ cls.start_session }}"
+                  data-duration="{{ cls.duration }}"
+                  data-grade="{{ cls.grade }}"
+                  data-location="{{ cls.location or '' }}"
+                  title="Click để đổi phòng"
+                  style="font-size:.8rem;white-space:nowrap;">
+                {% if cls.location %}
+                  <span style="color:#0369A1;font-weight:600;">{{ cls.location }}</span>
+                {% else %}
+                  <span class="text-muted" style="font-style:italic;font-size:.76rem;">Chưa xếp</span>
+                {% endif %}
+                <i class="bi bi-pencil loc-edit-icon ms-1" style="font-size:.6rem;color:#CBD5E1;transition:color .12s;"></i>
+              </td>
               <td class="text-center">
                 {% set cnt = enrollment_counts.get(cls.id, 0) %}
                 {% set mx  = cls.max_capacity or 0 %}
@@ -579,6 +600,42 @@
         <button class="btn btn-sm" id="reassignConfirmBtn" onclick="confirmReassign()"
                 style="font-size:.8rem;background:#0EA5E9;border:none;color:#fff;border-radius:8px;padding:5px 16px;">
           <i class="bi bi-check2 me-1"></i>Xác nhận đổi
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Xếp phòng (Room Picker) Modal ── -->
+<div class="modal fade" id="roomPickerModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:380px;">
+    <div class="modal-content" style="border-radius:14px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#0369A1,#0EA5E9);border:none;padding:12px 18px;">
+        <div>
+          <div class="fw-bold text-white" style="font-size:.9rem;"><i class="bi bi-geo-alt-fill me-2"></i>Xếp phòng</div>
+          <div id="roomPickerSub" style="font-size:.72rem;color:rgba(255,255,255,.85);margin-top:1px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="roomPickerCurrRow" style="padding:9px 16px;background:#F0F9FF;border-bottom:1px solid #BAE6FD;font-size:.78rem;display:flex;align-items:center;gap:8px;">
+          <span style="color:#64748B;">Phòng hiện tại:</span>
+          <span id="roomPickerCurrent" class="fw-semibold" style="color:#0369A1;"></span>
+        </div>
+        <div id="roomPickerList" style="max-height:320px;overflow-y:auto;">
+          <div class="text-center text-muted py-4">
+            <div class="spinner-border spinner-border-sm me-2" role="status"></div>Đang tải…
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding:10px 16px;border-top:1.5px solid #E2E8F0;gap:8px;">
+        <button id="roomPickerUnassignBtn" class="btn btn-sm btn-outline-danger me-auto fw-semibold" style="font-size:.78rem;border-radius:8px;" onclick="unassignRoomPick()">
+          <i class="bi bi-x-circle me-1"></i>Gỡ phòng
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" style="font-size:.8rem;">Hủy</button>
+        <button id="roomPickerConfirmBtn" class="btn btn-sm fw-semibold" disabled onclick="confirmRoomPick()"
+                style="font-size:.8rem;background:#0EA5E9;border:none;color:#fff;border-radius:8px;padding:5px 16px;">
+          <i class="bi bi-check2 me-1"></i>Xác nhận
         </button>
       </div>
     </div>
@@ -1056,6 +1113,123 @@ async function confirmReassign() {
     } else { alert(data.error || 'Lỗi khi đổi giáo viên.'); }
   } catch { alert('Lỗi kết nối.'); }
   btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Xác nhận đổi';
+}
+
+/* ── Room picker (Địa điểm column click) ── */
+let _roomPickerClassId = null;
+let _roomPickerSelected = null;
+
+// Delegate clicks on .loc-cell to open room picker
+document.addEventListener('click', function(e) {
+  const cell = e.target.closest('.loc-cell');
+  if (!cell) return;
+  const d = cell.dataset;
+  openRoomPicker(+d.classId, +d.day, d.session, +d.start, +d.duration, +d.grade, d.location || null);
+});
+
+async function openRoomPicker(classId, day, session, startSlot, duration, grade, currentRoom) {
+  _roomPickerClassId = classId;
+  _roomPickerSelected = null;
+  const DAY_VN = {2:'Thứ 2',3:'Thứ 3',4:'Thứ 4',5:'Thứ 5',6:'Thứ 6',7:'Thứ 7'};
+  const sesLabel = (session === 'morning' ? 'Sáng' : 'Chiều') + ' tiết ' + startSlot + (duration > 1 ? '–' + (startSlot + duration - 1) : '');
+  document.getElementById('roomPickerSub').textContent = `${DAY_VN[day] || day} · ${sesLabel} · Lớp #${classId}`;
+  document.getElementById('roomPickerCurrent').textContent = currentRoom || 'Chưa xếp';
+  document.getElementById('roomPickerList').innerHTML = '<div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Đang tải…</div>';
+  const confirmBtn = document.getElementById('roomPickerConfirmBtn');
+  confirmBtn.disabled = true;
+  confirmBtn.innerHTML = '<i class="bi bi-check2 me-1"></i>Xác nhận';
+  document.getElementById('roomPickerUnassignBtn').disabled = !currentRoom;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('roomPickerModal')).show();
+
+  try {
+    const url = `/api/available-rooms?day_of_week=${day}&session_type=${session}&start_session=${startSlot}&duration=${duration}&grade=${grade}&exclude_class_id=${classId}`;
+    const res = await fetch(url);
+    const rooms = await res.json();
+    const listEl = document.getElementById('roomPickerList');
+    if (!Array.isArray(rooms) || !rooms.length) {
+      listEl.innerHTML = '<div class="text-muted p-3 text-center" style="font-size:.83rem;"><i class="bi bi-calendar-x" style="font-size:1.3rem;display:block;margin-bottom:6px;"></i>Không có phòng trống trong khung giờ này.</div>';
+      return;
+    }
+    let html = '';
+    rooms.forEach(r => {
+      const active = r === currentRoom;
+      html += `<button type="button" class="rp-item d-flex align-items-center gap-2 w-100 text-start"
+        style="padding:9px 16px;border:none;background:${active?'#DCFCE7':'transparent'};color:${active?'#15803D':'#374151'};font-size:.83rem;font-weight:${active?700:400};border-bottom:1px solid #F1F5F9;transition:background .1s;"
+        onmouseenter="if(!this.classList.contains('rp-selected'))this.style.background='#F0F9FF'"
+        onmouseleave="if(!this.classList.contains('rp-selected'))this.style.background='transparent'"
+        onclick="selectRoomPick('${r.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}', this)">
+        <i class="bi ${active?'bi-check-circle-fill':'bi-door-open'}" style="color:${active?'#059669':'#94A3B8'};font-size:.9rem;flex-shrink:0;"></i>
+        ${r}
+      </button>`;
+    });
+    listEl.innerHTML = html;
+  } catch(e) {
+    document.getElementById('roomPickerList').innerHTML = '<div class="text-danger p-3" style="font-size:.83rem;">Lỗi tải danh sách phòng.</div>';
+  }
+}
+
+function selectRoomPick(roomName, btn) {
+  _roomPickerSelected = roomName;
+  document.querySelectorAll('#roomPickerList .rp-item').forEach(el => {
+    el.classList.remove('rp-selected');
+    el.style.background = 'transparent';
+    el.style.color = '#374151';
+    el.style.fontWeight = '400';
+    const ic = el.querySelector('i');
+    if (ic) { ic.className = 'bi bi-door-open'; ic.style.color = '#94A3B8'; }
+  });
+  btn.classList.add('rp-selected');
+  btn.style.background = '#DCFCE7';
+  btn.style.color = '#15803D';
+  btn.style.fontWeight = '700';
+  const ic = btn.querySelector('i');
+  if (ic) { ic.className = 'bi bi-check-circle-fill'; ic.style.color = '#059669'; }
+  document.getElementById('roomPickerConfirmBtn').disabled = false;
+}
+
+async function confirmRoomPick() {
+  if (!_roomPickerClassId || !_roomPickerSelected) return;
+  const btn = document.getElementById('roomPickerConfirmBtn');
+  btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Đang lưu…';
+  try {
+    const res = await fetch(`/admin/classes/${_roomPickerClassId}/assign-room`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({location: _roomPickerSelected})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('roomPickerModal')).hide();
+      showAlert(`Đã xếp phòng ${_roomPickerSelected}.`, 'success');
+      setTimeout(() => location.reload(), 700);
+    } else {
+      showAlert(data.error || 'Lỗi khi xếp phòng.', 'error');
+      btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Xác nhận';
+    }
+  } catch {
+    showAlert('Lỗi kết nối.', 'error');
+    btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Xác nhận';
+  }
+}
+
+async function unassignRoomPick() {
+  if (!_roomPickerClassId) return;
+  const btn = document.getElementById('roomPickerUnassignBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/admin/classes/${_roomPickerClassId}/unassign-room`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('roomPickerModal')).hide();
+      showAlert('Đã gỡ phòng.', 'success');
+      setTimeout(() => location.reload(), 700);
+    } else {
+      showAlert(data.error || 'Lỗi khi gỡ phòng.', 'error');
+      btn.disabled = false;
+    }
+  } catch {
+    showAlert('Lỗi kết nối.', 'error');
+    btn.disabled = false;
+  }
 }
 
 /* ── Gộp lớp ── */

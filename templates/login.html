@@ -283,6 +283,13 @@
             </button>
           </div>
 
+          <!-- Forgot password link (shown only for returning users) -->
+          <div id="forgot-pw-link" class="text-center mt-3" style="display:none !important;">
+            <a href="{{ url_for('forgot_password') }}" class="text-decoration-none" style="font-size:.84rem; color:#0EA5E9;">
+              <i class="bi bi-key me-1"></i>Quên mật khẩu?
+            </a>
+          </div>
+
         </form>
       </div>
     </div>
@@ -446,6 +453,9 @@
         pwField.placeholder        = 'Nhập mật khẩu';
         pwField.setAttribute('autocomplete', 'current-password');
         if (pwRules) pwRules.style.display = 'none';
+        // Show forgot password link for returning users
+        const forgotLink = document.getElementById('forgot-pw-link');
+        if (forgotLink) forgotLink.style.setProperty('display', 'block', 'important');
       }
 
       /* Reset step-2 inputs */
@@ -544,6 +554,8 @@
     sec1.style.display = '';
     clearError(err1Wrap);
     document.getElementById('full_name').focus();
+    const forgotLink = document.getElementById('forgot-pw-link');
+    if (forgotLink) forgotLink.style.setProperty('display', 'none', 'important');
   });
 
   /* ── Strip disallowed chars & live password checklist ── */

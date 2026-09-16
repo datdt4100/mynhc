@@ -441,20 +441,45 @@ document.getElementById('inner-afternoon').innerHTML = _buildGrid('afternoon');
 
 // ── Room assignment ──
 let _raClassId = null, _raSelectedRoom = null, _raCurrentLocation = null;
+let _raDay = null, _raSes = null, _raSlot = null;
+
+// Reopen detailModal after roomAssignModal closes
+document.getElementById('roomAssignModal').addEventListener('hidden.bs.modal', () => {
+  if (_raDay !== null) {
+    openDetail(_raDay, _raSlot, _raSes);
+    _raDay = null; _raSes = null; _raSlot = null;
+  }
+});
 
 async function openRoomAssign(classId, teacher, label, day, ses, start, dur, currentLocation) {
   _raClassId = classId;
   _raSelectedRoom = null;
   _raCurrentLocation = currentLocation || null;
+  _raDay = day; _raSes = ses; _raSlot = start;
   document.getElementById('raSubtitle').textContent = `${teacher} · ${label}`;
   document.getElementById('raConfirmBtn').disabled = true;
   document.getElementById('raRoomList').innerHTML =
     '<div class="text-center text-muted py-3"><i class="bi bi-hourglass-split me-1"></i>Đang tải phòng trống…</div>';
-  bootstrap.Modal.getOrCreateInstance(document.getElementById('roomAssignModal')).show();
+
+  // Fetch rooms in parallel with modal transition
+  const roomsFetch = fetch(`/api/available-rooms?day_of_week=${day}&session_type=${ses}&start_session=${start}&duration=${dur}&grade=0&exclude_class_id=${classId}`)
+    .then(r => r.json());
+
+  // Bootstrap 5 cannot stack modals — close detailModal first then open roomAssignModal
+  const detailEl   = document.getElementById('detailModal');
+  const detailInst = bootstrap.Modal.getInstance(detailEl);
+  const raEl       = document.getElementById('roomAssignModal');
+  if (detailInst) {
+    detailEl.addEventListener('hidden.bs.modal', () => {
+      bootstrap.Modal.getOrCreateInstance(raEl).show();
+    }, {once: true});
+    detailInst.hide();
+  } else {
+    bootstrap.Modal.getOrCreateInstance(raEl).show();
+  }
+
   try {
-    const url = `/api/available-rooms?day_of_week=${day}&session_type=${ses}&start_session=${start}&duration=${dur}&grade=0&exclude_class_id=${classId}`;
-    const res  = await fetch(url);
-    const data = await res.json();
+    const data = await roomsFetch;
     let rooms = Array.isArray(data) ? data : (data.rooms || []);
     // If class already has a room, add it at top so admin can "keep" it
     if (_raCurrentLocation && !rooms.includes(_raCurrentLocation)) {

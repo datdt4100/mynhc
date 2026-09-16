@@ -4877,12 +4877,36 @@ def admin_classes_available_for_slot():
             ))
             .order_by(classes.c.grade, teachers.c.subject_group, teachers.c.full_name)
         ).fetchall()
+        class_ids = [r.id for r in rows]
+        enrolled_map: dict = {}
+        if class_ids:
+            ecnt = conn.execute(
+                select(enrollments.c.class_id, func.count().label("cnt"))
+                .where(enrollments.c.class_id.in_(class_ids))
+                .group_by(enrollments.c.class_id)
+            ).fetchall()
+            enrolled_map = {r.class_id: r.cnt for r in ecnt}
     return jsonify(ok=True, classes=[
         {"id": r.id, "teacher": r.teacher_name,
          "subject": r.subject_group or r.subject or "",
-         "grade": r.grade}
+         "grade": r.grade,
+         "enrolled": enrolled_map.get(r.id, 0),
+         "max_capacity": r.max_capacity}
         for r in rows
     ])
+
+
+@app.route("/admin/classes/<int:class_id>/unassign-room", methods=["POST"])
+@admin_required
+def admin_class_unassign_room(class_id):
+    """Clear room assignment for a class (set location=NULL) without deleting the class."""
+    with engine.begin() as conn:
+        cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        if not cls:
+            return jsonify(ok=False, error="Không tìm thấy lớp.")
+        conn.execute(update(classes).where(classes.c.id == class_id).values(location=None))
+        _bump("class_update", cls.grade)
+    return jsonify(ok=True)
 
 
 @app.route("/admin/classes/<int:class_id>/assign-room", methods=["POST"])
@@ -5783,6 +5807,12 @@ def op_register_class():
 @operator_required
 def op_class_delete(class_id):
     return admin_class_delete.__wrapped__(class_id)
+
+
+@app.route("/op/classes/<int:class_id>/unassign-room", methods=["POST"])
+@operator_required
+def op_class_unassign_room(class_id):
+    return admin_class_unassign_room.__wrapped__(class_id)
 
 
 # --- Admin: Enrollment management ---

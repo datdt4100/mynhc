@@ -10,12 +10,50 @@
     <i class="bi bi-person-circle me-1"></i>
     {{ student.full_name | name_fmt }} &ndash; Lớp {{ student.class_name }}
   </span>
+  <button type="button" class="btn p-0 border-0"
+          style="background:rgba(255,255,255,.12); padding:6px 14px !important; border-radius:20px; color:#fff; font-size:.82rem; font-weight:600;"
+          data-bs-toggle="modal" data-bs-target="#changePasswordModal">
+    <i class="bi bi-key"></i><span class="d-none d-sm-inline ms-1">Đổi mật khẩu</span>
+  </button>
   <form method="POST" action="{{ url_for('logout') }}" class="m-0">
     <button type="submit" class="btn p-0 border-0"
             style="background:rgba(255,255,255,.12); padding:6px 14px !important; border-radius:20px; color:#fff; font-size:.82rem; font-weight:600;">
       <i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline ms-1">Đăng xuất</span>
     </button>
   </form>
+</div>
+
+<!-- ── Đổi mật khẩu Modal ── -->
+<div class="modal fade" id="changePasswordModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+    <div class="modal-content" style="border-radius:18px; overflow:hidden; border:none; box-shadow:0 24px 80px rgba(0,0,0,.22);">
+      <div class="modal-header" style="background:linear-gradient(135deg,#0EA5E9,#14B8A6); border:none; padding:18px 24px;">
+        <h5 class="modal-title text-white fw-bold" style="font-size:1rem;">
+          <i class="bi bi-key me-2"></i>Đổi mật khẩu
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div id="cpw-alert" class="d-none mb-3" style="font-size:.85rem; padding:10px 14px; border-radius:8px;"></div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" style="font-size:.85rem; color:#475569;">Mật khẩu hiện tại</label>
+          <input type="password" id="cpw-old" class="custom-input" placeholder="Nhập mật khẩu hiện tại" autocomplete="current-password">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" style="font-size:.85rem; color:#475569;">Mật khẩu mới</label>
+          <input type="password" id="cpw-new" class="custom-input" placeholder="Nhập mật khẩu mới" autocomplete="new-password">
+          <div style="font-size:.76rem; color:#94A3B8; margin-top:4px;">Ít nhất 8 ký tự, có chữ hoa, chữ thường, số và ký tự đặc biệt</div>
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold" style="font-size:.85rem; color:#475569;">Xác nhận mật khẩu mới</label>
+          <input type="password" id="cpw-new2" class="custom-input" placeholder="Nhập lại mật khẩu mới" autocomplete="new-password">
+        </div>
+        <button id="cpw-submit" class="btn btn-primary-custom w-100 d-flex align-items-center justify-content-center gap-2">
+          <i class="bi bi-check-circle me-1"></i>Xác nhận đổi mật khẩu
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -1002,5 +1040,52 @@ async function submitEmail() {
 
 /* ── Polling: auto-refresh khi admin thay đổi lớp/đăng ký ── */
 setInterval(refreshStudentSchedule, 12000);
+
+/* ── Đổi mật khẩu ── */
+document.getElementById('cpw-submit').addEventListener('click', async function() {
+  const old_pw  = document.getElementById('cpw-old').value;
+  const new_pw  = document.getElementById('cpw-new').value;
+  const new_pw2 = document.getElementById('cpw-new2').value;
+  const alertEl = document.getElementById('cpw-alert');
+
+  function showCpwAlert(msg, type) {
+    alertEl.className = 'd-block mb-3';
+    alertEl.style.cssText = type === 'success'
+      ? 'background:#F0FDF4;border:1px solid #86EFAC;color:#166534;font-size:.85rem;padding:10px 14px;border-radius:8px;'
+      : 'background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B;font-size:.85rem;padding:10px 14px;border-radius:8px;';
+    alertEl.textContent = msg;
+  }
+
+  if (!old_pw || !new_pw || !new_pw2) {
+    showCpwAlert('Vui lòng điền đầy đủ thông tin.', 'error'); return;
+  }
+
+  this.disabled = true;
+  try {
+    const res  = await fetch('/api/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ old_password: old_pw, new_password: new_pw, new_password2: new_pw2 }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      showCpwAlert('Đổi mật khẩu thành công!', 'success');
+      document.getElementById('cpw-old').value = '';
+      document.getElementById('cpw-new').value = '';
+      document.getElementById('cpw-new2').value = '';
+      setTimeout(() => {
+        const modal = bootstrap.Modal.getInstance(document.getElementById('changePasswordModal'));
+        if (modal) modal.hide();
+        alertEl.className = 'd-none';
+      }, 1800);
+    } else {
+      showCpwAlert(data.error || 'Đổi mật khẩu thất bại.', 'error');
+    }
+  } catch (e) {
+    showCpwAlert('Lỗi kết nối. Vui lòng thử lại.', 'error');
+  } finally {
+    this.disabled = false;
+  }
+});
 </script>
 {% endblock %}

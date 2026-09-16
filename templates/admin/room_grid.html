@@ -399,6 +399,9 @@ async function loadExistingClasses() {
     const GS = {10:{bg:'#DBEAFE',bdr:'#93C5FD',txt:'#1D4ED8'},11:{bg:'#DCFCE7',bdr:'#86EFAC',txt:'#166534'},12:{bg:'#FFF7ED',bdr:'#FED7AA',txt:'#C2410C'}};
     listEl.innerHTML = data.classes.map(c => {
       const gs = GS[c.grade] || {bg:'#F1F5F9',bdr:'#CBD5E1',txt:'#475569'};
+      const siSo = c.max_capacity
+        ? `${c.enrolled}/${c.max_capacity} HS`
+        : `${c.enrolled} HS`;
       return `<div id="ecls_${c.id}" onclick="_selectExisting(${c.id})"
                    style="display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;
                           border-bottom:1px solid #F1F5F9;border-radius:0;transition:background .1s;"
@@ -411,6 +414,7 @@ async function loadExistingClasses() {
                 <div style="font-size:.82rem;font-weight:700;color:#0c4a6e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_gesc(c.teacher)}</div>
                 <div style="font-size:.7rem;color:#64748B;">${_gesc(c.subject)}</div>
               </div>
+              <span style="flex-shrink:0;font-size:.67rem;color:#475569;background:#F1F5F9;border-radius:8px;padding:2px 7px;font-weight:600;white-space:nowrap;">${siSo}</span>
               <i class="bi bi-check-circle-fill" id="echeck_${c.id}" style="color:#0EA5E9;font-size:1rem;display:none;flex-shrink:0;"></i>
             </div>`;
     }).join('');
@@ -549,17 +553,17 @@ async function submitRegisterClass() {
 
 function deleteGridClass(classId, e) {
   e.stopPropagation();
-  showConfirm('Xóa lớp này?',
-    'Học sinh đăng ký lớp này cũng sẽ bị hủy. Không thể hoàn tác.',
+  showConfirm('Gỡ lớp khỏi phòng?',
+    'Lớp học sẽ không còn được xếp vào phòng này. Danh sách học sinh đăng ký không bị ảnh hưởng.',
     async () => {
       try {
-        const res  = await fetch(_API.classBase + '/' + classId, { method: 'DELETE' });
+        const res  = await fetch(_API.classBase + '/' + classId + '/unassign-room', { method: 'POST' });
         const data = await res.json();
-        if (data.ok) { showAlert('Đã xóa lớp.', 'success'); loadRoomGrid(); }
-        else showAlert(data.error || 'Không thể xóa.', 'error');
+        if (data.ok) { showAlert('Đã gỡ lớp khỏi phòng.', 'success'); loadRoomGrid(); }
+        else showAlert(data.error || 'Không thể gỡ phòng.', 'error');
       } catch { showAlert('Lỗi kết nối.', 'error'); }
     },
-    { confirmText: 'Xóa', confirmClass: 'btn-danger' }
+    { confirmText: 'Gỡ phòng', confirmClass: 'btn-danger' }
   );
 }
 

@@ -20,11 +20,30 @@
     display: flex; align-items: center; gap: 10px;
     font-size: .9rem; font-weight: 700; color: #3B0764;
   }
+  .perm-chip {
+    display:inline-flex;align-items:center;gap:3px;
+    font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:10px;
+    white-space:nowrap;
+  }
+  .perm-chip-on  { background:#DCFCE7;color:#15803D;border:1px solid #86EFAC; }
+  .perm-chip-off { background:#F1F5F9;color:#94A3B8;border:1px solid #E2E8F0; }
+  .perm-section-label {
+    font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+    color:#475569;margin-bottom:6px;display:block;
+  }
+  .perm-check-row {
+    display:flex;align-items:flex-start;gap:10px;padding:8px 0;
+    border-bottom:1px solid #F1F5F9;
+  }
+  .perm-check-row:last-child { border-bottom:none; }
+  .perm-check-row input[type=checkbox] { width:17px;height:17px;margin-top:1px;flex-shrink:0;cursor:pointer; }
+  .perm-check-label { font-size:.83rem;font-weight:600;color:#1E293B;cursor:pointer; }
+  .perm-check-desc  { font-size:.73rem;color:#64748B;margin-top:1px; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container pb-5" style="max-width:700px;">
+<div class="container pb-5" style="max-width:800px;">
   <div class="d-flex align-items-center gap-2 mb-4 pt-4">
     <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary flex-shrink-0"
        style="border-radius:8px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;padding:0;" title="Quay lại">
@@ -49,12 +68,13 @@
     </div>
     <div class="p-0" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
       {% if operators %}
-      <table class="table table-sm mb-0" style="font-size:.85rem;min-width:400px;">
+      <table class="table table-sm mb-0" style="font-size:.82rem;min-width:560px;">
         <thead>
           <tr style="background:#F5F3FF;">
             <th class="ps-3 py-2" style="color:#3B0764;font-weight:700;border:none;">Họ và tên</th>
             <th class="py-2" style="color:#3B0764;font-weight:700;border:none;">Mã đăng nhập</th>
-            <th class="py-2 text-center" style="color:#3B0764;font-weight:700;border:none;width:130px;">Thao tác</th>
+            <th class="py-2" style="color:#3B0764;font-weight:700;border:none;">Quyền</th>
+            <th class="py-2 text-center" style="color:#3B0764;font-weight:700;border:none;width:160px;">Thao tác</th>
           </tr>
         </thead>
         <tbody>
@@ -64,9 +84,37 @@
             <td class="py-2">
               <code style="background:#EDE9FE;color:#6D28D9;padding:2px 8px;border-radius:5px;">{{ op.login_code }}</code>
             </td>
+            <td class="py-2">
+              <div class="d-flex flex-wrap gap-1" id="perm-chips-{{ op.id }}">
+                {% if op.perm_room_assign %}
+                <span class="perm-chip perm-chip-on"><i class="bi bi-geo-alt-fill"></i>Xếp/Gỡ phòng</span>
+                {% endif %}
+                {% if op.perm_room_swap %}
+                <span class="perm-chip perm-chip-on"><i class="bi bi-arrow-left-right"></i>Đổi phòng</span>
+                {% endif %}
+                {% if op.perm_student_export %}
+                <span class="perm-chip perm-chip-on"><i class="bi bi-download"></i>Tải DS HS</span>
+                {% elif op.perm_student_view %}
+                <span class="perm-chip perm-chip-on"><i class="bi bi-people-fill"></i>Xem DS HS</span>
+                {% endif %}
+                {% if op.perm_manage_teachers %}
+                <span class="perm-chip perm-chip-on"><i class="bi bi-person-video3"></i>QL GV</span>
+                {% endif %}
+                {% if op.perm_manage_students %}
+                <span class="perm-chip perm-chip-on"><i class="bi bi-people"></i>QL HS</span>
+                {% endif %}
+                {% if not op.perm_room_assign and not op.perm_room_swap and not op.perm_student_view and not op.perm_student_export and not op.perm_manage_teachers and not op.perm_manage_students %}
+                <span class="perm-chip perm-chip-off"><i class="bi bi-eye"></i>Chỉ xem</span>
+                {% endif %}
+              </div>
+            </td>
             <td class="py-2 text-center" style="white-space:nowrap;">
+              <button onclick="openEditPerms({{ op.id }}, '{{ op.full_name | e }}', {{ {'perm_room_assign': op.perm_room_assign, 'perm_room_swap': op.perm_room_swap, 'perm_student_view': op.perm_student_view, 'perm_student_export': op.perm_student_export, 'perm_manage_teachers': op.perm_manage_teachers, 'perm_manage_students': op.perm_manage_students} | tojson | e }})"
+                      class="btn btn-sm" style="font-size:.72rem;padding:2px 8px;border-radius:6px;background:#F5F3FF;color:#7C3AED;border:1px solid #DDD6FE;">
+                <i class="bi bi-shield-check me-1"></i>Quyền
+              </button>
               <button onclick="openResetPw({{ op.id }}, '{{ op.full_name | e }}')"
-                      class="btn btn-sm" style="font-size:.72rem;padding:2px 8px;border-radius:6px;background:#EFF6FF;color:#0369A1;border:1px solid #BAE6FD;">
+                      class="btn btn-sm ms-1" style="font-size:.72rem;padding:2px 8px;border-radius:6px;background:#EFF6FF;color:#0369A1;border:1px solid #BAE6FD;">
                 <i class="bi bi-key me-1"></i>Đổi MK
               </button>
               <button onclick="deleteOp({{ op.id }}, '{{ op.full_name | e }}')"
@@ -112,6 +160,64 @@
             <input type="password" name="password" class="form-control form-control-sm"
                    placeholder="Mật khẩu ban đầu" required style="border-radius:8px;">
           </div>
+
+          <!-- Permission section -->
+          <div class="col-12">
+            <div style="background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:10px;padding:14px 16px;">
+              <div class="fw-bold mb-3" style="font-size:.82rem;color:#3B0764;">
+                <i class="bi bi-shield-check me-1" style="color:#7C3AED;"></i>Phân quyền
+              </div>
+
+              <span class="perm-section-label">Phòng học</span>
+              <div class="perm-check-row">
+                <input type="checkbox" name="perm_room_assign" id="c_perm_room_assign" value="1">
+                <label for="c_perm_room_assign">
+                  <div class="perm-check-label">Xếp phòng — Gỡ phòng</div>
+                  <div class="perm-check-desc">Xếp lớp chưa có phòng vào phòng trống; gỡ lớp ra khỏi phòng hiện tại.</div>
+                </label>
+              </div>
+              <div class="perm-check-row">
+                <input type="checkbox" name="perm_room_swap" id="c_perm_room_swap" value="1">
+                <label for="c_perm_room_swap">
+                  <div class="perm-check-label">Đổi phòng</div>
+                  <div class="perm-check-desc">Chuyển lớp đã xếp phòng sang phòng trống khác trong cùng khung giờ. Không thêm mới hay gỡ phòng.</div>
+                </label>
+              </div>
+
+              <span class="perm-section-label mt-3">Học sinh</span>
+              <div class="perm-check-row">
+                <input type="checkbox" name="perm_student_view" id="c_perm_student_view" value="1">
+                <label for="c_perm_student_view">
+                  <div class="perm-check-label">Xem danh sách học sinh</div>
+                  <div class="perm-check-desc">Được xem danh sách học sinh đã đăng ký vào lớp khi click vào phòng có lớp.</div>
+                </label>
+              </div>
+              <div class="perm-check-row">
+                <input type="checkbox" name="perm_student_export" id="c_perm_student_export" value="1">
+                <label for="c_perm_student_export">
+                  <div class="perm-check-label">Tải danh sách học sinh (Excel)</div>
+                  <div class="perm-check-desc">Được tải danh sách học sinh về file Excel. Bao gồm quyền xem danh sách.</div>
+                </label>
+              </div>
+
+              <span class="perm-section-label mt-3">Quản lý tài khoản</span>
+              <div class="perm-check-row">
+                <input type="checkbox" name="perm_manage_teachers" id="c_perm_manage_teachers" value="1">
+                <label for="c_perm_manage_teachers">
+                  <div class="perm-check-label">Quản trị tài khoản giáo viên</div>
+                  <div class="perm-check-desc">Được xem danh sách giáo viên và cấp mật khẩu mới cho tài khoản đã kích hoạt.</div>
+                </label>
+              </div>
+              <div class="perm-check-row">
+                <input type="checkbox" name="perm_manage_students" id="c_perm_manage_students" value="1">
+                <label for="c_perm_manage_students">
+                  <div class="perm-check-label">Quản trị tài khoản học sinh</div>
+                  <div class="perm-check-desc">Được xem danh sách học sinh và cấp mật khẩu mới cho tài khoản đã kích hoạt.</div>
+                </label>
+              </div>
+            </div>
+          </div>
+
           <div class="col-12">
             <button type="submit" class="btn btn-sm fw-bold"
                     style="background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;border:none;border-radius:8px;padding:6px 20px;">
@@ -149,11 +255,84 @@
     </div>
   </div>
 </div>
+
+<!-- Modal phân quyền -->
+<div class="modal fade" id="modalEditPerms" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:440px;">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#5B21B6,#7C3AED);border:none;padding:12px 18px;">
+        <div>
+          <h5 class="modal-title text-white fw-bold mb-0" style="font-size:.9rem;">
+            <i class="bi bi-shield-check me-2"></i>Phân quyền
+          </h5>
+          <div id="permModalName" style="font-size:.75rem;color:rgba(255,255,255,.85);margin-top:1px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:16px 20px;">
+        <span class="perm-section-label">Phòng học</span>
+        <div class="perm-check-row">
+          <input type="checkbox" id="ep_room_assign">
+          <label for="ep_room_assign">
+            <div class="perm-check-label">Xếp phòng — Gỡ phòng</div>
+            <div class="perm-check-desc">Xếp lớp chưa có phòng vào phòng trống; gỡ lớp ra khỏi phòng hiện tại.</div>
+          </label>
+        </div>
+        <div class="perm-check-row">
+          <input type="checkbox" id="ep_room_swap">
+          <label for="ep_room_swap">
+            <div class="perm-check-label">Đổi phòng</div>
+            <div class="perm-check-desc">Chuyển lớp đã xếp phòng sang phòng trống khác trong cùng khung giờ.</div>
+          </label>
+        </div>
+        <span class="perm-section-label mt-3">Học sinh</span>
+        <div class="perm-check-row">
+          <input type="checkbox" id="ep_student_view">
+          <label for="ep_student_view">
+            <div class="perm-check-label">Xem danh sách học sinh</div>
+            <div class="perm-check-desc">Được xem danh sách học sinh đã đăng ký vào lớp.</div>
+          </label>
+        </div>
+        <div class="perm-check-row">
+          <input type="checkbox" id="ep_student_export">
+          <label for="ep_student_export">
+            <div class="perm-check-label">Tải danh sách học sinh (Excel)</div>
+            <div class="perm-check-desc">Được tải danh sách học sinh về Excel. Bao gồm quyền xem.</div>
+          </label>
+        </div>
+        <span class="perm-section-label mt-3">Quản lý tài khoản</span>
+        <div class="perm-check-row">
+          <input type="checkbox" id="ep_manage_teachers">
+          <label for="ep_manage_teachers">
+            <div class="perm-check-label">Quản trị tài khoản giáo viên</div>
+            <div class="perm-check-desc">Xem danh sách và cấp mật khẩu mới cho giáo viên đã kích hoạt.</div>
+          </label>
+        </div>
+        <div class="perm-check-row">
+          <input type="checkbox" id="ep_manage_students">
+          <label for="ep_manage_students">
+            <div class="perm-check-label">Quản trị tài khoản học sinh</div>
+            <div class="perm-check-desc">Xem danh sách và cấp mật khẩu mới cho học sinh đã kích hoạt.</div>
+          </label>
+        </div>
+        <div id="permSaveError" class="text-danger mt-2 d-none" style="font-size:.8rem;"></div>
+      </div>
+      <div class="modal-footer" style="padding:10px 16px;gap:8px;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+        <button class="btn btn-sm fw-bold" onclick="savePerms()"
+                style="background:linear-gradient(135deg,#5B21B6,#7C3AED);color:#fff;border:none;border-radius:8px;padding:5px 18px;">
+          <i class="bi bi-check2 me-1"></i>Lưu quyền
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 let _rpOpId = null;
+let _epOpId = null;
 
 function openResetPw(id, name) {
   _rpOpId = id;
@@ -190,6 +369,64 @@ function deleteOp(id, name) {
       showAlert('Đã xóa tài khoản.', 'success');
     }
   }, { confirmText: 'Xóa', confirmClass: 'btn-danger' });
+}
+
+function openEditPerms(id, name, permsJson) {
+  _epOpId = id;
+  let perms = {};
+  try { perms = typeof permsJson === 'string' ? JSON.parse(permsJson) : permsJson; } catch(e) {}
+  document.getElementById('permModalName').textContent = name;
+  document.getElementById('ep_room_assign').checked      = !!perms.perm_room_assign;
+  document.getElementById('ep_room_swap').checked        = !!perms.perm_room_swap;
+  document.getElementById('ep_student_view').checked     = !!perms.perm_student_view;
+  document.getElementById('ep_student_export').checked   = !!perms.perm_student_export;
+  document.getElementById('ep_manage_teachers').checked  = !!perms.perm_manage_teachers;
+  document.getElementById('ep_manage_students').checked  = !!perms.perm_manage_students;
+  document.getElementById('permSaveError').classList.add('d-none');
+  new bootstrap.Modal(document.getElementById('modalEditPerms')).show();
+}
+
+async function savePerms() {
+  if (!_epOpId) return;
+  const payload = {
+    perm_room_assign:    document.getElementById('ep_room_assign').checked,
+    perm_room_swap:      document.getElementById('ep_room_swap').checked,
+    perm_student_view:   document.getElementById('ep_student_view').checked,
+    perm_student_export: document.getElementById('ep_student_export').checked,
+    perm_manage_teachers:document.getElementById('ep_manage_teachers').checked,
+    perm_manage_students:document.getElementById('ep_manage_students').checked,
+  };
+  try {
+    const res = await fetch(`/admin/operators/${_epOpId}/permissions`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('modalEditPerms')).hide();
+      // Update chips in row
+      const chipsEl = document.getElementById('perm-chips-' + _epOpId);
+      if (chipsEl) {
+        let html = '';
+        if (payload.perm_room_assign)    html += '<span class="perm-chip perm-chip-on"><i class="bi bi-geo-alt-fill"></i>Xếp/Gỡ phòng</span> ';
+        if (payload.perm_room_swap)      html += '<span class="perm-chip perm-chip-on"><i class="bi bi-arrow-left-right"></i>Đổi phòng</span> ';
+        if (payload.perm_student_export) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-download"></i>Tải DS HS</span> ';
+        else if (payload.perm_student_view) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-people-fill"></i>Xem DS HS</span> ';
+        if (payload.perm_manage_teachers) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-person-video3"></i>QL GV</span> ';
+        if (payload.perm_manage_students) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-people"></i>QL HS</span>';
+        if (!payload.perm_room_assign && !payload.perm_room_swap && !payload.perm_student_view && !payload.perm_student_export && !payload.perm_manage_teachers && !payload.perm_manage_students)
+          html = '<span class="perm-chip perm-chip-off"><i class="bi bi-eye"></i>Chỉ xem</span>';
+        chipsEl.innerHTML = html;
+      }
+      showAlert('Đã cập nhật quyền.', 'success');
+    } else {
+      document.getElementById('permSaveError').textContent = data.error || 'Lỗi.';
+      document.getElementById('permSaveError').classList.remove('d-none');
+    }
+  } catch {
+    document.getElementById('permSaveError').textContent = 'Lỗi kết nối.';
+    document.getElementById('permSaveError').classList.remove('d-none');
+  }
 }
 </script>
 {% endblock %}

@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Tài khoản học sinh – mynhc{% endblock %}
+{% block hero %}{% endblock %}
+
+{% block head %}
+<style>
+  body { background: #F5F3FF; }
+  .search-bar {
+    position: sticky; top: 0; z-index: 10;
+    background: #F5F3FF; padding: 10px 0 8px;
+    border-bottom: 1.5px solid #E9D5FF; margin-bottom: 12px;
+  }
+  .student-row { border-bottom: 1px solid #F1F5F9; }
+  .student-row:last-child { border-bottom: none; }
+  .status-active   { background:#DCFCE7;color:#15803D;border:1px solid #86EFAC; }
+  .status-inactive { background:#F1F5F9;color:#94A3B8;border:1px solid #E2E8F0; }
+  .grade-chip {
+    display:inline-flex;align-items:center;justify-content:center;
+    width:28px;height:28px;border-radius:50%;font-size:.65rem;font-weight:800;flex-shrink:0;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container pb-5" style="max-width:900px;">
+
+  <!-- Operator header bar -->
+  <div class="d-flex align-items-center gap-2 pt-3 mb-2" style="border-bottom:1.5px solid #E9D5FF;padding-bottom:10px;">
+    <div class="flex-grow-1" style="min-width:0;font-size:.8rem;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+      <i class="bi bi-person-badge me-1" style="color:#7C3AED;"></i>
+      <span class="fw-semibold" style="color:#3B0764;">Quản trị lớp học</span>
+      <span class="mx-1">·</span>{{ session['full_name'] | name_fmt }}
+    </div>
+    <form method="post" action="{{ url_for('logout') }}" style="display:inline;flex-shrink:0;">
+      <button type="submit" class="btn btn-sm btn-outline-danger"
+              style="border-radius:8px;height:30px;padding:0 10px;font-size:.76rem;">
+        <i class="bi bi-box-arrow-right me-1"></i>Đăng xuất
+      </button>
+    </form>
+  </div>
+
+  <!-- Nav tabs -->
+  <div class="d-flex gap-2 mt-2 mb-3" style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;">
+    <a href="{{ url_for('op_room_detail') }}"
+       class="btn btn-sm fw-semibold"
+       style="border-radius:8px;font-size:.78rem;padding:4px 12px;white-space:nowrap;
+              background:#EDE9FE;color:#5B21B6;border:1.5px solid #C4B5FD;">
+      <i class="bi bi-grid-3x3-gap me-1"></i>Lịch phòng
+    </a>
+    {% if session.get('op_perm_manage_teachers') %}
+    <a href="{{ url_for('op_teachers') }}"
+       class="btn btn-sm fw-semibold"
+       style="border-radius:8px;font-size:.78rem;padding:4px 12px;white-space:nowrap;
+              background:#EDE9FE;color:#5B21B6;border:1.5px solid #C4B5FD;">
+      <i class="bi bi-person-video3 me-1"></i>Tài khoản giáo viên
+    </a>
+    {% endif %}
+    <a href="{{ url_for('op_students') }}"
+       class="btn btn-sm fw-semibold"
+       style="border-radius:8px;font-size:.78rem;padding:4px 12px;white-space:nowrap;
+              background:#7C3AED;color:#fff;border:none;">
+      <i class="bi bi-people me-1"></i>Tài khoản học sinh
+    </a>
+  </div>
+
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <h1 style="font-size:1rem;font-weight:800;color:#3B0764;margin:0;">
+      <i class="bi bi-people me-2" style="color:#7C3AED;"></i>Tài khoản học sinh
+    </h1>
+    <span style="font-size:.75rem;color:#94A3B8;font-weight:600;">({{ student_list | length }} học sinh)</span>
+  </div>
+
+  <!-- Search bar -->
+  <div class="search-bar">
+    <input type="text" id="searchBox" class="form-control form-control-sm"
+           placeholder="Tìm kiếm họ tên, lớp, email…"
+           oninput="filterTable()"
+           style="border-radius:10px;border:1.5px solid #C4B5FD;font-size:.84rem;">
+  </div>
+
+  <!-- Table -->
+  <div style="background:#fff;border-radius:14px;border:1.5px solid #E2E8F0;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.04);overflow-x:auto;">
+    <table class="table table-sm mb-0" id="studentTable" style="font-size:.82rem;min-width:560px;">
+      <thead>
+        <tr style="background:linear-gradient(90deg,#F8FAFC,#F5F3FF);">
+          <th class="ps-3 py-2" style="color:#3B0764;font-weight:700;border:none;">Họ và tên</th>
+          <th class="py-2" style="color:#3B0764;font-weight:700;border:none;">Lớp</th>
+          <th class="py-2" style="color:#3B0764;font-weight:700;border:none;">Email</th>
+          <th class="py-2 text-center" style="color:#3B0764;font-weight:700;border:none;">Trạng thái</th>
+          <th class="py-2 text-center" style="color:#3B0764;font-weight:700;border:none;width:110px;">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in student_list %}
+        {% set grade_colors = {10: ('DBEAFE','1D4ED8'), 11: ('DCFCE7','166534'), 12: ('FFF7ED','C2410C')} %}
+        {% set gc = grade_colors.get(s.grade, ('F1F5F9','475569')) %}
+        <tr class="student-row" data-search="{{ s.full_name | lower }} {{ s.class_name | lower }} {{ (s.email or '') | lower }}">
+          <td class="ps-3 py-2">
+            <div class="d-flex align-items-center gap-2">
+              <div class="grade-chip" style="background:#{{ gc[0] }};color:#{{ gc[1] }};">K{{ s.grade }}</div>
+              <span class="fw-semibold" style="color:#0c4a6e;">{{ s.full_name }}</span>
+            </div>
+          </td>
+          <td class="py-2" style="color:#475569;">{{ s.class_name }}</td>
+          <td class="py-2" style="color:#475569;font-size:.78rem;">{{ s.email or '—' }}</td>
+          <td class="py-2 text-center">
+            {% if s.is_first_login %}
+            <span class="badge status-inactive" style="font-size:.68rem;border-radius:8px;padding:2px 8px;font-weight:700;">Chưa kích hoạt</span>
+            {% else %}
+            <span class="badge status-active" style="font-size:.68rem;border-radius:8px;padding:2px 8px;font-weight:700;">Đã kích hoạt</span>
+            {% endif %}
+          </td>
+          <td class="py-2 text-center">
+            {% if not s.is_first_login %}
+            <button onclick="resetPassword({{ s.id }}, '{{ s.full_name | e }}')"
+                    class="btn btn-sm"
+                    style="font-size:.72rem;padding:2px 10px;border-radius:6px;background:#EFF6FF;color:#0369A1;border:1px solid #BAE6FD;">
+              <i class="bi bi-key me-1"></i>Cấp MK
+            </button>
+            {% else %}
+            <span style="font-size:.72rem;color:#CBD5E1;">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div id="emptyMsg" class="d-none p-4 text-center text-muted" style="font-size:.85rem;">
+      <i class="bi bi-search" style="font-size:1.2rem;display:block;margin-bottom:4px;"></i>Không tìm thấy học sinh nào.
+    </div>
+  </div>
+</div>
+
+<!-- Password result modal -->
+<div class="modal fade" id="pwModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:360px;">
+    <div class="modal-content" style="border-radius:14px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#075985,#0EA5E9);border:none;padding:12px 16px;">
+        <h5 class="modal-title text-white fw-bold" style="font-size:.9rem;">
+          <i class="bi bi-key me-2"></i>Mật khẩu mới
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4 text-center">
+        <p style="font-size:.85rem;color:#475569;" class="mb-2">Mật khẩu mới cho <strong id="pwName"></strong>:</p>
+        <div style="font-size:1.5rem;font-weight:800;letter-spacing:.1em;color:#0c4a6e;background:#F0F9FF;border-radius:10px;padding:12px 20px;font-family:monospace;" id="pwValue"></div>
+        <p class="text-muted mt-2 mb-0" style="font-size:.75rem;">Học sinh sẽ phải đổi mật khẩu khi đăng nhập lần sau.</p>
+      </div>
+      <div class="modal-footer py-2 justify-content-center">
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterTable() {
+  const q = document.getElementById('searchBox').value.toLowerCase().trim();
+  let visCount = 0;
+  document.querySelectorAll('#studentTable tbody tr.student-row').forEach(row => {
+    const match = !q || row.dataset.search.includes(q);
+    row.style.display = match ? '' : 'none';
+    if (match) visCount++;
+  });
+  document.getElementById('emptyMsg').classList.toggle('d-none', visCount > 0);
+}
+
+async function resetPassword(id, name) {
+  const res  = await fetch(`/op/students/${id}/reset-password`, { method: 'POST' });
+  const data = await res.json();
+  if (!data.ok) { alert(data.error || 'Lỗi.'); return; }
+  document.getElementById('pwName').textContent  = data.name;
+  document.getElementById('pwValue').textContent = data.new_password;
+  new bootstrap.Modal(document.getElementById('pwModal')).show();
+}
+</script>
+{% endblock %}

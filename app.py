@@ -205,6 +205,12 @@ operators = Table(
     Column("full_name", Text, nullable=False),
     Column("login_code", Text, unique=True, nullable=False),  # Mã đăng nhập (như CCCD)
     Column("password_hash", Text, nullable=False),
+    Column("perm_room_assign",      Integer, nullable=False, server_default="0"),
+    Column("perm_room_swap",        Integer, nullable=False, server_default="0"),
+    Column("perm_student_view",     Integer, nullable=False, server_default="0"),
+    Column("perm_student_export",   Integer, nullable=False, server_default="0"),
+    Column("perm_manage_teachers",  Integer, nullable=False, server_default="0"),
+    Column("perm_manage_students",  Integer, nullable=False, server_default="0"),
 )
 
 # Compact activity logs — action codes: A=assign/enroll, U=reassign, D=delete/cancel, C=create
@@ -278,6 +284,21 @@ def init_db():
         ]:
             try:
                 conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+        # Migrate: add operator permission columns
+        for col_def in [
+            "ALTER TABLE operators ADD COLUMN perm_room_assign      INTEGER DEFAULT 0",
+            "ALTER TABLE operators ADD COLUMN perm_room_swap        INTEGER DEFAULT 0",
+            "ALTER TABLE operators ADD COLUMN perm_student_view     INTEGER DEFAULT 0",
+            "ALTER TABLE operators ADD COLUMN perm_student_export   INTEGER DEFAULT 0",
+            "ALTER TABLE operators ADD COLUMN perm_manage_teachers  INTEGER DEFAULT 0",
+            "ALTER TABLE operators ADD COLUMN perm_manage_students  INTEGER DEFAULT 0",
+        ]:
+            try:
+                conn.execute(text(col_def))
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -841,6 +862,11 @@ def operator_required(f):
     return decorated
 
 
+def _op_has_perm(perm: str) -> bool:
+    """Check if the current operator session has a specific permission."""
+    return bool(session.get("op_perm_" + perm))
+
+
 def send_email(to_addr: str, subject: str, body_html: str) -> bool:
     import smtplib
     from email.mime.multipart import MIMEMultipart
@@ -1110,9 +1136,15 @@ def login_step2():
         if not check_password_hash(op.password_hash, password):
             return jsonify(ok=False, error="Sai mật khẩu.")
         session.clear()
-        session["user_type"] = "operator"
-        session["operator_id"] = op.id
-        session["full_name"] = op.full_name
+        session["user_type"]             = "operator"
+        session["operator_id"]           = op.id
+        session["full_name"]             = op.full_name
+        session["op_perm_room_assign"]      = bool(op.perm_room_assign)
+        session["op_perm_room_swap"]        = bool(op.perm_room_swap)
+        session["op_perm_student_view"]     = bool(op.perm_student_view)
+        session["op_perm_student_export"]   = bool(op.perm_student_export)
+        session["op_perm_manage_teachers"]  = bool(op.perm_manage_teachers)
+        session["op_perm_manage_students"]  = bool(op.perm_manage_students)
         return jsonify(ok=True, redirect=url_for("op_room_detail"))
 
     return jsonify(ok=False, error="Loại tài khoản không hợp lệ.")
@@ -1798,12 +1830,16 @@ def admin_class_students_export(class_id):
 @app.route("/op/classes/<int:class_id>/students")
 @operator_required
 def op_class_students(class_id):
+    if not _op_has_perm("student_view") and not _op_has_perm("student_export"):
+        return jsonify(ok=False, error="Không có quyền xem danh sách học sinh."), 403
     return admin_class_students.__wrapped__(class_id)
 
 
 @app.route("/op/classes/<int:class_id>/students/export")
 @operator_required
 def op_class_students_export(class_id):
+    if not _op_has_perm("student_export"):
+        return "Không có quyền tải danh sách học sinh.", 403
     return admin_class_students_export.__wrapped__(class_id)
 
 
@@ -4024,19 +4060,26 @@ def admin_operators():
 @app.route("/admin/operators", methods=["POST"])
 @admin_required
 def admin_operators_create():
-    full_name  = (request.form.get("full_name") or "").strip()
-    login_code = (request.form.get("login_code") or "").strip()
-    password   = (request.form.get("password") or "").strip()
+    full_name   = (request.form.get("full_name")   or "").strip()
+    login_code  = (request.form.get("login_code")  or "").strip()
+    password    = (request.form.get("password")    or "").strip()
     if not full_name or not login_code or not password:
         flash("Vui lòng nhập đầy đủ Họ tên, Mã đăng nhập và Mật khẩu.", "danger")
         return redirect(url_for("admin_operators"))
     pw_hash = generate_password_hash(password)
+    perm_room_assign     = 1 if request.form.get("perm_room_assign")     else 0
+    perm_room_swap       = 1 if request.form.get("perm_room_swap")       else 0
+    perm_student_view    = 1 if request.form.get("perm_student_view")    else 0
+    perm_student_export  = 1 if request.form.get("perm_student_export")  else 0
+    perm_manage_teachers = 1 if request.form.get("perm_manage_teachers") else 0
+    perm_manage_students = 1 if request.form.get("perm_manage_students") else 0
     try:
         with engine.begin() as conn:
             conn.execute(insert(operators).values(
-                full_name=full_name,
-                login_code=login_code,
-                password_hash=pw_hash,
+                full_name=full_name, login_code=login_code, password_hash=pw_hash,
+                perm_room_assign=perm_room_assign, perm_room_swap=perm_room_swap,
+                perm_student_view=perm_student_view, perm_student_export=perm_student_export,
+                perm_manage_teachers=perm_manage_teachers, perm_manage_students=perm_manage_students,
             ))
         flash(f"Đã tạo tài khoản '{full_name}'.", "success")
     except Exception:
@@ -4062,6 +4105,22 @@ def admin_operators_reset_pw(op_id):
 def admin_operators_delete(op_id):
     with engine.begin() as conn:
         conn.execute(delete(operators).where(operators.c.id == op_id))
+    return jsonify(ok=True)
+
+
+@app.route("/admin/operators/<int:op_id>/permissions", methods=["POST"])
+@admin_required
+def admin_operators_update_perms(op_id):
+    data = request.get_json(force=True)
+    with engine.begin() as conn:
+        conn.execute(update(operators).where(operators.c.id == op_id).values(
+            perm_room_assign     = 1 if data.get("perm_room_assign")     else 0,
+            perm_room_swap       = 1 if data.get("perm_room_swap")       else 0,
+            perm_student_view    = 1 if data.get("perm_student_view")    else 0,
+            perm_student_export  = 1 if data.get("perm_student_export")  else 0,
+            perm_manage_teachers = 1 if data.get("perm_manage_teachers") else 0,
+            perm_manage_students = 1 if data.get("perm_manage_students") else 0,
+        ))
     return jsonify(ok=True)
 
 
@@ -4119,9 +4178,16 @@ def admin_room_detail():
                            api_room_grid=url_for("admin_room_grid"),
                            api_register_class=url_for("admin_register_class"),
                            api_available_for_slot=url_for("admin_classes_available_for_slot"),
+                           api_assigned_for_slot=url_for("admin_classes_assigned_for_slot"),
                            api_assign_room="/admin/classes",
                            api_class_base="/admin/classes",
-                           api_export_url=url_for("admin_room_detail_export"))
+                           api_export_url=url_for("admin_room_detail_export"),
+                           perm_room_assign=True,
+                           perm_room_swap=True,
+                           perm_student_view=True,
+                           perm_student_export=True,
+                           perm_manage_teachers=False,
+                           perm_manage_students=False)
 
 
 @app.route("/admin/room-detail/export")
@@ -5985,6 +6051,50 @@ def admin_class_delete(class_id):
     return jsonify(ok=True)
 
 
+@app.route("/admin/classes/assigned-for-slot")
+@admin_required
+def admin_classes_assigned_for_slot():
+    """Return classes already assigned to a room in the given slot (for swap/move mode)."""
+    session_type  = request.args.get("session")
+    day_of_week   = request.args.get("day",   type=int)
+    start_session = request.args.get("start", type=int)
+    exclude_room  = request.args.get("exclude_room", "") or ""
+    if not all([session_type, day_of_week, start_session]):
+        return jsonify(ok=False, error="Thiếu tham số.")
+    end_session = start_session + 1
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(classes, teachers.c.full_name.label("teacher_name"))
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .where(and_(
+                classes.c.session_type  == session_type,
+                classes.c.day_of_week   == day_of_week,
+                classes.c.start_session <= end_session,
+                (classes.c.start_session + classes.c.duration - 1) >= start_session,
+                classes.c.location.isnot(None),
+                classes.c.location      != exclude_room,
+                classes.c.is_published  == 1,
+            ))
+            .order_by(classes.c.grade, classes.c.location)
+        ).fetchall()
+        class_ids = [r.id for r in rows]
+        enrolled_map: dict = {}
+        if class_ids:
+            ecnt = conn.execute(
+                select(enrollments.c.class_id, func.count().label("cnt"))
+                .where(enrollments.c.class_id.in_(class_ids))
+                .group_by(enrollments.c.class_id)
+            ).fetchall()
+            enrolled_map = {r.class_id: r.cnt for r in ecnt}
+    return jsonify(ok=True, classes=[
+        {"id": r.id, "teacher": r.teacher_name,
+         "subject": r.subject_group or r.subject or "",
+         "grade": r.grade, "current_room": r.location,
+         "enrolled": enrolled_map.get(r.id, 0), "max_capacity": r.max_capacity}
+        for r in rows
+    ])
+
+
 # ---------------------------------------------------------------------------
 # Operator routes — separate /op/ namespace, never exposes /admin/ to operators
 # ---------------------------------------------------------------------------
@@ -6000,9 +6110,16 @@ def op_room_detail():
                            api_room_grid=url_for("op_room_grid"),
                            api_register_class=url_for("op_register_class"),
                            api_available_for_slot=url_for("admin_classes_available_for_slot"),
-                           api_assign_room="/admin/classes",
+                           api_assigned_for_slot=url_for("op_classes_assigned_for_slot"),
+                           api_assign_room="/op/classes",
                            api_class_base="/op/classes",
-                           api_export_url=url_for("op_room_detail_export"))
+                           api_export_url=url_for("op_room_detail_export"),
+                           perm_room_assign=_op_has_perm("room_assign"),
+                           perm_room_swap=_op_has_perm("room_swap"),
+                           perm_student_view=_op_has_perm("student_view"),
+                           perm_student_export=_op_has_perm("student_export"),
+                           perm_manage_teachers=_op_has_perm("manage_teachers"),
+                           perm_manage_students=_op_has_perm("manage_students"))
 
 
 @app.route("/op/room-grid")
@@ -6032,7 +6149,145 @@ def op_class_delete(class_id):
 @app.route("/op/classes/<int:class_id>/unassign-room", methods=["POST"])
 @operator_required
 def op_class_unassign_room(class_id):
+    if not _op_has_perm("room_assign"):
+        return jsonify(ok=False, error="Không có quyền gỡ phòng.")
     return admin_class_unassign_room.__wrapped__(class_id)
+
+
+@app.route("/op/classes/<int:class_id>/assign-room", methods=["POST"])
+@operator_required
+def op_class_assign_room(class_id):
+    can_assign = _op_has_perm("room_assign")
+    can_swap   = _op_has_perm("room_swap")
+    if not can_assign and not can_swap:
+        return jsonify(ok=False, error="Không có quyền xếp phòng.")
+    if not can_assign:
+        # Swap mode: class must already have a room (moving, not assigning fresh)
+        with engine.connect() as conn:
+            cls = conn.execute(select(classes.c.location).where(classes.c.id == class_id)).fetchone()
+            if not cls or not cls.location:
+                return jsonify(ok=False, error="Chỉ được phép đổi phòng cho lớp đã có phòng.")
+    return admin_class_assign_room.__wrapped__(class_id)
+
+
+@app.route("/op/classes/assigned-for-slot")
+@operator_required
+def op_classes_assigned_for_slot():
+    """Return classes already assigned to a room in the given slot (for swap mode)."""
+    if not _op_has_perm("room_swap"):
+        return jsonify(ok=False, error="Không có quyền."), 403
+    session_type  = request.args.get("session")
+    day_of_week   = request.args.get("day",   type=int)
+    start_session = request.args.get("start", type=int)
+    exclude_room  = request.args.get("exclude_room", "") or ""
+    if not all([session_type, day_of_week, start_session]):
+        return jsonify(ok=False, error="Thiếu tham số.")
+    end_session = start_session + 1
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(classes, teachers.c.full_name.label("teacher_name"))
+            .join(teachers, classes.c.teacher_id == teachers.c.id)
+            .where(and_(
+                classes.c.session_type  == session_type,
+                classes.c.day_of_week   == day_of_week,
+                classes.c.start_session <= end_session,
+                (classes.c.start_session + classes.c.duration - 1) >= start_session,
+                classes.c.location.isnot(None),
+                classes.c.location      != exclude_room,
+                classes.c.is_published  == 1,
+            ))
+            .order_by(classes.c.grade, classes.c.location)
+        ).fetchall()
+        class_ids = [r.id for r in rows]
+        enrolled_map: dict = {}
+        if class_ids:
+            ecnt = conn.execute(
+                select(enrollments.c.class_id, func.count().label("cnt"))
+                .where(enrollments.c.class_id.in_(class_ids))
+                .group_by(enrollments.c.class_id)
+            ).fetchall()
+            enrolled_map = {r.class_id: r.cnt for r in ecnt}
+    return jsonify(ok=True, classes=[
+        {"id": r.id, "teacher": r.teacher_name,
+         "subject": r.subject_group or r.subject or "",
+         "grade": r.grade, "current_room": r.location,
+         "enrolled": enrolled_map.get(r.id, 0), "max_capacity": r.max_capacity}
+        for r in rows
+    ])
+
+
+@app.route("/op/teachers")
+@operator_required
+def op_teachers():
+    if not _op_has_perm("manage_teachers"):
+        return "Không có quyền.", 403
+    with engine.connect() as conn:
+        teacher_list = conn.execute(
+            select(teachers).order_by(teachers.c.full_name)
+        ).fetchall()
+    return render_template("admin/op_teachers.html", teacher_list=teacher_list)
+
+
+@app.route("/op/teachers/<int:teacher_id>/reset-password", methods=["POST"])
+@operator_required
+def op_teachers_reset_password(teacher_id):
+    if not _op_has_perm("manage_teachers"):
+        return jsonify(ok=False, error="Không có quyền."), 403
+    with engine.connect() as conn:
+        teacher = conn.execute(
+            select(teachers.c.id, teachers.c.full_name, teachers.c.is_first_login)
+            .where(teachers.c.id == teacher_id)
+        ).fetchone()
+    if not teacher:
+        return jsonify(ok=False, error="Không tìm thấy giáo viên.")
+    if teacher.is_first_login:
+        return jsonify(ok=False, error="Tài khoản chưa kích hoạt.")
+    temp_pw = generate_temp_password()
+    with engine.begin() as conn:
+        conn.execute(
+            update(teachers).where(teachers.c.id == teacher_id).values(
+                password_hash=generate_password_hash(temp_pw),
+                must_change_password=1,
+            )
+        )
+    return jsonify(ok=True, new_password=temp_pw, name=teacher.full_name)
+
+
+@app.route("/op/students")
+@operator_required
+def op_students():
+    if not _op_has_perm("manage_students"):
+        return "Không có quyền.", 403
+    with engine.connect() as conn:
+        student_list = conn.execute(
+            select(students).order_by(students.c.grade, students.c.class_name, students.c.full_name)
+        ).fetchall()
+    return render_template("admin/op_students.html", student_list=student_list)
+
+
+@app.route("/op/students/<int:student_id>/reset-password", methods=["POST"])
+@operator_required
+def op_students_reset_password(student_id):
+    if not _op_has_perm("manage_students"):
+        return jsonify(ok=False, error="Không có quyền."), 403
+    with engine.connect() as conn:
+        student = conn.execute(
+            select(students.c.id, students.c.full_name, students.c.is_first_login)
+            .where(students.c.id == student_id)
+        ).fetchone()
+    if not student:
+        return jsonify(ok=False, error="Không tìm thấy học sinh.")
+    if student.is_first_login:
+        return jsonify(ok=False, error="Tài khoản chưa kích hoạt.")
+    temp_pw = generate_temp_password()
+    with engine.begin() as conn:
+        conn.execute(
+            update(students).where(students.c.id == student_id).values(
+                password_hash=generate_password_hash(temp_pw),
+                must_change_password=1,
+            )
+        )
+    return jsonify(ok=True, new_password=temp_pw, name=student.full_name)
 
 
 # --- Admin: Enrollment management ---

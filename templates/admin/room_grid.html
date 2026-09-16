@@ -86,6 +86,33 @@
       </button>
     </form>
   </div>
+  {% if perm_manage_teachers or perm_manage_students %}
+  <!-- Operator nav tabs -->
+  <div class="d-flex gap-2 mb-3" style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;">
+    <a href="{{ url_for('op_room_detail') }}"
+       class="btn btn-sm fw-semibold"
+       style="border-radius:8px;font-size:.78rem;padding:4px 12px;white-space:nowrap;
+              background:#7C3AED;color:#fff;border:none;">
+      <i class="bi bi-grid-3x3-gap me-1"></i>Lịch phòng
+    </a>
+    {% if perm_manage_teachers %}
+    <a href="{{ url_for('op_teachers') }}"
+       class="btn btn-sm fw-semibold"
+       style="border-radius:8px;font-size:.78rem;padding:4px 12px;white-space:nowrap;
+              background:#EDE9FE;color:#5B21B6;border:1.5px solid #C4B5FD;">
+      <i class="bi bi-person-video3 me-1"></i>Tài khoản giáo viên
+    </a>
+    {% endif %}
+    {% if perm_manage_students %}
+    <a href="{{ url_for('op_students') }}"
+       class="btn btn-sm fw-semibold"
+       style="border-radius:8px;font-size:.78rem;padding:4px 12px;white-space:nowrap;
+              background:#EDE9FE;color:#5B21B6;border:1.5px solid #C4B5FD;">
+      <i class="bi bi-people me-1"></i>Tài khoản học sinh
+    </a>
+    {% endif %}
+  </div>
+  {% endif %}
   {% endif %}
 
   <!-- Title row -->
@@ -181,6 +208,7 @@
           <div id="slModalSubtitle" style="font-size:.73rem;color:rgba(255,255,255,.85);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
         </div>
         <div class="d-flex align-items-center gap-2 ms-3">
+          {% if perm_student_export %}
           <a id="slExportBtn" href="#" target="_blank"
              style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:8px;
                     background:rgba(255,255,255,.2);color:#fff;font-size:.75rem;font-weight:700;
@@ -189,6 +217,9 @@
              onmouseleave="this.style.background='rgba(255,255,255,.2)'">
             <i class="bi bi-file-earmark-excel"></i><span class="rg-export-text">Excel</span>
           </a>
+          {% else %}
+          <span id="slExportBtn" style="display:none;"></span>
+          {% endif %}
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
       </div>
@@ -239,11 +270,18 @@ let _gridData    = null;
 let _gridSession = 'morning';
 let _regCtx      = null;
 const _API = {
-  roomGrid:         {{ api_room_grid | tojson }},
-  registerClass:    {{ api_register_class | tojson }},
-  availableForSlot: {{ api_available_for_slot | tojson }},
-  assignRoom:       {{ api_assign_room | tojson }},
-  classBase:        {{ api_class_base | tojson }},
+  roomGrid:           {{ api_room_grid | tojson }},
+  registerClass:      {{ api_register_class | tojson }},
+  availableForSlot:   {{ api_available_for_slot | tojson }},
+  assignedForSlot:    {{ api_assigned_for_slot | tojson }},
+  assignRoom:         {{ api_assign_room | tojson }},
+  classBase:          {{ api_class_base | tojson }},
+};
+const _PERM = {
+  roomAssign:    {{ perm_room_assign | tojson }},
+  roomSwap:      {{ perm_room_swap   | tojson }},
+  studentView:   {{ perm_student_view   | tojson }},
+  studentExport: {{ perm_student_export | tojson }},
 };
 let _selectedExistingId = null;
 
@@ -332,14 +370,19 @@ function _renderGridView() {
         const gr  = !bk && !ext && gradeRestr(room, d, s);
         if (bk) {
           const gs = _RG_GRADE_ST[bk.grade] || {bg:'#F1F5F9',bdr:'#CBD5E1',txt:'#475569'};
+          const canClickStudent = _PERM.studentView || _PERM.studentExport;
+          const studentClick = canClickStudent ? `onclick="openStudentListModal(${bk.class_id},event)"` : '';
+          const hoverEffect  = canClickStudent ? `onmouseenter="this.style.filter='brightness(.94)'" onmouseleave="this.style.filter=''"` : '';
+          const cursorStyle  = canClickStudent ? 'cursor:pointer;' : '';
+          const deleteBtn    = _PERM.roomAssign
+            ? `<button onclick="deleteGridClass(${bk.class_id},event)" style="position:absolute;top:1px;right:2px;background:none;border:none;cursor:pointer;color:#DC2626;font-size:.68rem;padding:0;line-height:1;" title="Gỡ phòng">✕</button>`
+            : '';
           h += `<td style="${TD}vertical-align:top;">
-            <div style="${IH}background:${gs.bg};border:1.5px solid ${gs.bdr};padding:3px 5px 3px 4px;position:relative;cursor:pointer;transition:filter .12s;"
-                 onclick="openStudentListModal(${bk.class_id},event)"
-                 onmouseenter="this.style.filter='brightness(.94)'" onmouseleave="this.style.filter=''">
+            <div style="${IH}background:${gs.bg};border:1.5px solid ${gs.bdr};padding:3px 5px 3px 4px;position:relative;${cursorStyle}transition:filter .12s;"
+                 ${studentClick} ${hoverEffect}>
               <div style="font-size:.58rem;font-weight:800;color:${gs.txt};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">K${bk.grade} · ${_gesc(bk.subject)}</div>
               <div style="font-size:.56rem;color:#374151;line-height:1.3;margin-top:1px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${_gesc(bk.teacher)}</div>
-              <button onclick="deleteGridClass(${bk.class_id},event)"
-                      style="position:absolute;top:1px;right:2px;background:none;border:none;cursor:pointer;color:#DC2626;font-size:.68rem;padding:0;line-height:1;" title="Xóa">✕</button>
+              ${deleteBtn}
             </div></td>`;
         } else if (ext) {
           h += `<td style="${TD}">
@@ -351,14 +394,23 @@ function _renderGridView() {
           const grChip = gr
             ? `<div style="font-size:.5rem;color:#6D28D9;font-weight:700;background:#EDE9FE;border-radius:3px;padding:0 3px;line-height:1.5;margin-bottom:1px;">K${gr.split(',').join('+')}</div>`
             : '';
-          h += `<td style="${TD}">
-            <div class="grid-slot" data-room="${_gesc(room)}" data-day="${d}" data-session="${ses}" data-start="${s}"
-                 onclick="openRegisterModal(this)"
-                 style="${IH}background:#F0FDF4;border:1.5px dashed #86EFAC;cursor:pointer;
-                        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:background .1s;"
-                 onmouseenter="this.style.background='#DCFCE7'" onmouseleave="this.style.background='#F0FDF4'">
-              ${grChip}<span style="font-size:.55rem;color:#94A3B8;">+ Đăng ký</span>
-            </div></td>`;
+          const canAct = _PERM.roomAssign || _PERM.roomSwap;
+          if (canAct) {
+            const slotLabel = _PERM.roomAssign ? '+ Xếp lớp' : '⇄ Đổi lớp';
+            h += `<td style="${TD}">
+              <div class="grid-slot" data-room="${_gesc(room)}" data-day="${d}" data-session="${ses}" data-start="${s}"
+                   onclick="openRegisterModal(this)"
+                   style="${IH}background:#F0FDF4;border:1.5px dashed #86EFAC;cursor:pointer;
+                          display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:background .1s;"
+                   onmouseenter="this.style.background='#DCFCE7'" onmouseleave="this.style.background='#F0FDF4'">
+                ${grChip}<span style="font-size:.55rem;color:#94A3B8;">${slotLabel}</span>
+              </div></td>`;
+          } else {
+            h += `<td style="${TD}">
+              <div style="${IH}background:#FAFAFA;display:flex;align-items:center;justify-content:center;">
+                ${grChip}
+              </div></td>`;
+          }
         }
       }
     }
@@ -416,6 +468,52 @@ async function loadExistingClasses() {
   }
 }
 
+async function loadAssignedClassesForSwap() {
+  const listEl    = document.getElementById('existingList');
+  const loadingEl = document.getElementById('existingLoading');
+  const emptyEl   = document.getElementById('existingEmpty');
+  listEl.style.display = 'none';
+  emptyEl.style.display = 'none';
+  loadingEl.style.display = '';
+  _selectedExistingId = null;
+
+  const url = `${_API.assignedForSlot}?session=${_regCtx.session}&day=${_regCtx.day}&start=${_regCtx.start}&exclude_room=${encodeURIComponent(_regCtx.room)}`;
+  try {
+    const res  = await fetch(url);
+    const data = await res.json();
+    loadingEl.style.display = 'none';
+    if (!data.ok || !data.classes.length) {
+      emptyEl.style.display = '';
+      return;
+    }
+    const GS = {10:{bg:'#DBEAFE',bdr:'#93C5FD',txt:'#1D4ED8'},11:{bg:'#DCFCE7',bdr:'#86EFAC',txt:'#166534'},12:{bg:'#FFF7ED',bdr:'#FED7AA',txt:'#C2410C'}};
+    listEl.innerHTML = data.classes.map(c => {
+      const gs = GS[c.grade] || {bg:'#F1F5F9',bdr:'#CBD5E1',txt:'#475569'};
+      const siSo = c.max_capacity ? `${c.enrolled}/${c.max_capacity} HS` : `${c.enrolled} HS`;
+      return `<div id="ecls_${c.id}" onclick="_selectExisting(${c.id})"
+                   style="display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;
+                          border-bottom:1px solid #F1F5F9;transition:background .1s;"
+                   onmouseenter="if(_selectedExistingId!=${c.id})this.style.background='#FFF7ED'"
+                   onmouseleave="if(_selectedExistingId!=${c.id})this.style.background=''">
+              <div style="flex-shrink:0;width:36px;height:36px;border-radius:50%;background:${gs.bg};
+                          border:1.5px solid ${gs.bdr};display:flex;align-items:center;justify-content:center;
+                          font-size:.65rem;font-weight:800;color:${gs.txt};">K${c.grade}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:.82rem;font-weight:700;color:#0c4a6e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_gesc(c.teacher)}</div>
+                <div style="font-size:.7rem;color:#64748B;">${_gesc(c.subject)}</div>
+                <div style="font-size:.65rem;color:#7C3AED;font-weight:600;"><i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> Phòng: ${_gesc(c.current_room)}</div>
+              </div>
+              <span style="flex-shrink:0;font-size:.67rem;color:#475569;background:#F1F5F9;border-radius:8px;padding:2px 7px;font-weight:600;white-space:nowrap;">${siSo}</span>
+              <i class="bi bi-check-circle-fill" id="echeck_${c.id}" style="color:#F59E0B;font-size:1rem;display:none;flex-shrink:0;"></i>
+            </div>`;
+    }).join('');
+    listEl.style.display = '';
+  } catch {
+    loadingEl.style.display = 'none';
+    emptyEl.style.display = '';
+  }
+}
+
 function _selectExisting(id) {
   if (_selectedExistingId) {
     const prev = document.getElementById('ecls_' + _selectedExistingId);
@@ -442,10 +540,30 @@ function openRegisterModal(cell) {
   const SES = {morning:'Sáng', afternoon:'Chiều'};
   document.getElementById('regModalSlotInfo').textContent =
     `${_gesc(_regCtx.room)}  ·  ${_RG_DAY_NAMES[_regCtx.day]} ${SES[_regCtx.session]} ${_RG_SLOT_LBL[_regCtx.start]}`;
+  // Update modal title based on mode
+  const titleEl = document.querySelector('#modalRegisterClass .modal-title');
+  if (titleEl) {
+    if (_PERM.roomAssign) {
+      titleEl.innerHTML = '<i class="bi bi-door-open me-2"></i>Xếp phòng';
+    } else {
+      titleEl.innerHTML = '<i class="bi bi-arrow-left-right me-2"></i>Đổi lớp sang phòng này';
+    }
+  }
+  // Update empty state text based on mode
+  const emptyEl = document.getElementById('existingEmpty');
+  if (emptyEl) {
+    emptyEl.innerHTML = _PERM.roomAssign
+      ? '<i class="bi bi-inbox" style="font-size:1.4rem;display:block;margin-bottom:6px;"></i>Không có lớp nào chưa xếp phòng cho khung giờ này.'
+      : '<i class="bi bi-inbox" style="font-size:1.4rem;display:block;margin-bottom:6px;"></i>Không có lớp nào đang xếp phòng khác để đổi sang.';
+  }
   document.getElementById('regModalError').classList.add('d-none');
   _selectedExistingId = null;
   document.getElementById('btnSubmitExisting').style.display = 'none';
-  loadExistingClasses();
+  if (_PERM.roomAssign) {
+    loadExistingClasses();
+  } else {
+    loadAssignedClassesForSwap();
+  }
   new bootstrap.Modal(document.getElementById('modalRegisterClass')).show();
 }
 
@@ -465,7 +583,7 @@ async function submitAssignExisting() {
     const data = await res.json();
     if (data.ok) {
       bootstrap.Modal.getInstance(document.getElementById('modalRegisterClass')).hide();
-      showAlert(`Đã xếp phòng ${_regCtx.room} thành công.`, 'success');
+      showAlert(_PERM.roomAssign ? `Đã xếp phòng ${_regCtx.room} thành công.` : `Đã chuyển lớp sang phòng ${_regCtx.room}.`, 'success');
       loadRoomGrid();
     } else {
       errEl.textContent = data.error || 'Lỗi khi xếp phòng.';
@@ -496,6 +614,7 @@ document.addEventListener('DOMContentLoaded', loadRoomGrid);
 // ── Student list popup ──
 async function openStudentListModal(classId, e) {
   if (e) e.stopPropagation();
+  if (!_PERM.studentView && !_PERM.studentExport) return;
   const modal = new bootstrap.Modal(document.getElementById('modalStudentList'));
   document.getElementById('slLoading').style.display = '';
   document.getElementById('slEmpty').style.display   = 'none';

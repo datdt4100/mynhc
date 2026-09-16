@@ -3,11 +3,20 @@
 {% block hero %}{% endblock %}
 
 {% block header_right %}
-<button class="topbar-btn topbar-btn-solid" id="btn-toggle-enrollment" onclick="toggleStudentReg()">
+<button class="topbar-btn topbar-btn-solid" id="btn-toggle-enrollment" onclick="toggleStudentReg()"
+        style="{% if supplement_reg_open %}opacity:.5;{% endif %}">
   {% if student_reg_open %}
-  <i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng đăng ký</span>
+  <i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng GĐ2</span>
   {% else %}
-  <i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở đăng ký</span>
+  <i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở GĐ2</span>
+  {% endif %}
+</button>
+<button class="topbar-btn" id="btn-toggle-supplement" onclick="toggleSupplementReg()"
+        style="background:{% if supplement_reg_open %}#F59E0B{% else %}rgba(255,255,255,.15){% endif %};border-color:{% if supplement_reg_open %}#F59E0B{% else %}rgba(255,255,255,.3){% endif %};">
+  {% if supplement_reg_open %}
+  <i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng GĐ3</span>
+  {% else %}
+  <i class="bi bi-plus-square"></i><span class="d-none d-sm-inline">Mở GĐ3 (bổ sung)</span>
   {% endif %}
 </button>
 {% endblock %}
@@ -159,16 +168,21 @@
 
   <!-- Status badge -->
   <div class="mb-4 d-flex align-items-center gap-3 flex-wrap">
-    <div id="enrollment-status-badge">
+    <div id="enrollment-status-badge" class="d-flex gap-2 flex-wrap">
       {% if student_reg_open %}
       <span class="badge fs-6 px-3 py-2" style="background:#10B981; border-radius:10px;">
         <i class="bi bi-circle-fill me-1" style="font-size:.5rem; vertical-align:middle;"></i>
-        Giai đoạn 2 đang mở — HS đăng ký môn học
+        GĐ2 đang mở — HS đăng ký môn học
+      </span>
+      {% elif supplement_reg_open %}
+      <span class="badge fs-6 px-3 py-2" style="background:#F59E0B; border-radius:10px;">
+        <i class="bi bi-circle-fill me-1" style="font-size:.5rem; vertical-align:middle;"></i>
+        GĐ3 đang mở — Đăng ký bổ sung
       </span>
       {% else %}
       <span class="badge fs-6 px-3 py-2 bg-secondary" style="border-radius:10px;">
         <i class="bi bi-lock-fill me-1" style="font-size:.75rem;"></i>
-        Giai đoạn 2 đã đóng — HS chỉ xem
+        Đã đóng đăng ký — HS chỉ xem
       </span>
       {% endif %}
     </div>
@@ -967,17 +981,55 @@ function adminDeleteEnrollment(enrollmentId, subject, btn) {
 }
 
 /* ── Toggle student reg ── */
-function toggleStudentReg() {
-  const btn   = document.getElementById('btn-toggle-enrollment');
+function _syncBadge(p2open, p3open) {
   const badge = document.getElementById('enrollment-status-badge');
+  if (p2open) {
+    badge.innerHTML = `<span class="badge fs-6 px-3 py-2" style="background:#10B981;border-radius:10px;"><i class="bi bi-circle-fill me-1" style="font-size:.5rem;vertical-align:middle;"></i>GĐ2 đang mở — HS đăng ký môn học</span>`;
+  } else if (p3open) {
+    badge.innerHTML = `<span class="badge fs-6 px-3 py-2" style="background:#F59E0B;border-radius:10px;"><i class="bi bi-circle-fill me-1" style="font-size:.5rem;vertical-align:middle;"></i>GĐ3 đang mở — Đăng ký bổ sung</span>`;
+  } else {
+    badge.innerHTML = `<span class="badge fs-6 px-3 py-2 bg-secondary" style="border-radius:10px;"><i class="bi bi-lock-fill me-1" style="font-size:.75rem;"></i>Đã đóng đăng ký — HS chỉ xem</span>`;
+  }
+}
+
+function toggleStudentReg() {
+  const btn  = document.getElementById('btn-toggle-enrollment');
+  const btn3 = document.getElementById('btn-toggle-supplement');
   btn.disabled = true;
   fetch('{{ url_for("admin_enrollment_toggle") }}', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'} })
   .then(r => r.json()).then(data => {
     const open = data.open;
-    btn.innerHTML = open ? '<i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng đăng ký</span>' : '<i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở đăng ký</span>';
-    badge.innerHTML = open
-      ? `<span class="badge fs-6 px-3 py-2" style="background:#10B981;border-radius:10px;"><i class="bi bi-circle-fill me-1" style="font-size:.5rem;vertical-align:middle;"></i>Giai đoạn 2 đang mở — HS đăng ký môn học</span>`
-      : `<span class="badge fs-6 px-3 py-2 bg-secondary" style="border-radius:10px;"><i class="bi bi-lock-fill me-1" style="font-size:.75rem;"></i>Giai đoạn 2 đã đóng — HS chỉ xem</span>`;
+    btn.innerHTML = open ? '<i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng GĐ2</span>' : '<i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở GĐ2</span>';
+    btn.style.opacity = open ? '' : '';
+    // Opening phase 2 closes phase 3
+    if (open) {
+      btn3.innerHTML = '<i class="bi bi-plus-square"></i><span class="d-none d-sm-inline">Mở GĐ3 (bổ sung)</span>';
+      btn3.style.background = 'rgba(255,255,255,.15)';
+      btn3.style.borderColor = 'rgba(255,255,255,.3)';
+    }
+    _syncBadge(open, false);
+  })
+  .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+  .finally(() => { btn.disabled = false; });
+}
+
+function toggleSupplementReg() {
+  const btn  = document.getElementById('btn-toggle-supplement');
+  const btn2 = document.getElementById('btn-toggle-enrollment');
+  btn.disabled = true;
+  fetch('{{ url_for("admin_enrollment_toggle_supplement") }}', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'} })
+  .then(r => r.json()).then(data => {
+    const open = data.open;
+    btn.innerHTML = open
+      ? '<i class="bi bi-lock"></i><span class="d-none d-sm-inline">Đóng GĐ3</span>'
+      : '<i class="bi bi-plus-square"></i><span class="d-none d-sm-inline">Mở GĐ3 (bổ sung)</span>';
+    btn.style.background = open ? '#F59E0B' : 'rgba(255,255,255,.15)';
+    btn.style.borderColor = open ? '#F59E0B' : 'rgba(255,255,255,.3)';
+    // Opening phase 3 closes phase 2
+    if (open) {
+      btn2.innerHTML = '<i class="bi bi-unlock"></i><span class="d-none d-sm-inline">Mở GĐ2</span>';
+    }
+    _syncBadge(false, open);
   })
   .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
   .finally(() => { btn.disabled = false; });

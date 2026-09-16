@@ -353,6 +353,7 @@ def init_db():
         for key, value in [("admin_password", "Admin@123"),
                            ("teacher_reg_open", "0"),
                            ("student_reg_open", "0"),
+                           ("supplement_reg_open", "0"),
                            ("maintenance_mode", "0"),
                            ("schedule_constraint", "1"),
                            ("allow_multi_class", "1"),
@@ -1855,8 +1856,11 @@ def student_dashboard():
                     else:
                         student_schedule[key] = {"status": "blocked"}
 
-    student_reg_open = get_setting("student_reg_open", "0") == "1"
-    require_5_subjects = get_setting("require_5_subjects", "1") == "1"
+    student_reg_open    = get_setting("student_reg_open",    "0") == "1"
+    supplement_reg_open = get_setting("supplement_reg_open", "0") == "1"
+    require_5_subjects  = get_setting("require_5_subjects",  "1") == "1"
+    # Classes the student enrolled in that already have a room — locked in phase 3
+    locked_class_ids = {c.id for c in published_classes if c.id in my_class_ids and c.location}
     needs_email = (
         get_setting("require_email_check", "0") == "1"
         and not (student_row.email or "").strip()
@@ -1880,6 +1884,8 @@ def student_dashboard():
         my_class_ids=my_class_ids,
         student_schedule=student_schedule,
         student_reg_open=student_reg_open,
+        supplement_reg_open=supplement_reg_open,
+        locked_class_ids=locked_class_ids,
         require_5_subjects=require_5_subjects,
         needs_email=needs_email,
         required_subjects=required_subjects,
@@ -2153,7 +2159,9 @@ def teacher_export_schedule():
 @app.route("/student/enroll", methods=["POST"])
 @student_required
 def student_enroll():
-    if get_setting("student_reg_open", "0") != "1":
+    reg_open = get_setting("student_reg_open", "0") == "1"
+    suppl_open = get_setting("supplement_reg_open", "0") == "1"
+    if not reg_open and not suppl_open:
         return jsonify(ok=False, error="Chưa mở đăng ký.")
 
     data = request.get_json(force=True)
@@ -2302,9 +2310,18 @@ def _student_covered_subjects(conn, student_id, student_grade):
 @app.route("/student/enroll/<int:class_id>", methods=["DELETE"])
 @student_required
 def student_cancel_enroll(class_id):
-    student_id = session["user_id"]
+    reg_open   = get_setting("student_reg_open",   "0") == "1"
+    suppl_open = get_setting("supplement_reg_open", "0") == "1"
+    if not reg_open and not suppl_open:
+        return jsonify(ok=False, error="Đăng ký đã đóng.")
+    student_id   = session["user_id"]
     student_grade = session.get("grade")
     with engine.connect() as conn:
+        # Phase 3 only: cannot cancel classes that already have a room assigned
+        if suppl_open and not reg_open:
+            cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+            if cls and cls.location:
+                return jsonify(ok=False, error="Không thể huỷ lớp đã được xếp phòng trong giai đoạn đăng ký bổ sung.")
         conn.execute(
             delete(enrollments).where(
                 and_(enrollments.c.student_id == student_id,
@@ -6060,7 +6077,8 @@ def admin_enrollment():
             except Exception:
                 pass
 
-    student_reg_open = get_setting("student_reg_open", "0") == "1"
+    student_reg_open    = get_setting("student_reg_open",    "0") == "1"
+    supplement_reg_open = get_setting("supplement_reg_open", "0") == "1"
     return render_template(
         "admin/enrollment.html",
         published_classes=published_classes,
@@ -6069,6 +6087,7 @@ def admin_enrollment():
         student_list=student_list_raw,
         enrolled_counts_by_student=enrolled_counts_by_student,
         student_reg_open=student_reg_open,
+        supplement_reg_open=supplement_reg_open,
         day_name=day_name,
         session_label=session_label,
     )
@@ -6359,6 +6378,21 @@ def admin_enrollment_toggle():
     current = get_setting("student_reg_open", "0")
     new_val = "0" if current == "1" else "1"
     set_setting("student_reg_open", new_val)
+    # Closing phase 2 also closes phase 3 (and vice-versa: opening phase 2 closes phase 3)
+    if new_val == "1":
+        set_setting("supplement_reg_open", "0")
+    return jsonify(ok=True, open=new_val == "1")
+
+
+@app.route("/admin/enrollment/toggle-supplement", methods=["POST"])
+@admin_required
+def admin_enrollment_toggle_supplement():
+    current = get_setting("supplement_reg_open", "0")
+    new_val = "0" if current == "1" else "1"
+    set_setting("supplement_reg_open", new_val)
+    # Opening phase 3 closes phase 2
+    if new_val == "1":
+        set_setting("student_reg_open", "0")
     return jsonify(ok=True, open=new_val == "1")
 
 

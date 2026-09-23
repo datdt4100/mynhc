@@ -5135,7 +5135,8 @@ def admin_classes_available_for_slot():
             .where(and_(
                 classes.c.session_type  == session_type,
                 classes.c.day_of_week   == day_of_week,
-                classes.c.start_session == start_session,
+                classes.c.start_session <= start_session + 1,
+                (classes.c.start_session + classes.c.duration - 1) >= start_session,
                 classes.c.location.is_(None),
                 classes.c.is_published  == 1,
             ))

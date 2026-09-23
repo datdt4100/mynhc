@@ -802,12 +802,7 @@ async function submitAssignTeacher() {
 
 function _atPostSuccess() {
   bootstrap.Modal.getInstance(document.getElementById('assignTeacherModal')).hide();
-  const row = document.getElementById('ua-row-' + _atClassId);
-  if (row) row.remove();
-  const tbody = document.querySelector('#unassigned-table tbody');
-  if (tbody && !tbody.querySelector('tr')) {
-    document.querySelector('.section-card.mt-4')?.remove();
-  }
+  location.reload();
 }
 
 async function loadUARooms(sel) {

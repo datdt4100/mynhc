@@ -84,9 +84,9 @@
   }
   /* Inline capacity popover */
   .cap-popover {
-    position: absolute; z-index: 9999; background: #fff; border: 1.5px solid #C4B5FD;
+    position: fixed; z-index: 9999; background: #fff; border: 1.5px solid #C4B5FD;
     border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.15);
-    padding: 10px 12px; min-width: 180px; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+    padding: 10px 12px; min-width: 180px; transform: translateX(-50%);
   }
   .cap-popover input[type=number] {
     width: 100%; border: 1.5px solid #E2E8F0; border-radius: 8px;
@@ -833,8 +833,10 @@ function openCapEditor(badge, e) {
       <button onclick="saveCapacity(document.getElementById('cap-input'),${classId})"
               style="font-size:.72rem;padding:3px 10px;border-radius:6px;background:#7C3AED;color:#fff;border:none;cursor:pointer;font-weight:700;">Lưu</button>
     </div>`;
-  badge.style.position = 'relative';
-  badge.appendChild(pop);
+  const rect = badge.getBoundingClientRect();
+  pop.style.top  = (rect.bottom + 6) + 'px';
+  pop.style.left = (rect.left + rect.width / 2) + 'px';
+  document.body.appendChild(pop);
   _capPopover = pop;
   pop.querySelector('#cap-input').focus();
   pop.querySelector('#cap-input').select();

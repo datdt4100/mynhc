@@ -2840,7 +2840,7 @@ function _renderIdxPhase2(list) {
             <button onclick="_idxP2Toggle('${c.class_name}',${c.phase2_enabled ? 1 : 0})"
                     id="idxP2Btn_${c.class_name.replace(/\s/g,'_')}"
                     class="reg-toggle ${c.phase2_enabled ? 'open' : 'closed'}"
-                    style="width:52px;min-width:52px;">
+                    style="flex-shrink:0;">
               <span class="toggle-dot"></span>
               <span>${c.phase2_enabled ? 'Bật' : 'Tắt'}</span>
             </button>
@@ -2950,7 +2950,7 @@ function _renderGd2Vis(list) {
                   id="gd2VB_${c.id}"
                   data-published="${c.is_published}"
                   class="reg-toggle ${c.is_published ? 'open' : 'closed'}"
-                  style="width:52px;min-width:52px;flex-shrink:0;">
+                  style="flex-shrink:0;">
             <span class="toggle-dot"></span>
             <span>${c.is_published ? 'Bật' : 'Tắt'}</span>
           </button>`;

@@ -6097,6 +6097,54 @@ def student_set_email():
     return jsonify(ok=True)
 
 
+@app.route("/admin/gd2-classes", methods=["GET"])
+@admin_required
+def admin_gd2_classes():
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(
+                classes.c.id,
+                classes.c.grade,
+                classes.c.subject,
+                classes.c.day_of_week,
+                classes.c.session_type,
+                classes.c.start_session,
+                classes.c.duration,
+                classes.c.max_capacity,
+                classes.c.is_published,
+                teachers.c.full_name.label("teacher_name"),
+            )
+            .select_from(classes.outerjoin(teachers, classes.c.teacher_id == teachers.c.id))
+            .order_by(classes.c.grade, classes.c.subject, classes.c.day_of_week, classes.c.start_session)
+        ).fetchall()
+
+        enroll_counts = {
+            r.class_id: r.cnt
+            for r in conn.execute(
+                select(enrollments.c.class_id, func.count().label("cnt"))
+                .group_by(enrollments.c.class_id)
+            ).fetchall()
+        }
+
+    result = [
+        {
+            "id": r.id,
+            "grade": r.grade,
+            "subject": r.subject or "",
+            "teacher": r.teacher_name or "",
+            "day_of_week": r.day_of_week,
+            "session_type": r.session_type,
+            "start_session": r.start_session,
+            "duration": r.duration,
+            "max_capacity": r.max_capacity or 0,
+            "enrolled": enroll_counts.get(r.id, 0),
+            "is_published": bool(r.is_published),
+        }
+        for r in rows
+    ]
+    return jsonify(ok=True, classes=result)
+
+
 @app.route("/admin/classes/<int:class_id>/publish", methods=["POST"])
 @admin_required
 def admin_class_publish(class_id):

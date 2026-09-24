@@ -290,6 +290,10 @@
   .adm-icon-btn.btn-outline-warning:hover { background: #D97706; color: #fff; }
   .adm-icon-btn.btn-outline-danger  { color: #DC2626; border-color: #DC2626; }
   .adm-icon-btn.btn-outline-danger:hover  { background: #DC2626; color: #fff; }
+  .man-teacher-item:not(.man-selected):hover { background: #EFF6FF; }
+  .man-teacher-item.man-selected { background: #DBEAFE; }
+  #manTeacherTrigger.open { border-radius:8px 8px 0 0; border-color:#BFDBFE; background:#EFF6FF; }
+  #manTeacherChevron.open { transform: rotate(180deg); color:#2563EB; }
 </style>
 {% endblock %}
 
@@ -639,6 +643,18 @@
                   onclick="toggleTeacherViewEnroll()">
             <span class="toggle-dot"></span>
             <span id="teacher-view-enroll-label">{% if teacher_view_enrollments %}Bật{% else %}Tắt{% endif %}</span>
+          </button>
+        </div>
+        <div class="d-flex gap-2 pt-3 mt-1 flex-wrap" style="border-top:1.5px solid #E2E8F0;">
+          <button class="btn btn-sm fw-semibold flex-fill"
+                  onclick="openIdxPhase2Modal()"
+                  style="background:#EFF6FF;color:#1D4ED8;border:1.5px solid #BFDBFE;border-radius:8px;font-size:.76rem;min-width:120px;">
+            <i class="bi bi-people-fill me-1"></i>Phân lớp GĐ2
+          </button>
+          <button class="btn btn-sm fw-semibold flex-fill"
+                  onclick="openGd2VisModal()"
+                  style="background:#F0FDF4;color:#15803D;border:1.5px solid #BBF7D0;border-radius:8px;font-size:.76rem;min-width:120px;">
+            <i class="bi bi-eye-fill me-1"></i>Môn được mở đăng ký
           </button>
         </div>
       </div>
@@ -1482,16 +1498,22 @@
         {# Hidden: selected teacher name #}
         <input type="hidden" id="manTeacher" value="">
 
-        {# Teacher list #}
-        <div class="mb-2">
+        {# Teacher dropdown #}
+        <div class="mb-2" id="manTeacherWrap">
           <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Giáo viên <span class="text-danger">*</span></label>
+          <div id="manTeacherTrigger"
+               onclick="toggleManTeacherList(event)"
+               style="cursor:pointer;border:1.5px solid #E2E8F0;border-radius:8px;padding:7px 12px;font-size:.82rem;background:#fff;display:flex;align-items:center;justify-content:space-between;user-select:none;">
+            <span id="manTeacherTriggerText" style="color:#94A3B8;">Chọn giáo viên...</span>
+            <i class="bi bi-chevron-down" id="manTeacherChevron" style="color:#94A3B8;font-size:.75rem;transition:transform .2s;flex-shrink:0;margin-left:6px;"></i>
+          </div>
           <div id="manTeacherList"
-               style="max-height:180px;overflow-y:auto;border:1.5px solid #E2E8F0;border-radius:10px;background:#FAFAFA;">
+               style="display:none;max-height:200px;overflow-y:auto;border:1.5px solid #BFDBFE;border-top:none;border-radius:0 0 10px 10px;background:#FAFAFA;box-shadow:0 4px 12px rgba(0,0,0,.08);">
             {# "Do trường phân công" option #}
             <div class="man-teacher-item d-flex align-items-center gap-2 px-3 py-2"
                  data-name="" data-subject=""
                  onclick="_manSelectTeacher(this)"
-                 style="cursor:pointer;border-bottom:1px solid #F1F5F9;font-size:.82rem;transition:background .1s;">
+                 style="cursor:pointer;border-bottom:1px solid #F1F5F9;font-size:.82rem;">
               <i class="bi bi-building" style="color:#92400E;font-size:.85rem;flex-shrink:0;"></i>
               <span class="fw-semibold" style="color:#92400E;">Do trường phân công</span>
             </div>
@@ -1504,9 +1526,7 @@
             <div class="man-teacher-item d-flex align-items-center gap-2 px-3 py-2"
                  data-name="{{ t.name | e }}" data-subject="{{ t.subject | e }}"
                  onclick="_manSelectTeacher(this)"
-                 style="cursor:pointer;border-bottom:1px solid #F1F5F9;font-size:.82rem;transition:background .1s;"
-                 onmouseenter="if(!this.classList.contains('man-selected'))this.style.background='#EFF6FF'"
-                 onmouseleave="if(!this.classList.contains('man-selected'))this.style.background=''">
+                 style="cursor:pointer;border-bottom:1px solid #F1F5F9;font-size:.82rem;">
               <i class="bi bi-person-fill" style="color:#6B7280;font-size:.8rem;flex-shrink:0;"></i>
               <span>{{ t.name }}</span>
             </div>
@@ -1587,6 +1607,46 @@
                 style="background:#2563EB;color:#fff;border-radius:8px;font-size:.8rem;border:none;padding:6px 16px;">
           <i class="bi bi-plus me-1"></i>Thêm lớp
         </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Modal: Phân lớp GĐ2 ── #}
+<div class="modal fade" id="idxModalPhase2" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down" style="max-width:460px;">
+    <div class="modal-content" style="border-radius:16px;border:none;">
+      <div class="modal-header" style="border-bottom:1.5px solid #E2E8F0;padding:12px 16px;">
+        <div class="fw-bold" style="font-size:.88rem;color:#1D4ED8;">
+          <i class="bi bi-people-fill me-2"></i>Phân lớp GĐ2 — Mở khoá theo lớp
+        </div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:14px 16px;max-height:72vh;overflow-y:auto;" id="idxPhase2Body">
+        <div class="text-center text-muted py-4" style="font-size:.82rem;">Đang tải...</div>
+      </div>
+      <div class="modal-footer" style="border-top:1.5px solid #E2E8F0;padding:8px 16px;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" style="border-radius:8px;font-size:.8rem;">Đóng</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Modal: Môn được mở đăng ký (GĐ2 class visibility) ── #}
+<div class="modal fade" id="idxModalGd2Vis" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down" style="max-width:540px;">
+    <div class="modal-content" style="border-radius:16px;border:none;">
+      <div class="modal-header" style="border-bottom:1.5px solid #E2E8F0;padding:12px 16px;">
+        <div class="fw-bold" style="font-size:.88rem;color:#15803D;">
+          <i class="bi bi-eye-fill me-2"></i>Môn được mở đăng ký — Hiển thị cho học sinh
+        </div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:14px 16px;max-height:72vh;overflow-y:auto;" id="gd2VisBody">
+        <div class="text-center text-muted py-4" style="font-size:.82rem;">Đang tải...</div>
+      </div>
+      <div class="modal-footer" style="border-top:1.5px solid #E2E8F0;padding:8px 16px;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" style="border-radius:8px;font-size:.8rem;">Đóng</button>
       </div>
     </div>
   </div>
@@ -2565,16 +2625,39 @@ async function doImportExcel() {
 }
 
 // ── Thêm lớp thủ công ────────────────────────────────────────
+function toggleManTeacherList(e) {
+  if (e) e.stopPropagation();
+  const list    = document.getElementById('manTeacherList');
+  const trigger = document.getElementById('manTeacherTrigger');
+  const chevron = document.getElementById('manTeacherChevron');
+  const open = list.style.display === 'none';
+  list.style.display = open ? '' : 'none';
+  trigger.classList.toggle('open', open);
+  chevron.classList.toggle('open', open);
+}
+
+function _closeManTeacherList() {
+  document.getElementById('manTeacherList').style.display = 'none';
+  document.getElementById('manTeacherTrigger').classList.remove('open');
+  document.getElementById('manTeacherChevron').classList.remove('open');
+}
+
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('manTeacherWrap');
+  if (wrap && !wrap.contains(e.target)) _closeManTeacherList();
+});
+
 function _manSelectTeacher(item) {
   document.querySelectorAll('.man-teacher-item').forEach(el => {
     el.classList.remove('man-selected');
-    el.style.background = '';
   });
   item.classList.add('man-selected');
-  item.style.background = '#EFF6FF';
   const name    = item.dataset.name;
   const subject = item.dataset.subject;
   document.getElementById('manTeacher').value = name;
+  const triggerText = document.getElementById('manTeacherTriggerText');
+  triggerText.textContent = name || 'Do trường phân công';
+  triggerText.style.color = '#1E293B';
   const dispEl = document.getElementById('manTeacherDisplay');
   const subjectRow = document.getElementById('manSubjectRow');
   const isSchool = !name;
@@ -2586,6 +2669,7 @@ function _manSelectTeacher(item) {
     subjectRow.style.display = 'none';
     document.getElementById('manSubject').value = '';
   }
+  _closeManTeacherList();
 }
 
 function openAddManual() {
@@ -2593,9 +2677,13 @@ function openAddManual() {
   document.getElementById('manTeacher').value = '';
   document.getElementById('manTeacherDisplay').textContent = '';
   document.getElementById('manSubjectRow').style.display = 'none';
+  _closeManTeacherList();
   document.querySelectorAll('.man-teacher-item').forEach(el => {
-    el.classList.remove('man-selected'); el.style.background = '';
+    el.classList.remove('man-selected');
   });
+  const triggerText = document.getElementById('manTeacherTriggerText');
+  triggerText.textContent = 'Chọn giáo viên...';
+  triggerText.style.color = '#94A3B8';
   ['manGrade','manSession','manDay','manStart','manSubject','manNotes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
@@ -2713,6 +2801,203 @@ async function deleteGVCN(className) {
       else showAlert(data.error || 'Không thể xóa.', 'error');
     } catch { showAlert('Lỗi kết nối.', 'error'); }
   }, {confirmText:'Xóa', confirmClass:'btn-danger'});
+}
+
+// ── Phân lớp GĐ2 modal ──
+function openIdxPhase2Modal() {
+  const body = document.getElementById('idxPhase2Body');
+  body.innerHTML = '<div class="text-center text-muted py-4" style="font-size:.82rem;">Đang tải...</div>';
+  new bootstrap.Modal(document.getElementById('idxModalPhase2')).show();
+  fetch('/admin/phase2-class-access')
+    .then(r => r.json())
+    .then(d => _renderIdxPhase2(d.classes || []))
+    .catch(() => { body.innerHTML = '<div class="text-danger text-center py-3">Lỗi tải dữ liệu</div>'; });
+}
+
+function _renderIdxPhase2(list) {
+  const body = document.getElementById('idxPhase2Body');
+  body.innerHTML = '';
+  [10, 11, 12].forEach(g => {
+    const cls = list.filter(c => c.grade === g);
+    if (!cls.length) return;
+    const sec = document.createElement('div');
+    sec.className = 'mb-3';
+    sec.innerHTML = `
+      <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+        <span class="fw-bold" style="font-size:.8rem;color:#374151;">Khối ${g}</span>
+        <div class="d-flex gap-1 flex-wrap">
+          <button class="btn btn-xs" style="font-size:.7rem;padding:2px 10px;border:1.5px solid #10B981;color:#10B981;border-radius:6px;background:transparent;"
+                  onclick="_idxP2SetAll(${g},1)">Bật tất</button>
+          <button class="btn btn-xs" style="font-size:.7rem;padding:2px 10px;border:1.5px solid #EF4444;color:#EF4444;border-radius:6px;background:transparent;"
+                  onclick="_idxP2SetAll(${g},0)">Tắt tất</button>
+        </div>
+      </div>
+      <div class="d-flex flex-column gap-1" id="idxP2G${g}">
+        ${cls.map(c => `
+          <div class="d-flex align-items-center justify-content-between px-3 py-2"
+               style="background:#F8FAFC;border-radius:8px;border:1px solid #E2E8F0;">
+            <span style="font-size:.81rem;font-weight:600;color:#1E293B;">${c.class_name}</span>
+            <button onclick="_idxP2Toggle('${c.class_name}',${c.phase2_enabled ? 1 : 0})"
+                    id="idxP2Btn_${c.class_name.replace(/\s/g,'_')}"
+                    class="reg-toggle ${c.phase2_enabled ? 'open' : 'closed'}"
+                    style="width:52px;min-width:52px;">
+              <span class="toggle-dot"></span>
+              <span>${c.phase2_enabled ? 'Bật' : 'Tắt'}</span>
+            </button>
+          </div>`).join('')}
+      </div>`;
+    body.appendChild(sec);
+  });
+}
+
+function _idxP2Toggle(className, cur) {
+  const newVal = cur ? 0 : 1;
+  const btnId = 'idxP2Btn_' + className.replace(/\s/g, '_');
+  fetch('/admin/phase2-class-access', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({class_name: className, enabled: newVal})
+  }).then(r => r.json()).then(d => {
+    if (!d.ok) return;
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.className = 'reg-toggle ' + (newVal ? 'open' : 'closed');
+    btn.querySelector('span:last-child').textContent = newVal ? 'Bật' : 'Tắt';
+    btn.onclick = () => _idxP2Toggle(className, newVal);
+  });
+}
+
+function _idxP2SetAll(grade, enabled) {
+  const container = document.getElementById('idxP2G' + grade);
+  if (!container) return;
+  container.querySelectorAll('[id^="idxP2Btn_"]').forEach(btn => {
+    const rawId = btn.id.replace('idxP2Btn_', '');
+    const className = rawId.replace(/_/g, ' ');
+    fetch('/admin/phase2-class-access', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({class_name: className, enabled: enabled})
+    }).then(r => r.json()).then(d => {
+      if (!d.ok) return;
+      btn.className = 'reg-toggle ' + (enabled ? 'open' : 'closed');
+      btn.querySelector('span:last-child').textContent = enabled ? 'Bật' : 'Tắt';
+      btn.onclick = () => _idxP2Toggle(className, enabled);
+    });
+  });
+}
+
+// ── Môn được mở đăng ký modal ──
+function openGd2VisModal() {
+  const body = document.getElementById('gd2VisBody');
+  body.innerHTML = '<div class="text-center text-muted py-4" style="font-size:.82rem;">Đang tải...</div>';
+  new bootstrap.Modal(document.getElementById('idxModalGd2Vis')).show();
+  fetch('/admin/gd2-classes')
+    .then(r => r.json())
+    .then(d => _renderGd2Vis(d.classes || []))
+    .catch(() => { body.innerHTML = '<div class="text-danger text-center py-3">Lỗi tải dữ liệu</div>'; });
+}
+
+function _renderGd2Vis(list) {
+  const body = document.getElementById('gd2VisBody');
+  body.innerHTML = '';
+  const dayNames = {2:'T2',3:'T3',4:'T4',5:'T5',6:'T6',7:'T7'};
+  [10, 11, 12].forEach(g => {
+    const gCls = list.filter(c => c.grade === g);
+    if (!gCls.length) return;
+    const gradeDiv = document.createElement('div');
+    gradeDiv.className = 'mb-4';
+    const gradeHeader = document.createElement('div');
+    gradeHeader.className = 'fw-bold mb-2 pb-1';
+    gradeHeader.style = 'font-size:.82rem;color:#1D4ED8;border-bottom:1.5px solid #DBEAFE;';
+    gradeHeader.textContent = 'Khối ' + g;
+    gradeDiv.appendChild(gradeHeader);
+    // group by subject
+    const subjects = {};
+    gCls.forEach(c => { (subjects[c.subject] = subjects[c.subject] || []).push(c); });
+    Object.keys(subjects).sort().forEach(subj => {
+      const clsList = subjects[subj];
+      const safeKey = (g + '_' + subj).replace(/[^a-zA-Z0-9]/g, '_');
+      const subjDiv = document.createElement('div');
+      subjDiv.className = 'mb-3';
+      const subjHeader = document.createElement('div');
+      subjHeader.className = 'd-flex align-items-center justify-content-between mb-1 flex-wrap gap-1';
+      subjHeader.innerHTML = `
+        <span style="font-size:.78rem;font-weight:700;color:#374151;">${subj || '(Chưa có môn)'}</span>
+        <div class="d-flex gap-1 flex-wrap">
+          <button class="btn btn-xs" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #10B981;color:#10B981;border-radius:6px;background:transparent;"
+                  data-gd2-setall="${safeKey}" data-gd2-val="1">Bật tất</button>
+          <button class="btn btn-xs" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #EF4444;color:#EF4444;border-radius:6px;background:transparent;"
+                  data-gd2-setall="${safeKey}" data-gd2-val="0">Tắt tất</button>
+        </div>`;
+      subjHeader.querySelectorAll('[data-gd2-setall]').forEach(btn => {
+        btn.onclick = () => _gd2VisSetAll(safeKey, btn.dataset.gd2Val === '1');
+      });
+      const listDiv = document.createElement('div');
+      listDiv.className = 'd-flex flex-column gap-1';
+      listDiv.id = 'gd2VL_' + safeKey;
+      clsList.forEach(c => {
+        const ses = c.session_type === 'morning' ? 'Sáng' : 'Chiều';
+        const timeLabel = (dayNames[c.day_of_week] || '?') + ' ' + ses + ' T' + c.start_session;
+        const row = document.createElement('div');
+        row.className = 'd-flex align-items-center gap-2 px-2 py-2 flex-wrap';
+        row.style = 'background:#F8FAFC;border-radius:7px;border:1px solid #E2E8F0;';
+        row.innerHTML = `
+          <div style="flex:1;min-width:0;font-size:.77rem;color:#1E293B;word-break:break-word;">
+            ${c.teacher ? '<span class="fw-semibold">' + c.teacher + '</span> · ' : ''}${timeLabel}
+            <span style="color:#94A3B8;font-size:.7rem;"> · ${c.enrolled}/${c.max_capacity} HS</span>
+          </div>
+          <button onclick="_gd2VisToggle(${c.id},${c.is_published})"
+                  id="gd2VB_${c.id}"
+                  data-published="${c.is_published}"
+                  class="reg-toggle ${c.is_published ? 'open' : 'closed'}"
+                  style="width:52px;min-width:52px;flex-shrink:0;">
+            <span class="toggle-dot"></span>
+            <span>${c.is_published ? 'Bật' : 'Tắt'}</span>
+          </button>`;
+        listDiv.appendChild(row);
+      });
+      subjDiv.appendChild(subjHeader);
+      subjDiv.appendChild(listDiv);
+      gradeDiv.appendChild(subjDiv);
+    });
+    body.appendChild(gradeDiv);
+  });
+}
+
+function _gd2VisToggle(classId, cur) {
+  const newPub = !cur;
+  fetch('/admin/classes/' + classId + '/publish', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({publish: newPub})
+  }).then(r => r.json()).then(d => {
+    if (!d.ok) return;
+    const btn = document.getElementById('gd2VB_' + classId);
+    if (!btn) return;
+    btn.className = 'reg-toggle ' + (newPub ? 'open' : 'closed');
+    btn.dataset.published = newPub;
+    btn.querySelector('span:last-child').textContent = newPub ? 'Bật' : 'Tắt';
+    btn.onclick = () => _gd2VisToggle(classId, newPub);
+  });
+}
+
+function _gd2VisSetAll(safeKey, enabled) {
+  const container = document.getElementById('gd2VL_' + safeKey);
+  if (!container) return;
+  container.querySelectorAll('[id^="gd2VB_"]').forEach(btn => {
+    const classId = parseInt(btn.id.replace('gd2VB_', ''));
+    fetch('/admin/classes/' + classId + '/publish', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({publish: enabled})
+    }).then(r => r.json()).then(d => {
+      if (!d.ok) return;
+      btn.className = 'reg-toggle ' + (enabled ? 'open' : 'closed');
+      btn.dataset.published = enabled;
+      btn.querySelector('span:last-child').textContent = enabled ? 'Bật' : 'Tắt';
+      btn.onclick = () => _gd2VisToggle(classId, enabled);
+    });
+  });
 }
 </script>
 {% endblock %}

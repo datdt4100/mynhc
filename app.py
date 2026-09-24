@@ -197,6 +197,7 @@ homeroom_classes = Table(
     Column("gvcn_name", Text, nullable=True),                  # Họ tên GVCN
     Column("subject_group", Text, nullable=True),              # Tổ bộ môn GVCN
     Column("show_student_tab", Integer, default=0),            # 1 = GVCN thấy tab Quản lý HS
+    Column("phase2_enabled", Integer, nullable=False, server_default="1"),  # 1 = lớp được đăng ký GĐ2
 )
 
 operators = Table(
@@ -334,6 +335,11 @@ def init_db():
         # Migrate: add show_student_tab column if missing (existing DBs)
         try:
             conn.execute(text("ALTER TABLE homeroom_classes ADD COLUMN show_student_tab INTEGER DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            conn.execute(text("ALTER TABLE homeroom_classes ADD COLUMN phase2_enabled INTEGER DEFAULT 1"))
             conn.commit()
         except Exception:
             conn.rollback()
@@ -1895,6 +1901,16 @@ def student_dashboard():
     student_reg_open    = get_setting("student_reg_open",    "0") == "1"
     supplement_reg_open = get_setting("supplement_reg_open", "0") == "1"
     require_5_subjects  = get_setting("require_5_subjects",  "1") == "1"
+    # Phase 2 per-class access
+    phase2_allowed = True
+    if student_reg_open:
+        with engine.connect() as conn:
+            hroom = conn.execute(
+                select(homeroom_classes.c.phase2_enabled)
+                .where(homeroom_classes.c.class_name == student_row.class_name)
+            ).fetchone()
+            if hroom is not None:
+                phase2_allowed = bool(hroom.phase2_enabled)
     # Classes the student enrolled in that already have a room — locked in phase 3
     locked_class_ids = {c.id for c in published_classes if c.id in my_class_ids and c.location}
     needs_email = (
@@ -1928,6 +1944,7 @@ def student_dashboard():
         covered_subjects=list(covered_subjects),
         day_name=day_name,
         session_label=session_label,
+        phase2_allowed=phase2_allowed,
     )
 
 
@@ -2199,6 +2216,18 @@ def student_enroll():
     suppl_open = get_setting("supplement_reg_open", "0") == "1"
     if not reg_open and not suppl_open:
         return jsonify(ok=False, error="Chưa mở đăng ký.")
+    # Phase 2 per-class access gate
+    if reg_open and not suppl_open:
+        student_id_check = session.get("user_id")
+        with engine.connect() as conn:
+            st = conn.execute(select(students.c.class_name).where(students.c.id == student_id_check)).fetchone()
+            if st:
+                hroom = conn.execute(
+                    select(homeroom_classes.c.phase2_enabled)
+                    .where(homeroom_classes.c.class_name == st.class_name)
+                ).fetchone()
+                if hroom is not None and not hroom.phase2_enabled:
+                    return jsonify(ok=False, error="Lớp của bạn chưa được mở khoá để đăng ký giai đoạn 2.")
 
     data = request.get_json(force=True)
     student_id = session["user_id"]
@@ -3750,6 +3779,44 @@ def admin_homeroom_toggle_student_tab_all():
     with engine.begin() as conn:
         conn.execute(update(homeroom_classes).values(show_student_tab=new_val))
     return jsonify(ok=True, enabled=bool(new_val))
+
+
+@app.route("/admin/phase2-class-access")
+@admin_required
+def admin_phase2_class_access_get():
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(homeroom_classes).order_by(homeroom_classes.c.class_name)
+        ).fetchall()
+    result = []
+    for r in rows:
+        try:
+            grade = int(r.class_name[:2])
+        except (ValueError, TypeError):
+            grade = 0
+        result.append({
+            "class_name": r.class_name,
+            "grade": grade,
+            "phase2_enabled": bool(r.phase2_enabled),
+        })
+    return jsonify(ok=True, classes=result)
+
+
+@app.route("/admin/phase2-class-access", methods=["POST"])
+@admin_required
+def admin_phase2_class_access_set():
+    data = request.get_json(force=True) or {}
+    class_name = (data.get("class_name") or "").strip()
+    enabled = 1 if data.get("enabled") else 0
+    if not class_name:
+        return jsonify(ok=False, error="Thiếu tên lớp.")
+    with engine.begin() as conn:
+        conn.execute(
+            update(homeroom_classes)
+            .where(homeroom_classes.c.class_name == class_name)
+            .values(phase2_enabled=enabled)
+        )
+    return jsonify(ok=True)
 
 
 _GVCN_COL_DEFAULTS = {

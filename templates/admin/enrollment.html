@@ -12,6 +12,11 @@
     <i class="bi bi-lock-fill"></i><span class="d-none d-sm-inline">Mở GĐ2</span>
     {% endif %}
   </button>
+  <button class="topbar-btn" onclick="openPhase2ClassModal()"
+          title="Điều chỉnh lớp tham gia GĐ2"
+          style="background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.35);color:rgba(255,255,255,.92);">
+    <i class="bi bi-people-fill"></i><span class="d-none d-sm-inline ms-1">Phân lớp GĐ2</span>
+  </button>
   <button class="topbar-btn" id="btn-toggle-supplement" onclick="toggleSupplementReg()"
           style="background:{% if supplement_reg_open %}#F59E0B{% else %}rgba(255,255,255,.13){% endif %};
                  border-color:{% if supplement_reg_open %}#D97706{% else %}rgba(255,255,255,.35){% endif %};
@@ -752,6 +757,32 @@
                 onclick="confirmMerge()">
           <i class="bi bi-diagram-2 me-1"></i>Hợp lớp
         </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Phase 2 class access modal -->
+<div class="modal fade" id="modalPhase2Classes" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:520px;">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#1D4ED8,#3B82F6);border:none;padding:14px 20px;">
+        <h5 class="modal-title text-white fw-bold" style="font-size:.95rem;">
+          <i class="bi bi-people-fill me-2"></i>Lớp được tham gia Giai đoạn 2
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-3" id="phase2ClassModalBody">
+        <div id="p2Loading" class="text-center py-4 text-muted" style="font-size:.85rem;">
+          <div class="spinner-border spinner-border-sm me-2"></div>Đang tải...
+        </div>
+        <div id="p2Content" style="display:none;"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <div id="p2SaveMsg" class="text-success me-auto fw-semibold d-none" style="font-size:.8rem;">
+          <i class="bi bi-check-circle me-1"></i>Đã lưu
+        </div>
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
       </div>
     </div>
   </div>
@@ -1523,6 +1554,96 @@ async function confirmMerge() {
     document.getElementById('merge-error').style.display = 'block';
   }
   btn.disabled = false; btn.innerHTML = '<i class="bi bi-diagram-2 me-1"></i>Hợp lớp';
+}
+
+let _p2SaveTimeout = null;
+async function openPhase2ClassModal() {
+  const modal = new bootstrap.Modal(document.getElementById('modalPhase2Classes'));
+  document.getElementById('p2Loading').style.display = '';
+  document.getElementById('p2Content').style.display = 'none';
+  document.getElementById('p2SaveMsg').classList.add('d-none');
+  modal.show();
+  try {
+    const res  = await fetch('/admin/phase2-class-access');
+    const data = await res.json();
+    if (!data.ok) { document.getElementById('p2Loading').textContent = 'Lỗi tải dữ liệu.'; return; }
+    document.getElementById('p2Loading').style.display = 'none';
+    // Group by grade
+    const byGrade = {10: [], 11: [], 12: []};
+    data.classes.forEach(c => { if (byGrade[c.grade]) byGrade[c.grade].push(c); });
+    const GC = {10:'#DBEAFE,#1D4ED8', 11:'#DCFCE7,#166534', 12:'#FFF7ED,#C2410C'};
+    let html = '';
+    for (const g of [10, 11, 12]) {
+      const list = byGrade[g];
+      if (!list.length) continue;
+      const [gbg, gtxt] = GC[g].split(',');
+      html += `<div class="mb-3">
+        <div class="d-flex align-items-center justify-content-between mb-2 pb-1" style="border-bottom:1.5px solid #E2E8F0;">
+          <span class="fw-bold" style="font-size:.82rem;color:${gtxt};">
+            <span style="background:${gbg};color:${gtxt};border-radius:6px;padding:2px 8px;font-size:.75rem;font-weight:800;">K${g}</span>
+            Khối ${g}
+          </span>
+          <div class="d-flex gap-1">
+            <button onclick="p2SetAll(${g}, true)" class="btn btn-xs btn-outline-success fw-semibold" style="font-size:.68rem;padding:1px 8px;border-radius:5px;">Mở tất</button>
+            <button onclick="p2SetAll(${g}, false)" class="btn btn-xs btn-outline-secondary fw-semibold" style="font-size:.68rem;padding:1px 8px;border-radius:5px;">Đóng tất</button>
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          ${list.map(c => `
+            <div class="d-flex align-items-center gap-2 p-2" id="p2row_${CSS.escape(c.class_name)}"
+                 style="background:#F8FAFC;border:1.5px solid ${c.phase2_enabled ? '#86EFAC' : '#E2E8F0'};border-radius:10px;min-width:100px;cursor:pointer;transition:border-color .15s;"
+                 onclick="p2Toggle('${c.class_name}', ${c.phase2_enabled})">
+              <span class="fw-semibold" style="font-size:.8rem;color:#0c4a6e;flex:1;">${c.class_name}</span>
+              <div class="form-check form-switch mb-0" style="padding:0;">
+                <input class="form-check-input" type="checkbox" id="p2cb_${c.class_name}"
+                       ${c.phase2_enabled ? 'checked' : ''}
+                       onclick="event.stopPropagation();p2Toggle('${c.class_name}', !this.checked)"
+                       style="cursor:pointer;width:2em;height:1.1em;">
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    }
+    if (!html) html = '<p class="text-muted text-center py-3" style="font-size:.85rem;">Chưa có lớp chủ nhiệm nào.</p>';
+    document.getElementById('p2Content').innerHTML = html;
+    document.getElementById('p2Content').style.display = '';
+  } catch { document.getElementById('p2Loading').textContent = 'Lỗi kết nối.'; }
+}
+
+async function p2Toggle(className, currentEnabled) {
+  const newEnabled = !currentEnabled;
+  const row = document.getElementById('p2row_' + className);
+  const cb  = document.getElementById('p2cb_' + className);
+  if (cb) cb.checked = newEnabled;
+  if (row) {
+    row.style.borderColor = newEnabled ? '#86EFAC' : '#E2E8F0';
+    row.setAttribute('onclick', `p2Toggle('${className}', ${newEnabled})`);
+  }
+  if (cb) cb.setAttribute('onclick', `event.stopPropagation();p2Toggle('${className}', ${!newEnabled})`);
+  try {
+    await fetch('/admin/phase2-class-access', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({class_name: className, enabled: newEnabled}),
+    });
+    // Show saved indicator
+    const msg = document.getElementById('p2SaveMsg');
+    msg.classList.remove('d-none');
+    clearTimeout(_p2SaveTimeout);
+    _p2SaveTimeout = setTimeout(() => msg.classList.add('d-none'), 2000);
+  } catch {}
+}
+
+async function p2SetAll(grade, enabled) {
+  const checkboxes = document.querySelectorAll(`[id^="p2cb_"]`);
+  for (const cb of checkboxes) {
+    const className = cb.id.replace('p2cb_', '');
+    const g = parseInt(className.substring(0, 2));
+    if (g !== grade) continue;
+    const currentEnabled = cb.checked;
+    if (currentEnabled !== enabled) {
+      await p2Toggle(className, currentEnabled);
+    }
+  }
 }
 </script>
 {% endblock %}

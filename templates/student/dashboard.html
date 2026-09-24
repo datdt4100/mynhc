@@ -345,6 +345,15 @@
       <span style="font-size:.88rem;"> Bạn có thể đăng ký thêm lớp mới. Những lớp đã được xếp phòng sẽ <strong>không thể huỷ</strong>.</span>
     </div>
   </div>
+  {% elif student_reg_open and not phase2_allowed %}
+  <div class="alert d-flex align-items-center gap-2 mb-4 reveal" role="alert"
+       style="background:#EFF6FF;border:1.5px solid #BAE6FD;color:#0369A1;">
+    <i class="bi bi-lock-fill fs-5 flex-shrink-0" style="color:#0EA5E9;"></i>
+    <div>
+      <span class="fw-bold">Lớp {{ student.class_name }} chưa được mở khoá đăng ký.</span>
+      <span style="font-size:.88rem;"> Vui lòng chờ nhà trường mở khoá để tham gia Giai đoạn 2.</span>
+    </div>
+  </div>
   {% elif not student_reg_open %}
   <div class="alert alert-warning d-flex align-items-center gap-2 mb-4 reveal" role="alert">
     <i class="bi bi-lock-fill fs-5 flex-shrink-0"></i>
@@ -383,7 +392,7 @@
               </div>
             </div>
             {% set is_locked = supplement_reg_open and not student_reg_open and cls.id in locked_class_ids %}
-            {% if (student_reg_open or supplement_reg_open) and not is_locked %}
+            {% if ((student_reg_open and phase2_allowed) or supplement_reg_open) and not is_locked %}
             <button class="btn btn-sm btn-outline-danger flex-shrink-0 py-1 px-2"
                     title="Huỷ đăng ký"
                     onclick="cancelEnroll({{ cls.id }})">
@@ -512,7 +521,7 @@
               </div>
 
               {# Action button #}
-              {% set any_reg_open = student_reg_open or supplement_reg_open %}
+              {% set any_reg_open = (student_reg_open and phase2_allowed) or supplement_reg_open %}
               {% set card_locked = supplement_reg_open and not student_reg_open and cls.id in locked_class_ids %}
               {% if enrolled %}
                 {% if card_locked %}
@@ -894,7 +903,8 @@ async function refreshStudentSchedule() {
   /* ── Per-class config for client-side button logic ──────────── */
   var regOpen     = {{ 'true' if student_reg_open else 'false' }};
   var supplementOpen = {{ 'true' if supplement_reg_open else 'false' }};
-  var anyRegOpen  = regOpen || supplementOpen;
+  var phase2Allowed = {{ phase2_allowed | tojson }};
+  var anyRegOpen  = (regOpen && phase2Allowed) || supplementOpen;
   var lockedClassIds = new Set({{ locked_class_ids | list | tojson }});
 
   function isLocked(classId) {

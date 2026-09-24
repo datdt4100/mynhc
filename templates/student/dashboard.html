@@ -551,6 +551,15 @@
 
           </div>{# end flex row #}
 
+          {# ── Notes line ── #}
+          {% if cls.notes %}
+          <div class="mt-2 d-flex align-items-start gap-1"
+               style="font-size:.73rem;color:#475569;line-height:1.4;">
+            <i class="bi bi-info-circle-fill flex-shrink-0" style="color:#94A3B8;margin-top:1px;"></i>
+            <span><em>Ghi chú: {{ cls.notes }}</em></span>
+          </div>
+          {% endif %}
+
           {# ── Warning line ─────────────────────────────────── #}
           {% if near_full %}
           <div class="warning-box-{{ cls.id }} mt-2 d-flex align-items-start gap-1"

@@ -147,6 +147,7 @@ classes = Table(
     Column("location", Text, nullable=True),
     Column("max_capacity", Integer, nullable=True),
     Column("extra_data", Text, nullable=True),        # JSON blob
+    Column("notes", Text, nullable=True),             # Admin note shown to students
     Column("is_published", Integer, default=0),
     Column("created_at", Text, default="CURRENT_TIMESTAMP"),
 )
@@ -335,6 +336,11 @@ def init_db():
         # Migrate: add show_student_tab column if missing (existing DBs)
         try:
             conn.execute(text("ALTER TABLE homeroom_classes ADD COLUMN show_student_tab INTEGER DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            conn.execute(text("ALTER TABLE classes ADD COLUMN notes TEXT"))
             conn.commit()
         except Exception:
             conn.rollback()
@@ -3149,6 +3155,11 @@ def admin_index():
         t.subject_group for t in teacher_list
         if t.subject_group and t.cccd != _UNASSIGNED_CCCD
     })
+    teachers_for_modal = sorted(
+        [{"name": t.full_name, "subject": t.subject_group or ""}
+         for t in teacher_list if t.cccd != _UNASSIGNED_CCCD and t.full_name],
+        key=lambda x: (x["subject"], x["name"])
+    )
     return render_template(
         "admin/index.html",
         stats={
@@ -3179,6 +3190,7 @@ def admin_index():
         room_count=room_count,
         busy_room_count=busy_room_count,
         subject_groups=subject_groups,
+        teachers_for_modal=teachers_for_modal,
     )
 
 # --- Admin: Teacher management ---
@@ -5460,6 +5472,7 @@ def admin_add_class_manual():
     teacher_name  = (data.get("teacher_name") or "").strip()
     school_assign = not teacher_name   # empty name → school-assigned placeholder
     subject_input = (data.get("subject") or "").strip()
+    notes_input   = (data.get("notes") or "").strip()
     grade         = data.get("grade")
     session_type  = data.get("session_type")
     day_of_week   = data.get("day_of_week")
@@ -5556,6 +5569,7 @@ def admin_add_class_manual():
             duration      = duration,
             location      = None,
             max_capacity  = max_capacity,
+            notes         = notes_input or None,
             is_published  = 1,
             created_at    = now_vn(),
         ))

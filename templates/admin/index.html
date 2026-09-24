@@ -1478,27 +1478,55 @@
         </div>
         <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body" style="padding:14px 18px;">
-        <div class="row g-2">
-          <div class="col-12">
-            <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Tên giáo viên</label>
-            <input type="text" id="manTeacher" class="form-control form-control-sm" placeholder="Họ và tên đầy đủ" style="font-size:.82rem;border-radius:8px;">
-            <div class="form-check mt-1">
-              <input class="form-check-input" type="checkbox" id="manSchoolAssigned" onchange="_toggleSchoolAssigned(this.checked)">
-              <label class="form-check-label" for="manSchoolAssigned" style="font-size:.76rem;color:#92400E;cursor:pointer;">
-                <i class="bi bi-building me-1"></i>Do trường phân công
-              </label>
+      <div class="modal-body" style="padding:14px 18px;max-height:80vh;overflow-y:auto;">
+        {# Hidden: selected teacher name #}
+        <input type="hidden" id="manTeacher" value="">
+
+        {# Teacher list #}
+        <div class="mb-2">
+          <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Giáo viên <span class="text-danger">*</span></label>
+          <div id="manTeacherList"
+               style="max-height:180px;overflow-y:auto;border:1.5px solid #E2E8F0;border-radius:10px;background:#FAFAFA;">
+            {# "Do trường phân công" option #}
+            <div class="man-teacher-item d-flex align-items-center gap-2 px-3 py-2"
+                 data-name="" data-subject=""
+                 onclick="_manSelectTeacher(this)"
+                 style="cursor:pointer;border-bottom:1px solid #F1F5F9;font-size:.82rem;transition:background .1s;">
+              <i class="bi bi-building" style="color:#92400E;font-size:.85rem;flex-shrink:0;"></i>
+              <span class="fw-semibold" style="color:#92400E;">Do trường phân công</span>
             </div>
+            {% set _prev_subj = namespace(v='') %}
+            {% for t in teachers_for_modal %}
+            {% if t.subject != _prev_subj.v %}
+            {% set _prev_subj.v = t.subject %}
+            <div style="padding:3px 12px;font-size:.68rem;font-weight:700;color:#94A3B8;background:#F8FAFC;border-bottom:1px solid #F1F5F9;text-transform:uppercase;letter-spacing:.05em;">{{ t.subject or '—' }}</div>
+            {% endif %}
+            <div class="man-teacher-item d-flex align-items-center gap-2 px-3 py-2"
+                 data-name="{{ t.name | e }}" data-subject="{{ t.subject | e }}"
+                 onclick="_manSelectTeacher(this)"
+                 style="cursor:pointer;border-bottom:1px solid #F1F5F9;font-size:.82rem;transition:background .1s;"
+                 onmouseenter="if(!this.classList.contains('man-selected'))this.style.background='#EFF6FF'"
+                 onmouseleave="if(!this.classList.contains('man-selected'))this.style.background=''">
+              <i class="bi bi-person-fill" style="color:#6B7280;font-size:.8rem;flex-shrink:0;"></i>
+              <span>{{ t.name }}</span>
+            </div>
+            {% endfor %}
           </div>
-          <div class="col-12" id="manSubjectRow" style="display:none;">
-            <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Môn học <span class="text-danger">*</span></label>
-            <select id="manSubject" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
-              <option value="">-- Chọn môn --</option>
-              {% for sg in subject_groups %}
-              <option value="{{ sg }}">{{ sg }}</option>
-              {% endfor %}
-            </select>
-          </div>
+          <div id="manTeacherDisplay" class="mt-1" style="font-size:.75rem;color:#6B7280;min-height:18px;"></div>
+        </div>
+
+        {# Subject row (only for "Do trường phân công") #}
+        <div class="mb-2" id="manSubjectRow" style="display:none;">
+          <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Môn học <span class="text-danger">*</span></label>
+          <select id="manSubject" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+            <option value="">-- Chọn môn --</option>
+            {% for sg in subject_groups %}
+            <option value="{{ sg }}">{{ sg }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="row g-2">
           <div class="col-4">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Khối</label>
             <select id="manGrade" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
@@ -1543,6 +1571,12 @@
           <div class="col-6">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Sĩ số tối đa</label>
             <input id="manMaxCap" type="number" min="1" max="200" value="50" class="form-control form-control-sm" style="font-size:.82rem;border-radius:8px;">
+          </div>
+          <div class="col-12">
+            <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Ghi chú <span class="text-muted fw-normal">(hiển thị cho học sinh)</span></label>
+            <textarea id="manNotes" rows="2" class="form-control form-control-sm"
+                      placeholder="Ví dụ: Lớp dành cho HS chọn ban tự nhiên..."
+                      style="font-size:.82rem;border-radius:8px;resize:none;"></textarea>
           </div>
         </div>
         <div id="manualResult" class="mt-3" style="display:none;"></div>
@@ -2531,33 +2565,52 @@ async function doImportExcel() {
 }
 
 // ── Thêm lớp thủ công ────────────────────────────────────────
-function _toggleSchoolAssigned(checked) {
-  const teacherEl = document.getElementById('manTeacher');
+function _manSelectTeacher(item) {
+  document.querySelectorAll('.man-teacher-item').forEach(el => {
+    el.classList.remove('man-selected');
+    el.style.background = '';
+  });
+  item.classList.add('man-selected');
+  item.style.background = '#EFF6FF';
+  const name    = item.dataset.name;
+  const subject = item.dataset.subject;
+  document.getElementById('manTeacher').value = name;
+  const dispEl = document.getElementById('manTeacherDisplay');
   const subjectRow = document.getElementById('manSubjectRow');
-  teacherEl.disabled = checked;
-  if (checked) teacherEl.value = '';
-  subjectRow.style.display = checked ? '' : 'none';
-  if (!checked) document.getElementById('manSubject').value = '';
+  const isSchool = !name;
+  if (isSchool) {
+    dispEl.textContent = 'Chọn thêm môn học bên dưới.';
+    subjectRow.style.display = '';
+  } else {
+    dispEl.innerHTML = `<i class="bi bi-check-circle-fill text-success me-1"></i>Môn: <strong>${subject || '—'}</strong>`;
+    subjectRow.style.display = 'none';
+    document.getElementById('manSubject').value = '';
+  }
 }
 
 function openAddManual() {
   document.getElementById('manualResult').style.display = 'none';
-  ['manTeacher','manGrade','manSession','manDay','manStart'].forEach(id => {
+  document.getElementById('manTeacher').value = '';
+  document.getElementById('manTeacherDisplay').textContent = '';
+  document.getElementById('manSubjectRow').style.display = 'none';
+  document.querySelectorAll('.man-teacher-item').forEach(el => {
+    el.classList.remove('man-selected'); el.style.background = '';
+  });
+  ['manGrade','manSession','manDay','manStart','manSubject','manNotes'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) { el.value = ''; el.disabled = false; }
+    if (el) el.value = '';
   });
   document.getElementById('manDuration').value = '2';
   document.getElementById('manMaxCap').value = '50';
-  const cb = document.getElementById('manSchoolAssigned');
-  if (cb) { cb.checked = false; _toggleSchoolAssigned(false); }
   new bootstrap.Modal(document.getElementById('addManualModal')).show();
 }
 
 async function doAddManual() {
   const resEl = document.getElementById('manualResult');
-  const schoolAssigned = document.getElementById('manSchoolAssigned')?.checked;
+  const teacherName  = document.getElementById('manTeacher').value.trim();
+  const schoolAssigned = !teacherName;
   const payload = {
-    teacher_name : schoolAssigned ? '' : document.getElementById('manTeacher').value.trim(),
+    teacher_name : teacherName,
     subject      : schoolAssigned ? (document.getElementById('manSubject')?.value || '') : '',
     grade        : document.getElementById('manGrade').value,
     session_type : document.getElementById('manSession').value,
@@ -2565,8 +2618,13 @@ async function doAddManual() {
     start_session: document.getElementById('manStart').value,
     duration     : document.getElementById('manDuration').value,
     max_capacity : parseInt(document.getElementById('manMaxCap')?.value || 50) || 50,
+    notes        : (document.getElementById('manNotes')?.value || '').trim(),
   };
-  if ((!payload.teacher_name && !schoolAssigned) || !payload.grade || !payload.session_type || !payload.day_of_week || !payload.start_session) {
+  if (!document.querySelector('.man-teacher-item.man-selected')) {
+    resEl.innerHTML = '<div class="alert alert-warning py-2 px-3" style="font-size:.8rem;border-radius:8px;">Vui lòng chọn giáo viên.</div>';
+    resEl.style.display = ''; return;
+  }
+  if (!payload.grade || !payload.session_type || !payload.day_of_week || !payload.start_session) {
     resEl.innerHTML = '<div class="alert alert-warning py-2 px-3" style="font-size:.8rem;border-radius:8px;">Vui lòng điền đầy đủ thông tin.</div>';
     resEl.style.display = ''; return;
   }

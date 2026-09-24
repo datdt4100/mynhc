@@ -1498,6 +1498,9 @@
         {# Hidden: selected teacher name #}
         <input type="hidden" id="manTeacher" value="">
 
+        {# Teacher data for lazy render — no DOM nodes until dropdown opens #}
+        <script id="manTeacherData" type="application/json">{{ teachers_for_modal | tojson }}</script>
+
         {# Teacher dropdown #}
         <div class="mb-2" id="manTeacherWrap">
           <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Giáo viên <span class="text-danger">*</span></label>
@@ -1509,28 +1512,6 @@
           </div>
           <div id="manTeacherList"
                style="display:none;max-height:200px;overflow-y:auto;border:1.5px solid #BFDBFE;border-top:none;border-radius:0 0 10px 10px;background:#FAFAFA;box-shadow:0 4px 12px rgba(0,0,0,.08);">
-            {# "Do trường phân công" option #}
-            <div class="man-teacher-item d-flex align-items-center gap-2 px-3 py-2"
-                 data-name="" data-subject=""
-                 onclick="_manSelectTeacher(this)"
-                 style="cursor:pointer;border-bottom:1px solid #F1F5F9;font-size:.82rem;">
-              <i class="bi bi-building" style="color:#92400E;font-size:.85rem;flex-shrink:0;"></i>
-              <span class="fw-semibold" style="color:#92400E;">Do trường phân công</span>
-            </div>
-            {% set _prev_subj = namespace(v='') %}
-            {% for t in teachers_for_modal %}
-            {% if t.subject != _prev_subj.v %}
-            {% set _prev_subj.v = t.subject %}
-            <div style="padding:3px 12px;font-size:.68rem;font-weight:700;color:#94A3B8;background:#F8FAFC;border-bottom:1px solid #F1F5F9;text-transform:uppercase;letter-spacing:.05em;">{{ t.subject or '—' }}</div>
-            {% endif %}
-            <div class="man-teacher-item d-flex align-items-center gap-2 px-3 py-2"
-                 data-name="{{ t.name | e }}" data-subject="{{ t.subject | e }}"
-                 onclick="_manSelectTeacher(this)"
-                 style="cursor:pointer;border-bottom:1px solid #F1F5F9;font-size:.82rem;">
-              <i class="bi bi-person-fill" style="color:#6B7280;font-size:.8rem;flex-shrink:0;"></i>
-              <span>{{ t.name }}</span>
-            </div>
-            {% endfor %}
           </div>
           <div id="manTeacherDisplay" class="mt-1" style="font-size:.75rem;color:#6B7280;min-height:18px;"></div>
         </div>
@@ -2625,12 +2606,44 @@ async function doImportExcel() {
 }
 
 // ── Thêm lớp thủ công ────────────────────────────────────────
+function _escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _buildManTeacherListIfNeeded() {
+  const list = document.getElementById('manTeacherList');
+  if (list.dataset.built) return;
+  list.dataset.built = '1';
+  const teachers = JSON.parse(document.getElementById('manTeacherData').textContent);
+  let html = `<div class="man-teacher-item d-flex align-items-center gap-2 px-3 py-2"
+    data-name="" data-subject="" onclick="_manSelectTeacher(this)"
+    style="cursor:pointer;border-bottom:1px solid #F1F5F9;font-size:.82rem;">
+    <i class="bi bi-building" style="color:#92400E;font-size:.85rem;flex-shrink:0;"></i>
+    <span class="fw-semibold" style="color:#92400E;">Do trường phân công</span>
+  </div>`;
+  let prevSubj = null;
+  teachers.forEach(t => {
+    if (t.subject !== prevSubj) {
+      prevSubj = t.subject;
+      html += `<div style="padding:3px 12px;font-size:.68rem;font-weight:700;color:#94A3B8;background:#F8FAFC;border-bottom:1px solid #F1F5F9;text-transform:uppercase;letter-spacing:.05em;">${_escHtml(t.subject||'—')}</div>`;
+    }
+    html += `<div class="man-teacher-item d-flex align-items-center gap-2 px-3 py-2"
+      data-name="${_escHtml(t.name)}" data-subject="${_escHtml(t.subject)}" onclick="_manSelectTeacher(this)"
+      style="cursor:pointer;border-bottom:1px solid #F1F5F9;font-size:.82rem;">
+      <i class="bi bi-person-fill" style="color:#6B7280;font-size:.8rem;flex-shrink:0;"></i>
+      <span>${_escHtml(t.name)}</span>
+    </div>`;
+  });
+  list.innerHTML = html;
+}
+
 function toggleManTeacherList(e) {
   if (e) e.stopPropagation();
   const list    = document.getElementById('manTeacherList');
   const trigger = document.getElementById('manTeacherTrigger');
   const chevron = document.getElementById('manTeacherChevron');
   const open = list.style.display === 'none';
+  if (open) _buildManTeacherListIfNeeded();
   list.style.display = open ? '' : 'none';
   trigger.classList.toggle('open', open);
   chevron.classList.toggle('open', open);

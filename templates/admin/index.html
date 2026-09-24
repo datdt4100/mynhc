@@ -318,7 +318,7 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 
-<div class="container pb-5" id="mainContent">
+<div class="container pb-5">
   <div class="d-flex align-items-center gap-2 mb-4 pt-4">
     <h1 style="font-size:1.15rem; font-weight:800; color:#0c4a6e; margin:0;">
       <i class="bi bi-grid-1x2-fill me-2" style="color:#0EA5E9;"></i>Quản trị mynhc
@@ -3317,14 +3317,6 @@ async function saveSubjSlotMode() {
   } catch { showAlert('Lỗi kết nối.', 'error'); }
 }
 
-/* ── Hide main content while any modal is open to eliminate focus lag ── */
-(function() {
-  const mc = document.getElementById('mainContent');
-  if (!mc) return;
-  let _n = 0;
-  document.body.addEventListener('show.bs.modal', () => { if (++_n === 1) mc.style.display = 'none'; });
-  document.body.addEventListener('hide.bs.modal', () => { if (--_n <= 0) { _n = 0; mc.style.display = ''; } });
-})();
 </script>
 
 <!-- ══ MODAL: Cài đặt môn học (tổ bộ môn) ══ -->

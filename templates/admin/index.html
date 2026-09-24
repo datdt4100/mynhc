@@ -142,6 +142,7 @@
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     max-height: 420px;   /* ~10 rows visible; scrolls vertically when list is long */
+    contain: layout style paint;
   }
   .table-responsive-admin thead th {
     position: sticky;
@@ -968,7 +969,7 @@
 
       {# Table #}
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;">
-      <div class="table-responsive-admin" id="teacherTableContainer" style="flex:1;max-height:none;">
+      <div class="table-responsive-admin" id="teacherTableContainer" style="flex:1;max-height:none;contain:layout style paint;">
         <table id="tableTeacher" class="table table-hover admin-table mb-0">
           <thead>
             <tr>
@@ -1137,7 +1138,7 @@
 
       {# Table #}
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;">
-      <div class="table-responsive-admin" id="studentTableContainer" style="flex:1;max-height:none;">
+      <div class="table-responsive-admin" id="studentTableContainer" style="flex:1;max-height:none;contain:layout style paint;">
         <table id="tableStudent" class="table table-hover admin-table mb-0">
           <thead>
             <tr>

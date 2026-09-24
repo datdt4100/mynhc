@@ -474,12 +474,6 @@
             <i class="bi bi-arrow-right-circle ms-auto" style="color:#EA580C;font-size:.88rem;"></i>
           </a>
         </div>
-        <div class="mb-2">
-          <button onclick="openSubjGrpModal()" class="btn btn-sm w-100 fw-semibold"
-                  style="background:#F0FDF4;border:1.5px solid #6EE7B7;color:#065F46;border-radius:9px;font-size:.79rem;">
-            <i class="bi bi-sliders me-1" style="color:#059669;"></i>Cài đặt môn học
-          </button>
-        </div>
         <div class="d-flex gap-2">
           <button onclick="openImportExcel()" class="btn btn-sm flex-fill fw-semibold"
                   style="background:#F0FDF4;border:1.5px solid #86EFAC;color:#15803D;border-radius:9px;font-size:.78rem;">
@@ -535,6 +529,12 @@
                   onclick="toggleTeacherRoomSelect()">
             <span class="toggle-dot"></span>
             <span id="teacher-room-select-label">{% if teacher_room_select %}Bật{% else %}Tắt{% endif %}</span>
+          </button>
+        </div>
+        <div class="pt-2 mt-1">
+          <button onclick="openSubjGrpModal()" class="btn btn-sm w-100 fw-semibold"
+                  style="background:#F0FDF4;border:1.5px solid #6EE7B7;color:#065F46;border-radius:9px;font-size:.79rem;">
+            <i class="bi bi-sliders me-1" style="color:#059669;"></i>Cài đặt môn học
           </button>
         </div>
       </div>

@@ -34,6 +34,7 @@
 {% block head %}
 <style>
   body { background: #F0F9FF; }
+  .modal-content { contain: layout style; }
 
   .section-card {
     background: #fff; border-radius: 16px; border: 1.5px solid #E2E8F0;
@@ -56,7 +57,7 @@
   .page-tab-btn {
     padding: 8px 20px; border-radius: 9px; border: none;
     font-size: .84rem; font-weight: 600; cursor: pointer;
-    background: transparent; color: #64748B; transition: all .15s;
+    background: transparent; color: #64748B; transition: background .15s, color .15s, box-shadow .15s;
   }
   .page-tab-btn.active {
     background: linear-gradient(135deg, #065f46, #10B981);
@@ -115,7 +116,7 @@
   .enroll-grade-btn {
     padding: 5px 14px; border-radius: 8px; border: 1.5px solid #E2E8F0;
     font-size: .78rem; font-weight: 700; cursor: pointer; background: #F8FAFC; color: #64748B;
-    transition: all .12s;
+    transition: background .12s, border-color .12s, color .12s;
   }
   .enroll-grade-btn.active-all,
   .enroll-grade-btn[data-grade="all"].active { background: #0F172A; border-color: #0F172A; color: #fff; }
@@ -142,7 +143,7 @@
     display: block; width: 100%; text-align: center;
     padding: 5px 4px; border-radius: 7px; border: 1.5px solid transparent;
     font-size: .72rem; font-weight: 600; cursor: pointer;
-    transition: all .12s; word-break: break-word; line-height: 1.25; background: transparent;
+    transition: background .12s, border-color .12s, color .12s; word-break: break-word; line-height: 1.25; background: transparent;
   }
   .enr-cls-btn[data-grade="10"] { color: #1D4ED8; border-color: #BFDBFE; background: #EFF6FF; }
   .enr-cls-btn[data-grade="10"]:hover, .enr-cls-btn[data-grade="10"].active { background: #2563EB; border-color: #2563EB; color: #fff; }
@@ -166,7 +167,7 @@
   .adm-icon-btn {
     width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
     border-radius: 7px; border: 1.5px solid; background: transparent; cursor: pointer;
-    font-size: .82rem; transition: all .12s; padding: 0;
+    font-size: .82rem; transition: background .12s, border-color .12s, color .12s; padding: 0;
   }
   .adm-icon-btn.btn-outline-primary { color: #2563EB; border-color: #2563EB; }
   .adm-icon-btn.btn-outline-primary:hover { background: #2563EB; color: #fff; }

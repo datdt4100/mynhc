@@ -55,6 +55,8 @@
 
 {% block head %}
 <style>
+.modal-content { contain: layout style; }
+
 /* ── Calendar wrap ── */
 .cal-outer {
   overflow-x: auto;
@@ -312,7 +314,7 @@
 .main-tab-btn {
   padding: 8px 20px; border-radius: 9px; border: none;
   font-size: .84rem; font-weight: 600; cursor: pointer;
-  background: transparent; color: #64748B; transition: all .15s;
+  background: transparent; color: #64748B; transition: background .15s, color .15s, box-shadow .15s;
 }
 .main-tab-btn.active {
   background: linear-gradient(135deg, #0c4a6e, #0EA5E9);
@@ -332,7 +334,7 @@
 .hm-icon-btn {
   width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
   border-radius: 7px; border: 1.5px solid; background: transparent; cursor: pointer;
-  font-size: .82rem; transition: all .12s; padding: 0;
+  font-size: .82rem; transition: background .12s, border-color .12s, color .12s; padding: 0;
 }
 .hm-icon-btn.btn-info   { color: #0369A1; border-color: #0369A1; }
 .hm-icon-btn.btn-info:hover   { background: #0369A1; color: #fff; }

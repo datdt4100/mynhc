@@ -273,7 +273,10 @@
             <tr data-search-cls="{{ cls.teacher_name|lower }} {{ (cls.subject or cls.subject_group)|lower }} {{ cls.location|lower if cls.location else '' }}">
               <td><code style="font-size:.78rem; background:#F1F5F9; padding:2px 6px; border-radius:4px;">#{{ cls.id }}</code></td>
               <td class="fw-semibold" style="white-space:nowrap;">{{ cls.teacher_name | name_fmt }}</td>
-              <td><span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">{{ cls.subject or cls.subject_group }}</span></td>
+              <td>
+                <span class="badge rounded-pill" style="background:#EFF6FF; color:#0369A1; font-size:.72rem;">{{ cls.subject or cls.subject_group }}</span>
+                {% if cls.chuyen_de %}<div style="font-size:.68rem;color:#6B7280;margin-top:2px;">{{ cls.chuyen_de }}</div>{% endif %}
+              </td>
               <td><span class="badge bg-light text-dark border" style="font-size:.72rem;">Khối {{ cls.grade }}</span></td>
               <td style="white-space:nowrap; font-size:.78rem;">
                 {{ day_name(cls.day_of_week) }} - {{ "Sáng" if cls.session_type == "morning" else "Chiều" }} - Tiết {{ cls.start_session }}{% if cls.duration > 1 %}–{{ cls.start_session + cls.duration - 1 }}{% endif %}

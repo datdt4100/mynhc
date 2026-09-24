@@ -144,6 +144,7 @@ classes = Table(
     Column("session_type", Text, nullable=False),     # morning / afternoon
     Column("start_session", Integer, nullable=False), # 1-4
     Column("subject", Text, nullable=True),
+    Column("chuyen_de", Text, nullable=True),              # Chuyên đề (optional)
     Column("location", Text, nullable=True),
     Column("max_capacity", Integer, nullable=True),
     Column("extra_data", Text, nullable=True),        # JSON blob
@@ -401,6 +402,11 @@ def init_db():
                 "(id INTEGER PRIMARY KEY, token TEXT UNIQUE NOT NULL, user_type TEXT NOT NULL, "
                 "user_id INTEGER NOT NULL, expires_at TEXT NOT NULL, used INTEGER DEFAULT 0)"
             ))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            conn.execute(text("ALTER TABLE classes ADD COLUMN chuyen_de TEXT"))
             conn.commit()
         except Exception:
             conn.rollback()
@@ -1534,7 +1540,8 @@ def teacher_register_class():
     if start_session + duration - 1 > 4:
         return jsonify(ok=False, error="Tiết kết thúc vượt quá tiết 4.")
 
-    subject  = session.get("subject_group") or (data.get("subject") or "").strip() or None
+    subject   = session.get("subject_group") or (data.get("subject") or "").strip() or None
+    chuyen_de = (data.get("chuyen_de") or "").strip() or None
     end_session = start_session + duration - 1
 
     # Validate slot against subject group custom schedule
@@ -1625,6 +1632,7 @@ def teacher_register_class():
                     session_type=session_type,
                     start_session=start_session,
                     subject=subject,
+                    chuyen_de=chuyen_de,
                     location=None,
                     max_capacity=50,
                     extra_data=None,
@@ -4901,11 +4909,12 @@ def admin_import_classes_template():
     hfont = Font(bold=True, color="FFFFFF", size=10)
     thin  = Side(style="thin", color="CBD5E1")
     bdr   = Border(left=thin, right=thin, top=thin, bottom=thin)
-    HEADERS = ["Tên giáo viên", "Môn (đầy đủ)", "Khối", "Buổi", "Thứ", "Tiết bắt đầu", "Số tiết", "Sĩ số"]
-    WIDTHS  = [30, 16, 8, 10, 8, 16, 10, 10]
+    HEADERS = ["Tên giáo viên", "Môn (đầy đủ)", "Chuyên đề", "Khối", "Buổi", "Thứ", "Tiết bắt đầu", "Số tiết", "Sĩ số"]
+    WIDTHS  = [30, 16, 22, 8, 10, 8, 16, 10, 10]
     NOTES   = [
         "Để trống nếu do trường phân công",
         "Tiếng Anh / Ngữ Văn / Vật lý / Hóa học / Toán",
+        "VD: Văn học dân gian, Đại số và giải tích... (không bắt buộc)",
         "10, 11 hoặc 12",
         "Sáng hoặc Chiều",
         "2 đến 7 (Thứ Hai đến Thứ Bảy)",
@@ -4929,9 +4938,9 @@ def admin_import_classes_template():
     ws.row_dimensions[2].height = 40
     # Sample rows
     samples = [
-        ("Nguyễn Văn A", "Toán", 10, "Chiều", 3, 1, 2, 50),
-        ("Lê Thị B", "Tiếng Anh", 11, "Chiều", 4, 3, 2, 40),
-        ("", "Ngữ Văn", 12, "Sáng", 7, 1, 2, ""),
+        ("Nguyễn Văn A", "Toán", "Đại số và giải tích", 10, "Chiều", 3, 1, 2, 50),
+        ("Lê Thị B", "Tiếng Anh", "", 11, "Chiều", 4, 3, 2, 40),
+        ("", "Ngữ Văn", "Văn học dân gian", 12, "Sáng", 7, 1, 2, ""),
     ]
     sfill_a = PatternFill("solid", fgColor="F0F9FF")
     sfill_b = PatternFill("solid", fgColor="FFFFFF")
@@ -4943,7 +4952,7 @@ def admin_import_classes_template():
             cell.font = Font(size=10)
             cell.alignment = Alignment(horizontal="center" if c >= 3 else "left", vertical="center")
     ws.freeze_panes = "A3"
-    ws.auto_filter.ref = f"A1:H{len(samples)+2}"
+    ws.auto_filter.ref = f"A1:I{len(samples)+2}"
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return send_file(buf, as_attachment=True,
                      download_name="mau_import_lop.xlsx",
@@ -5673,6 +5682,7 @@ def admin_add_class_manual():
     teacher_name  = (data.get("teacher_name") or "").strip()
     school_assign = not teacher_name   # empty name → school-assigned placeholder
     subject_input = (data.get("subject") or "").strip()
+    chuyen_de_input = (data.get("chuyen_de") or "").strip()
     notes_input   = (data.get("notes") or "").strip()
     grade         = data.get("grade")
     session_type  = data.get("session_type")
@@ -5770,6 +5780,7 @@ def admin_add_class_manual():
             duration      = duration,
             location      = None,
             max_capacity  = max_capacity,
+            chuyen_de     = chuyen_de_input or None,
             notes         = notes_input or None,
             is_published  = 1,
             created_at    = now_vn(),
@@ -5816,10 +5827,12 @@ def admin_import_classes_excel():
         return jsonify(ok=False, error=f"Không đọc được file: {e}")
 
     # Detect columns: try both formats
-    # Format A (reformatted): teacher | subject | grade | buoi | thu | tiet | so_tiet
+    # Format A (reformatted): teacher | subject | [chuyen_de] | grade | buoi | thu | tiet | so_tiet | si_so
     # Format B (original form): timestamp | teacher | subject_short | grade | time_string
     header_row = [str(c).strip().lower() if c else "" for c in (list(ws.iter_rows(min_row=1, max_row=1, values_only=True))[0] or [])]
     is_format_b = "dấu thời gian" in header_row or "họ và tên" in " ".join(header_row)
+    # Detect if new format with "Chuyên đề" column (col 3 = index 2)
+    has_chuyen_de_col = any("chuy" in h for h in header_row[:4])
 
     imported, skipped, errors_list = 0, 0, []
 
@@ -5866,8 +5879,13 @@ def admin_import_classes_excel():
                     buoi, thu, tiet = parse_time_string(time_raw or "")
                     so_tiet = 2
                     max_capacity = 50
+                    chuyen_de_raw = None
                 else:
-                    teacher_name, subj_raw, grade_raw, buoi_str, thu_raw, tiet_raw, so_tiet, si_so_raw = (row + (None,)*8)[:8]
+                    if has_chuyen_de_col:
+                        teacher_name, subj_raw, chuyen_de_raw, grade_raw, buoi_str, thu_raw, tiet_raw, so_tiet, si_so_raw = (row + (None,)*9)[:9]
+                    else:
+                        teacher_name, subj_raw, grade_raw, buoi_str, thu_raw, tiet_raw, so_tiet, si_so_raw = (row + (None,)*8)[:8]
+                        chuyen_de_raw = None
                     buoi    = BUOI_MAP.get(str(buoi_str or "").strip().lower())
                     thu     = int(thu_raw) if thu_raw else None
                     tiet    = int(tiet_raw) if tiet_raw else None
@@ -5878,6 +5896,7 @@ def admin_import_classes_excel():
                             max_capacity = 50
                     except (ValueError, TypeError):
                         max_capacity = 50
+                chuyen_de_val = str(chuyen_de_raw or "").strip() or None
 
                 teacher_name = str(teacher_name or "").strip()
                 grade        = int(float(grade_raw)) if grade_raw else None
@@ -5974,6 +5993,7 @@ def admin_import_classes_excel():
                     teacher_id    = teacher_row.id,
                     grade         = grade,
                     subject       = subject,
+                    chuyen_de     = chuyen_de_val,
                     day_of_week   = thu,
                     session_type  = buoi,
                     start_session = tiet,
@@ -6490,6 +6510,7 @@ def admin_classes_assigned_for_slot():
     return jsonify(ok=True, classes=[
         {"id": r.id, "teacher": r.teacher_name,
          "subject": r.subject_group or r.subject or "",
+         "chuyen_de": r.chuyen_de or "",
          "grade": r.grade, "current_room": r.location,
          "enrolled": enrolled_map.get(r.id, 0), "max_capacity": r.max_capacity}
         for r in rows
@@ -6611,6 +6632,7 @@ def op_classes_assigned_for_slot():
     return jsonify(ok=True, classes=[
         {"id": r.id, "teacher": r.teacher_name,
          "subject": r.subject_group or r.subject or "",
+         "chuyen_de": r.chuyen_de or "",
          "grade": r.grade, "current_room": r.location,
          "enrolled": enrolled_map.get(r.id, 0), "max_capacity": r.max_capacity}
         for r in rows

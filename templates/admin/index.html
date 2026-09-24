@@ -1590,6 +1590,13 @@
             <input id="manMaxCap" type="number" min="1" max="200" value="50" class="form-control form-control-sm" style="font-size:.82rem;border-radius:8px;">
           </div>
           <div class="col-12">
+            <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Chuyên đề <span class="text-muted fw-normal">(không bắt buộc)</span></label>
+            <input id="manChuyenDe" type="text" class="form-control form-control-sm"
+                   placeholder="VD: Văn học dân gian, Đại số và giải tích..."
+                   style="font-size:.82rem;border-radius:8px;"
+                   autocomplete="off" spellcheck="false">
+          </div>
+          <div class="col-12">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Ghi chú <span class="text-muted fw-normal">(hiển thị cho học sinh)</span></label>
             <textarea id="manNotes" rows="2" class="form-control form-control-sm"
                       placeholder="Ví dụ: Lớp dành cho HS chọn ban tự nhiên..."
@@ -2736,7 +2743,7 @@ function openAddManual() {
   const triggerText = document.getElementById('manTeacherTriggerText');
   triggerText.textContent = 'Chọn giáo viên...';
   triggerText.style.color = '#94A3B8';
-  ['manGrade','manSession','manDay','manStart','manSubject','manNotes'].forEach(id => {
+  ['manGrade','manSession','manDay','manStart','manSubject','manChuyenDe','manNotes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -2758,6 +2765,7 @@ async function doAddManual() {
     start_session: document.getElementById('manStart').value,
     duration     : document.getElementById('manDuration').value,
     max_capacity : parseInt(document.getElementById('manMaxCap')?.value || 50) || 50,
+    chuyen_de    : (document.getElementById('manChuyenDe')?.value || '').trim(),
     notes        : (document.getElementById('manNotes')?.value || '').trim(),
   };
   if (!document.querySelector('.man-teacher-item.man-selected')) {

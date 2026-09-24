@@ -164,6 +164,7 @@ rooms = Table(
     "rooms", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("name", Text, unique=True, nullable=False),
+    Column("conflict_check", Integer, nullable=False, server_default="1"),
 )
 
 room_external_busy = Table(
@@ -346,6 +347,12 @@ def init_db():
             conn.rollback()
         try:
             conn.execute(text("ALTER TABLE homeroom_classes ADD COLUMN phase2_enabled INTEGER DEFAULT 1"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            conn.execute(text("ALTER TABLE rooms ADD COLUMN conflict_check INTEGER NOT NULL DEFAULT 1"))
+            conn.execute(text("UPDATE rooms SET conflict_check = 1 WHERE conflict_check IS NULL"))
             conn.commit()
         except Exception:
             conn.rollback()
@@ -2607,14 +2614,29 @@ def admin_rooms_busy_upload():
                         col_map[ci] = (ses, dow)
                     break
 
-        # Fallback: if header detection fails, use fixed col positions (cols 3-14, 0-indexed)
+        # Detect new format: check if header has "xung đột" / "kt xung" / "conflict" column
+        conflict_col = None
+        tiet_col = 2  # default old format: col C (index 2)
+        for ci, h in enumerate(header):
+            hl = h.lower()
+            if any(k in hl for k in ("xung đột", "xung dot", "conflict", "kt xung", "kt.xung")):
+                conflict_col = ci
+            if "tiết" in hl or "tiet" in hl:
+                tiet_col = ci
+
+        # Fallback: if header detection fails, use fixed col positions
         if len(col_map) < 12:
-            col_map = {3 + i: v for i, v in enumerate(_BUSY_COL_MAP)}
+            # New format (16 cols, tiết at index 3): sessions at cols 4-15
+            # Old format (15 cols, tiết at index 2): sessions at cols 3-14
+            offset = 4 if conflict_col is not None else 3
+            col_map = {offset + i: v for i, v in enumerate(_BUSY_COL_MAP)}
 
         added = 0
         current_room = None
+        current_conflict_check = 1  # default: check conflicts
         rows_data = list(ws.iter_rows(min_row=2, values_only=True))
         seen_rooms = []
+        room_conflict_map = {}  # {room_name: 0/1}
 
         def _parse_grades(raw):
             """'10 - 11' / '10-11' → '10,11'; '10' → '10'; 'x'/'X' → None (busy); '' → skip"""
@@ -2639,8 +2661,15 @@ def admin_rooms_busy_upload():
                     current_room = str(row[1]).strip()
                     if current_room not in seen_rooms:
                         seen_rooms.append(current_room)
-                # Column C (index 2) = tiết
-                tiet_val = row[2]
+                    # Read conflict_check from new column C when room name first appears
+                    if conflict_col is not None and conflict_col < len(row):
+                        cc_val = str(row[conflict_col] or "").strip().lower()
+                        current_conflict_check = 0 if cc_val in ("", "0", "không", "khong", "n", "no") else 1
+                    else:
+                        current_conflict_check = 1
+                    room_conflict_map[current_room] = current_conflict_check
+                # tiết column (auto-detected or fallback)
+                tiet_val = row[tiet_col] if tiet_col < len(row) else None
                 if not current_room or not tiet_val:
                     continue
                 try:
@@ -2671,9 +2700,13 @@ def admin_rooms_busy_upload():
                         ))
                         added += 1
 
-            # Sync room names into rooms table
+            # Sync room names + conflict_check into rooms table
             for rn in seen_rooms:
-                conn.execute(text("INSERT INTO rooms (name) VALUES (:n) ON CONFLICT (name) DO NOTHING"), {"n": rn})
+                cc = room_conflict_map.get(rn, 1)
+                conn.execute(text(
+                    "INSERT INTO rooms (name, conflict_check) VALUES (:n, :cc) "
+                    "ON CONFLICT (name) DO UPDATE SET conflict_check=:cc"
+                ), {"n": rn, "cc": cc})
 
         _bump(event_type="schedule")
         return jsonify(ok=True, added=added, rooms_synced=len(seen_rooms))
@@ -2694,9 +2727,9 @@ def admin_rooms_busy_clear():
 @admin_required
 def admin_rooms_schedule():
     with engine.connect() as conn:
-        all_rooms = [r.name for r in conn.execute(
-            select(rooms).order_by(rooms.c.name)
-        ).fetchall()]
+        room_rows = conn.execute(select(rooms).order_by(rooms.c.name)).fetchall()
+        all_rooms = [r.name for r in room_rows]
+        conflict_map = {r.name: bool(r.conflict_check) for r in room_rows}
         busy_rows = conn.execute(select(room_external_busy)).fetchall()
         grade_rows = conn.execute(select(room_grade_slots)).fetchall()
     busy_map = {}
@@ -2709,16 +2742,17 @@ def admin_rooms_schedule():
         if r.room_name not in grade_map:
             grade_map[r.room_name] = {}
         grade_map[r.room_name][key] = r.available_grades
-    return jsonify(rooms=all_rooms, busy=busy_map, grade_map=grade_map)
+    return jsonify(rooms=all_rooms, busy=busy_map, grade_map=grade_map, conflict_map=conflict_map)
 
 
 @app.route("/admin/rooms/schedule", methods=["POST"])
 @admin_required
 def admin_rooms_schedule_save():
     data = request.get_json(force=True)
-    room_list  = [str(r).strip() for r in data.get("rooms", []) if str(r).strip()]
-    busy_map   = data.get("busy", {})
-    grade_map  = data.get("grade_map", {})  # {room: {key: "10,11"}}
+    room_list    = [str(r).strip() for r in data.get("rooms", []) if str(r).strip()]
+    busy_map     = data.get("busy", {})
+    grade_map    = data.get("grade_map", {})  # {room: {key: "10,11"}}
+    conflict_map = data.get("conflict_map", {})  # {room: bool}
     VALID_SESS = ("morning", "afternoon")
     VALID_TIET = (1, 2, 3, 4)
     with engine.begin() as conn:
@@ -2726,7 +2760,8 @@ def admin_rooms_schedule_save():
         conn.execute(text("DELETE FROM room_external_busy"))
         conn.execute(text("DELETE FROM room_grade_slots"))
         for rn in room_list:
-            conn.execute(text("INSERT INTO rooms (name) VALUES (:n)"), {"n": rn})
+            cc = 1 if conflict_map.get(rn, True) else 0
+            conn.execute(text("INSERT INTO rooms (name, conflict_check) VALUES (:n, :cc)"), {"n": rn, "cc": cc})
             for key in busy_map.get(rn, []):
                 parts = key.split("_", 2)
                 if len(parts) != 3:
@@ -2762,13 +2797,17 @@ def admin_rooms_schedule_save():
 @admin_required
 def admin_rooms_add_manual():
     data = request.get_json(force=True)
-    room_name = (data.get("room_name") or "").strip()
+    room_name     = (data.get("room_name") or "").strip()
     if not room_name:
         return jsonify(ok=False, error="Tên phòng không được để trống.")
-    busy = data.get("busy", [])  # [{day_of_week, session_type, tiet}, ...]
+    busy          = data.get("busy", [])  # [{day_of_week, session_type, tiet}, ...]
+    conflict_check = 1 if data.get("conflict_check", True) else 0
 
     with engine.begin() as conn:
-        conn.execute(text("INSERT INTO rooms (name) VALUES (:n) ON CONFLICT (name) DO NOTHING"), {"n": room_name})
+        conn.execute(text(
+            "INSERT INTO rooms (name, conflict_check) VALUES (:n, :cc) "
+            "ON CONFLICT (name) DO UPDATE SET conflict_check=:cc"
+        ), {"n": room_name, "cc": conflict_check})
         conn.execute(delete(room_external_busy).where(room_external_busy.c.room_name == room_name))
         for slot in busy:
             try:
@@ -2809,60 +2848,105 @@ def admin_rooms_busy_template():
     thin = Side(style="thin", color="9CA3AF")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-    # Row 1: merged headers
+    conflict_fill = PatternFill("solid", fgColor="E0F2FE")
+    grade_fill    = PatternFill("solid", fgColor="EDE9FE")
+    busy_fill     = PatternFill("solid", fgColor="FEE2E2")
+    legend_fill   = PatternFill("solid", fgColor="F8FAFC")
+
+    # Row 1: merged headers (new column C = Kt xung đột, tiết shifts to D)
     ws.merge_cells("A1:A2"); ws["A1"] = "STT"
     ws.merge_cells("B1:B2"); ws["B1"] = "Phòng"
-    ws.merge_cells("C1:C2"); ws["C1"] = "Tiết"
-    ws.merge_cells("D1:I1"); ws["D1"] = "Buổi Sáng"
-    ws.merge_cells("J1:O1"); ws["J1"] = "Buổi Chiều"
+    ws.merge_cells("C1:C2"); ws["C1"] = "Kt xung đột"
+    ws.merge_cells("D1:D2"); ws["D1"] = "Tiết"
+    ws.merge_cells("E1:J1"); ws["E1"] = "Buổi Sáng"
+    ws.merge_cells("K1:P1"); ws["K1"] = "Buổi Chiều"
 
     # Row 2: day headers
     days = ["T2", "T3", "T4", "T5", "T6", "T7"]
     for i, d in enumerate(days):
-        ws.cell(row=2, column=4 + i).value  = d  # morning
-        ws.cell(row=2, column=10 + i).value = d  # afternoon
+        ws.cell(row=2, column=5 + i).value  = d  # morning E-J
+        ws.cell(row=2, column=11 + i).value = d  # afternoon K-P
 
     # Style row 1 + 2 headers
-    for col in range(1, 16):
+    for col in range(1, 17):
         c1 = ws.cell(row=1, column=col)
         c2 = ws.cell(row=2, column=col)
         c1.fill = header_fill; c1.font = bold_white; c1.alignment = center; c1.border = border
         c2.fill = header_fill; c2.font = bold_white; c2.alignment = center; c2.border = border
 
     # Sample data rows (2 rooms × 4 tiết)
-    sample_rooms = ["A101", "A102"]
+    # A101: conflict_check=x (bật), có ví dụ bận + giới hạn khối
+    # A102: conflict_check="" (tắt), ví dụ chỉ K10 rảnh
+    sample = [
+        ("A101", "x", {
+            (1, 5, "morning"): "x",         # Tiết 1 Sáng T2 → bận
+            (2, 6, "morning"): "10-11",      # Tiết 2 Sáng T3 → chỉ K10-11
+            (3, 7, "morning"): "10",         # Tiết 3 Sáng T4 → chỉ K10
+            (4, 8, "morning"): "11",         # Tiết 4 Sáng T5 → chỉ K11
+        }),
+        ("A102", "", {
+            (1, 12, "afternoon"): "10",      # Tiết 1 Chiều T3 → chỉ K10
+            (2, 13, "afternoon"): "10-11",   # Tiết 2 Chiều T4 → chỉ K10-11
+        }),
+    ]
     row = 3
-    for stt, room in enumerate(sample_rooms, start=1):
+    for stt, (room, cc_val, marks) in enumerate(sample, start=1):
         first_row = row
         for tiet in (1, 2, 3, 4):
-            ws.cell(row=row, column=3).value = tiet
-            # Style morning cols
-            for col in range(4, 10):
+            ws.cell(row=row, column=4).value = tiet  # col D = Tiết
+            # Style morning cols E-J
+            for col in range(5, 11):
                 c = ws.cell(row=row, column=col)
                 c.fill = morning_fill; c.alignment = center; c.border = border
-            # Style afternoon cols
-            for col in range(10, 16):
+            # Style afternoon cols K-P
+            for col in range(11, 17):
                 c = ws.cell(row=row, column=col)
                 c.fill = afternoon_fill; c.alignment = center; c.border = border
-            # Example: mark sample busy cell
-            if tiet == 1 and stt == 1:
-                ws.cell(row=row, column=4).value = "x"  # Sáng T2
+            # Apply sample marks
+            for (t, col, ses), val in marks.items():
+                if t == tiet:
+                    c = ws.cell(row=row, column=col)
+                    c.value = val
+                    if val == "x":
+                        c.fill = busy_fill
+                    else:
+                        c.fill = grade_fill
+                    c.font = Font(bold=True, color="374151")
             row += 1
-        # Merge STT and Phòng across 4 rows for this room
+        # Merge STT, Phòng, Kt xung đột across 4 rows
         last_row = row - 1
         ws.merge_cells(f"A{first_row}:A{last_row}")
         ws.merge_cells(f"B{first_row}:B{last_row}")
+        ws.merge_cells(f"C{first_row}:C{last_row}")
         ws[f"A{first_row}"] = stt
         ws[f"B{first_row}"] = room
-        for col in (1, 2):
+        ws[f"C{first_row}"] = cc_val
+        for col in (1, 2, 3):
             c = ws.cell(row=first_row, column=col)
             c.alignment = center; c.border = border
+            if col == 3:
+                c.fill = conflict_fill
+                c.font = Font(bold=True, color="0369A1")
+
+    # Legend rows
+    legend_row = row + 1
+    ws.merge_cells(f"A{legend_row}:P{legend_row}")
+    lc = ws[f"A{legend_row}"]
+    lc.value = "Hướng dẫn: Cột 'Kt xung đột': điền 'x' = kiểm tra trùng giờ (1 lớp/giờ), để trống = không kiểm tra (cho phép nhiều lớp cùng phòng)"
+    lc.fill = legend_fill; lc.font = Font(italic=True, color="475569", size=8)
+
+    legend_row2 = row + 2
+    ws.merge_cells(f"A{legend_row2}:P{legend_row2}")
+    lc2 = ws[f"A{legend_row2}"]
+    lc2.value = "Ô lịch: để trống = rảnh cho cả 3 khối (10-11-12) | 'x' = bận (không xếp được) | '10' hoặc '10-11' hoặc '11-12' = chỉ khối đó rảnh"
+    lc2.fill = legend_fill; lc2.font = Font(italic=True, color="475569", size=8)
 
     # Column widths
-    ws.column_dimensions["A"].width = 6
+    ws.column_dimensions["A"].width = 5
     ws.column_dimensions["B"].width = 12
-    ws.column_dimensions["C"].width = 6
-    for col in range(4, 16):
+    ws.column_dimensions["C"].width = 14
+    ws.column_dimensions["D"].width = 6
+    for col in range(5, 17):
         ws.column_dimensions[get_column_letter(col)].width = 7
 
     ws.row_dimensions[1].height = 22
@@ -2954,7 +3038,10 @@ def api_available_rooms():
         return jsonify([]), 400
     end = ss + dur - 1
     with engine.connect() as conn:
-        all_rooms = sorted([r.name for r in conn.execute(select(rooms)).fetchall()], key=_room_sort_key)
+        room_rows_all = conn.execute(select(rooms)).fetchall()
+        all_rooms = sorted([r.name for r in room_rows_all], key=_room_sort_key)
+        # rooms that enforce conflict check (1 class per slot)
+        conflict_rooms = {r.name for r in room_rows_all if r.conflict_check}
         # rooms already booked for overlapping slots (exclude current class if re-assigning)
         booked_filter = and_(
             classes.c.day_of_week == dow,
@@ -2997,7 +3084,9 @@ def api_available_rooms():
                 if str(grade) not in allowed:
                     grade_blocked_set.add(r.room_name)
     available = [r for r in all_rooms
-                 if r not in booked_set and r not in ext_busy_set and r not in grade_blocked_set]
+                 if (r not in booked_set or r not in conflict_rooms)
+                 and r not in ext_busy_set
+                 and r not in grade_blocked_set]
     return jsonify(available)
 
 

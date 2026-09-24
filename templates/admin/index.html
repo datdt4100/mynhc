@@ -1297,6 +1297,15 @@
           <label class="form-label fw-semibold" style="font-size:.85rem;">Tên phòng <span class="text-danger">*</span></label>
           <input type="text" id="newRoomName" class="form-control custom-input" placeholder="VD: A101, Hội trường B..." maxlength="50">
         </div>
+        <div class="mb-3">
+          <div class="form-check d-flex align-items-center gap-2" style="padding-left:0;">
+            <input class="form-check-input m-0" type="checkbox" id="newRoomConflict" checked style="width:18px;height:18px;flex-shrink:0;cursor:pointer;">
+            <label class="form-check-label" for="newRoomConflict" style="font-size:.83rem;cursor:pointer;">
+              <span class="fw-semibold" style="color:#0c4a6e;">Kiểm tra trùng giờ</span>
+              <span class="text-muted ms-1" style="font-size:.75rem;">(chỉ 1 lớp/khung giờ)</span>
+            </label>
+          </div>
+        </div>
         <div>
           <div class="fw-semibold mb-2" style="font-size:.85rem; color:#0c4a6e;">
             Lịch bận <span class="text-muted fw-normal" style="font-size:.78rem;">(bấm vào ô để đánh dấu bận — mặc định rảnh hết)</span>
@@ -2207,6 +2216,7 @@ function toggleBusy(key) {
 
 function openAddRoomModal() {
   document.getElementById('newRoomName').value = '';
+  document.getElementById('newRoomConflict').checked = true;
   document.getElementById('addRoomError').classList.add('d-none');
   _buildAddRoomGrid();
   new bootstrap.Modal(document.getElementById('modalAddRoom')).show();
@@ -2230,7 +2240,7 @@ async function submitAddRoom() {
     const res  = await fetch('/admin/rooms/add-manual', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ room_name: name, busy })
+      body: JSON.stringify({ room_name: name, busy, conflict_check: document.getElementById('newRoomConflict').checked })
     });
     const data = await res.json();
     if (data.ok) {
@@ -2251,10 +2261,11 @@ async function submitAddRoom() {
 // ════════════════════════════════════════
 // Schedule Editor
 // ════════════════════════════════════════
-let _schedRooms = [];
-let _schedBusy  = {};   // {room → Set<"dow_ses_tiet">}
-let _schedGrade = {};   // {room → {key → "10,11"}}
-let _gradeMode  = [];   // currently selected grades e.g. ['10','11']
+let _schedRooms    = [];
+let _schedBusy     = {};   // {room → Set<"dow_ses_tiet">}
+let _schedGrade    = {};   // {room → {key → "10,11"}}
+let _schedConflict = {};   // {room → bool}
+let _gradeMode     = [];   // currently selected grades e.g. ['10','11']
 let _dragActive = false;
 let _dragValue  = null; // 'busy' | 'grade' | 'free'
 
@@ -2279,13 +2290,16 @@ async function openScheduleEditor() {
   new bootstrap.Modal(document.getElementById('modalScheduleEditor')).show();
   try {
     const data = await (await fetch('/admin/rooms/schedule')).json();
-    _schedRooms = [...(data.rooms || [])];
-    _schedBusy  = {};
-    _schedGrade = {};
+    _schedRooms    = [...(data.rooms || [])];
+    _schedBusy     = {};
+    _schedGrade    = {};
+    _schedConflict = {};
     for (const [room, keys] of Object.entries(data.busy || {}))
       _schedBusy[room] = new Set(keys);
     for (const [room, keyGrades] of Object.entries(data.grade_map || {}))
       _schedGrade[room] = {...keyGrades};
+    for (const [room, val] of Object.entries(data.conflict_map || {}))
+      _schedConflict[room] = val;
     _renderSched();
   } catch {
     document.getElementById('schedEditorWrap').innerHTML = '<div class="p-4 text-danger">Lỗi tải dữ liệu.</div>';
@@ -2318,11 +2332,13 @@ function _renderSched() {
     for (let tiet = 1; tiet <= 4; tiet++) {
       h += `<tr>`;
       if (tiet === 1) {
+        const ccChecked = (_schedConflict[room] !== false) ? 'checked' : '';
+        const rid = _rid(room);
         h += `<td rowspan="4" class="sched-room-cell" data-room="${_esc(room)}"
           style="padding:5px 7px;border:1px solid #E2E8F0;vertical-align:middle;text-align:center;
                  background:#F8FAFC;position:sticky;left:0;z-index:3;min-width:${W0}px;">
           <div style="display:flex;align-items:center;gap:3px;justify-content:center;flex-wrap:wrap;">
-            <span class="sched-room-name" id="rn_${_rid(room)}"
+            <span class="sched-room-name" id="rn_${rid}"
                   style="font-size:.75rem;font-weight:700;color:#0c4a6e;">${_esc(room)}</span>
             <button class="sched-edit-btn" data-room="${_esc(room)}"
                     style="background:none;border:none;cursor:pointer;color:#0EA5E9;font-size:.7rem;padding:1px 2px;line-height:1;flex-shrink:0;">
@@ -2330,6 +2346,11 @@ function _renderSched() {
             <button class="sched-del-btn" data-room="${_esc(room)}"
                     style="background:none;border:none;cursor:pointer;color:#DC2626;font-size:.7rem;padding:1px 2px;line-height:1;flex-shrink:0;">
               <i class="bi bi-trash"></i></button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-top:4px;">
+            <input type="checkbox" id="cc_${rid}" class="sched-conflict-cb" data-room="${_esc(room)}" ${ccChecked}
+                   style="width:13px;height:13px;cursor:pointer;flex-shrink:0;">
+            <label for="cc_${rid}" style="font-size:.65rem;color:#475569;cursor:pointer;line-height:1.2;">Kt trùng giờ</label>
           </div></td>`;
       }
       h += `<td style="padding:3px 4px;border:1px solid #E2E8F0;text-align:center;font-size:.7rem;color:#64748B;font-weight:600;
@@ -2364,6 +2385,15 @@ function _renderSched() {
   tbl.addEventListener('touchend',   () => { _dragActive=false; });
   document.addEventListener('mouseup', () => { _dragActive=false; });
 
+  // Conflict checkbox listeners
+  tbl.querySelectorAll('.sched-conflict-cb').forEach(cb => {
+    cb.addEventListener('change', e => {
+      e.stopPropagation();
+      _schedConflict[cb.dataset.room] = cb.checked;
+    });
+    cb.addEventListener('mousedown', e => e.stopPropagation());
+  });
+
   // Edit & delete room buttons
   tbl.querySelectorAll('.sched-edit-btn').forEach(btn => {
     btn.addEventListener('click', e => { e.stopPropagation(); _editRoomName(btn.dataset.room); });
@@ -2387,6 +2417,7 @@ function _renderSched() {
               if (idx !== -1) _schedRooms.splice(idx, 1);
               delete _schedBusy[room];
               delete _schedGrade[room];
+              delete _schedConflict[room];
               _renderSched();
               const cnt = document.getElementById('room-count');
               if (cnt) cnt.textContent = _schedRooms.length;
@@ -2507,7 +2538,7 @@ async function saveSchedule() {
   try {
     const res  = await fetch('/admin/rooms/schedule', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({rooms: _schedRooms, busy, grade_map}),
+      body: JSON.stringify({rooms: _schedRooms, busy, grade_map, conflict_map: _schedConflict}),
     });
     const data = await res.json();
     if (data.ok) {

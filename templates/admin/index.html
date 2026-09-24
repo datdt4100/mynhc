@@ -3321,8 +3321,9 @@ async function saveSubjSlotMode() {
 (function() {
   const mc = document.getElementById('mainContent');
   if (!mc) return;
-  document.body.addEventListener('show.bs.modal', () => { mc.style.contentVisibility = 'hidden'; });
-  document.body.addEventListener('hidden.bs.modal', () => { mc.style.contentVisibility = ''; });
+  let _n = 0;
+  document.body.addEventListener('show.bs.modal', () => { if (++_n === 1) mc.style.display = 'none'; });
+  document.body.addEventListener('hide.bs.modal', () => { if (--_n <= 0) { _n = 0; mc.style.display = ''; } });
 })();
 </script>
 

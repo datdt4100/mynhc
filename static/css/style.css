@@ -154,7 +154,7 @@ a.brand:hover .brand-logo { transform: scale(1.06); }
   border-radius: 40px;
   white-space: nowrap;
   backdrop-filter: blur(6px);
-  transition: all var(--ease);
+  transition: background var(--ease), color var(--ease), border-color var(--ease);
 }
 .admin-link:hover { background: rgba(255,255,255,.18); color: #fff; }
 
@@ -312,7 +312,7 @@ a.brand:hover .brand-logo { transform: scale(1.06); }
   color: #94a3b8;
   border: 2.5px solid #e2e8f0;
   box-shadow: 0 2px 10px rgba(0,0,0,.08);
-  transition: all var(--spring);
+  transition: background var(--spring), color var(--spring), border-color var(--spring), box-shadow var(--spring);
   position: relative;
   min-width: 52px;
 }
@@ -429,7 +429,7 @@ a.brand:hover .brand-logo { transform: scale(1.06); }
   min-height: 48px;   /* touch target */
   font-size: .95rem;
   font-family: var(--font);
-  transition: all var(--ease);
+  transition: border-color var(--ease), box-shadow var(--ease), background var(--ease);
   background: rgba(255,255,255,.92);
   width: 100%;
 }
@@ -454,7 +454,7 @@ a.brand:hover .brand-logo { transform: scale(1.06); }
   font-weight: 700;
   font-family: var(--font);
   font-size: .95rem;
-  transition: all var(--ease);
+  transition: transform var(--ease), box-shadow var(--ease), background-position var(--ease);
   box-shadow: 0 4px 16px rgba(14,165,233,.38);
   position: relative;
   overflow: hidden;
@@ -678,7 +678,7 @@ a.brand:hover .brand-logo { transform: scale(1.06); }
   color: var(--p);
   opacity: 0;
   transform: scale(.4) rotate(-20deg);
-  transition: all var(--spring);
+  transition: opacity var(--spring), transform var(--spring);
 }
 .subject-card.selected .subject-tick { opacity: 1; transform: scale(1) rotate(0deg); }
 
@@ -793,7 +793,7 @@ a.brand:hover .brand-logo { transform: scale(1.06); }
   min-height: 44px;
   font-weight: 700; font-size: .85rem;
   white-space: nowrap;
-  transition: all var(--ease);
+  transition: transform var(--ease), box-shadow var(--ease), color var(--ease);
   text-decoration: none;
   box-shadow: 0 4px 14px rgba(16,185,129,.3);
   display: inline-flex; align-items: center;
@@ -807,7 +807,7 @@ a.brand:hover .brand-logo { transform: scale(1.06); }
   border: 2px solid var(--border) !important;
   background: rgba(255,255,255,.92) !important;
   font-family: 'Courier New', monospace !important;
-  transition: all var(--ease) !important;
+  transition: border-color var(--ease) !important, box-shadow var(--ease) !important;
 }
 .otp-box:focus {
   border-color: var(--p) !important;
@@ -824,7 +824,7 @@ a.brand:hover .brand-logo { transform: scale(1.06); }
   text-decoration: none;
   color: var(--muted);
   border: 1.5px solid var(--border);
-  transition: all var(--ease);
+  transition: background var(--ease), color var(--ease), border-color var(--ease), box-shadow var(--ease);
   font-weight: 600;
   display: inline-flex; align-items: center;
 }

@@ -423,6 +423,10 @@
       <i class="bi bi-lock-fill"></i>
       <span>Chưa mở đăng ký lớp. Vui lòng chờ quản trị viên mở đăng ký.</span>
     </div>
+    {% elif subj_grp_settings and not subj_grp_settings.get('can_register', True) %}
+    <div class="alert alert-warning" style="border-radius:10px;font-size:.84rem;">
+      <i class="bi bi-lock me-2"></i>Tổ bộ môn của bạn chưa được phép đăng ký mở lớp trong giai đoạn này.
+    </div>
     {% else %}
     <div class="d-flex justify-content-end mb-3">
       <button type="button" class="btn btn-primary-custom px-4"
@@ -783,8 +787,8 @@
           </div>
           <div class="col-6">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Số tiết</label>
-            <input type="hidden" id="regDuration" value="2">
-            <div class="custom-input d-flex align-items-center" style="font-size:.85rem; color:#374151; background:#F9FAFB; pointer-events:none;">2 tiết</div>
+            <input type="hidden" id="regDuration" value="{% if subj_grp_settings and subj_grp_settings.get('slot_mode')=='fixed' and subj_grp_settings.get('fixed_slots')==2 %}4{% else %}2{% endif %}">
+            <div class="custom-input d-flex align-items-center" style="font-size:.85rem; color:#374151; background:#F9FAFB; pointer-events:none;" id="regDurationLabel">{% if subj_grp_settings and subj_grp_settings.get('slot_mode')=='fixed' and subj_grp_settings.get('fixed_slots')==2 %}4{% else %}2{% endif %} tiết{% if subj_grp_settings and subj_grp_settings.get('slot_mode')=='fixed' %} <span class="badge ms-2" style="background:#EDE9FE;color:#5B21B6;font-size:.65rem;">Cố định</span>{% endif %}</div>
           </div>
         </div>
 
@@ -1498,6 +1502,18 @@ setInterval(updateCounts, 300000);
 
 // ── Poll slot grid every 30s (only when reg is open) ──
 const _TEACHER_REG_OPEN = {{ teacher_reg_open | tojson }};
+const _subjGrpSettings = {{ subj_grp_settings | tojson | safe }};
+
+// Lock duration if slot_mode is fixed
+if (_subjGrpSettings && _subjGrpSettings.slot_mode === 'fixed') {
+  const fixedDur = (_subjGrpSettings.fixed_slots || 1) === 2 ? 4 : 2;
+  const sel = document.getElementById('regDuration');
+  if (sel) {
+    sel.value = String(fixedDur);
+    sel.disabled = true;
+    sel.title = 'Số tiết do quản trị viên cố định';
+  }
+}
 setInterval(function() {
   if (!_TEACHER_REG_OPEN) return;
   _invalidateRoomSched();

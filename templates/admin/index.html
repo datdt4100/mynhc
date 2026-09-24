@@ -474,6 +474,12 @@
             <i class="bi bi-arrow-right-circle ms-auto" style="color:#EA580C;font-size:.88rem;"></i>
           </a>
         </div>
+        <div class="mb-2">
+          <button onclick="openSubjGrpModal()" class="btn btn-sm w-100 fw-semibold"
+                  style="background:#F0FDF4;border:1.5px solid #6EE7B7;color:#065F46;border-radius:9px;font-size:.79rem;">
+            <i class="bi bi-sliders me-1" style="color:#059669;"></i>Cài đặt môn học
+          </button>
+        </div>
         <div class="d-flex gap-2">
           <button onclick="openImportExcel()" class="btn btn-sm flex-fill fw-semibold"
                   style="background:#F0FDF4;border:1.5px solid #86EFAC;color:#15803D;border-radius:9px;font-size:.78rem;">
@@ -3045,5 +3051,355 @@ function _gd2VisSetAll(safeKey, enabled) {
     });
   });
 }
+
+// ════════════════════════════════════════
+// Subject Group Settings
+// ════════════════════════════════════════
+let _sgGroups   = [];
+let _sgCurGroup = null;
+let _sgSlotMap  = {};
+
+async function openSubjGrpModal() {
+  document.getElementById('subjGrpList').innerHTML = '<div class="text-center text-muted p-4">Đang tải...</div>';
+  new bootstrap.Modal(document.getElementById('modalSubjGrp')).show();
+  try {
+    const data = await (await fetch('/admin/subject-group-settings')).json();
+    _sgGroups = data.groups || [];
+    _renderSgList();
+  } catch {
+    document.getElementById('subjGrpList').innerHTML = '<div class="text-danger p-3">Lỗi tải dữ liệu.</div>';
+  }
+}
+
+function _renderSgList() {
+  if (!_sgGroups.length) {
+    document.getElementById('subjGrpList').innerHTML =
+      '<div class="text-center text-muted p-4">Chưa có tổ bộ môn nào.</div>';
+    return;
+  }
+  let h = '';
+  for (const g of _sgGroups) {
+    const schedBadge = g.schedule_type === 'custom'
+      ? '<span class="badge ms-1" style="background:#DBEAFE;color:#1E40AF;font-size:.62rem;">Lịch riêng</span>'
+      : '<span class="badge ms-1" style="background:#F1F5F9;color:#64748B;font-size:.62rem;">Lịch phòng</span>';
+    const slotBadge = g.slot_mode === 'fixed'
+      ? `<span class="badge ms-1" style="background:#EDE9FE;color:#6D28D9;font-size:.62rem;">Cố định ${g.fixed_slots===2?'4':'2'} tiết</span>`
+      : '<span class="badge ms-1" style="background:#F0FDF4;color:#065F46;font-size:.62rem;">Số tiết tự do</span>';
+    h += `<div class="d-flex align-items-center gap-2 p-2 mb-2" style="background:#F8FAFC;border-radius:10px;border:1px solid #E2E8F0;">
+      <div class="flex-grow-1 min-w-0">
+        <span class="fw-semibold" style="font-size:.84rem;color:#0c4a6e;">${_esc(g.name)}</span>
+        ${schedBadge}${slotBadge}
+      </div>
+      <div class="d-flex gap-1 flex-shrink-0 flex-wrap justify-content-end">
+        <button class="btn btn-sm" style="font-size:.7rem;background:#EFF6FF;border:1px solid #BAE6FD;color:#0369A1;border-radius:7px;padding:3px 7px;white-space:nowrap;"
+                onclick="_openSubjSched('${_esc(g.name).replace(/'/g,"\\'")}')"><i class="bi bi-calendar3 me-1"></i>Lịch trống</button>
+        <button class="btn btn-sm" style="font-size:.7rem;background:#F5F3FF;border:1px solid #C4B5FD;color:#5B21B6;border-radius:7px;padding:3px 7px;white-space:nowrap;"
+                onclick="_openSubjSlotMode('${_esc(g.name).replace(/'/g,"\\'")}')"><i class="bi bi-123 me-1"></i>Số tiết</button>
+        <button class="btn btn-sm reg-toggle ${g.can_register ? 'open' : 'closed'}" style="font-size:.7rem;min-width:80px;flex-shrink:0;"
+                onclick="_sgToggleReg('${_esc(g.name).replace(/'/g,"\\'")}')">
+          <span class="toggle-dot"></span>
+          <span>${g.can_register ? 'Cho ĐK' : 'Đã khoá'}</span>
+        </button>
+      </div>
+    </div>`;
+  }
+  document.getElementById('subjGrpList').innerHTML = h;
+}
+
+async function _sgToggleReg(name) {
+  const grp = _sgGroups.find(g => g.name === name);
+  if (!grp) return;
+  const newVal = !grp.can_register;
+  try {
+    const res = await fetch(`/admin/subject-group-settings/${encodeURIComponent(name)}`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({can_register: newVal})
+    });
+    if ((await res.json()).ok) { grp.can_register = newVal; _renderSgList(); }
+  } catch {}
+}
+
+// ── Lịch trống ──────────────────────────────────────────────
+const _SG_DAYS = [2,3,4,5,6,7];
+const _SG_DAYNAMES = {2:'T2',3:'T3',4:'T4',5:'T5',6:'T6',7:'T7'};
+const _SG_SESS = [{key:'morning',label:'Buổi Sáng'},{key:'afternoon',label:'Buổi Chiều'}];
+
+async function _openSubjSched(name) {
+  _sgCurGroup = name;
+  _sgSlotMap  = {};
+  document.getElementById('subjSchedGroupName').textContent = name;
+  document.getElementById('subjSchedError').classList.add('d-none');
+  document.getElementById('subjSchedCustomWrap').classList.add('d-none');
+  ['10','11','12'].forEach(g => { const el = document.getElementById('sgK'+g); if(el) el.checked = false; });
+
+  const grp = _sgGroups.find(g => g.name === name);
+  const isCustom = grp && grp.schedule_type === 'custom';
+  document.getElementById('subjSchedTypeRoom').checked = !isCustom;
+  document.getElementById('subjSchedTypeCustom').checked = isCustom;
+
+  document.getElementById('subjSchedTypeRoom').onchange   = _sgSchedTypeChange;
+  document.getElementById('subjSchedTypeCustom').onchange = _sgSchedTypeChange;
+
+  const modal = new bootstrap.Modal(document.getElementById('modalSubjGrpSched'));
+  modal.show();
+
+  if (isCustom) {
+    await _loadSubjSchedGrid(name);
+    document.getElementById('subjSchedCustomWrap').classList.remove('d-none');
+  }
+}
+
+function _sgSchedTypeChange() {
+  const isCustom = document.getElementById('subjSchedTypeCustom').checked;
+  document.getElementById('subjSchedCustomWrap').classList.toggle('d-none', !isCustom);
+  if (isCustom && _sgCurGroup && Object.keys(_sgSlotMap).length === 0) {
+    _loadSubjSchedGrid(_sgCurGroup);
+  }
+}
+
+async function _loadSubjSchedGrid(name) {
+  try {
+    const data = await (await fetch(`/admin/subject-group-schedule/${encodeURIComponent(name)}`)).json();
+    _sgSlotMap = data.slot_map || {};
+  } catch { _sgSlotMap = {}; }
+  _renderSubjSchedGrid();
+}
+
+function _sgCellColor(key) {
+  const fg = _sgSlotMap[key] || '';
+  if (!fg) return ['#FEE2E2','#FCA5A5',''];
+  const fgs = fg.split(',').map(x => x.trim()).filter(Boolean);
+  const allFree = ['10','11','12'].every(g => fgs.includes(g));
+  if (allFree) return ['#F0FDF4','#86EFAC',''];
+  return ['#EDE9FE','#A78BFA','K'+fgs.join('-')];
+}
+
+function _renderSubjSchedGrid() {
+  const mBg = '#DBEAFE', aBg = '#FEF3C7';
+  let h = `<table style="border-collapse:collapse;min-width:450px;width:100%;"><thead><tr>
+    <th style="padding:4px 6px;font-size:.7rem;color:#64748B;min-width:62px;"></th>`;
+  for (const d of _SG_DAYS) h += `<th style="padding:4px 2px;text-align:center;font-size:.72rem;color:#0369A1;font-weight:700;">${_SG_DAYNAMES[d]}</th>`;
+  h += `</tr></thead><tbody>`;
+  for (const ses of _SG_SESS) {
+    h += `<tr><td colspan="7" style="padding:5px 6px 2px;font-weight:700;color:#475569;font-size:.7rem;background:${ses.key==='morning'?mBg:aBg};">${ses.label}</td></tr>`;
+    for (let tiet = 1; tiet <= 4; tiet++) {
+      h += `<tr><td style="padding:2px 6px;font-size:.72rem;color:#64748B;font-weight:600;white-space:nowrap;">Tiết ${tiet}</td>`;
+      for (const d of _SG_DAYS) {
+        const key = `${d}_${ses.key}_${tiet}`;
+        const [bg, bdr, lbl] = _sgCellColor(key);
+        h += `<td style="padding:2px 3px;"><div class="sg-cell" data-key="${key}"
+          style="height:26px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+                 background:${bg};border:1.5px solid ${bdr};font-size:.59rem;font-weight:700;color:#4C1D95;transition:background .07s;">${lbl}</div></td>`;
+      }
+      h += `</tr>`;
+    }
+  }
+  h += `</tbody></table>`;
+  const wrap = document.getElementById('subjSchedGrid');
+  wrap.innerHTML = h;
+  wrap.querySelectorAll('.sg-cell').forEach(el => {
+    el.addEventListener('click', () => _sgCellClick(el.dataset.key, el));
+  });
+}
+
+function _sgCellClick(key, el) {
+  const grades = ['10','11','12'].filter(g => document.getElementById('sgK'+g)?.checked);
+  if (!grades.length) { showAlert('Chọn ít nhất 1 khối để xếp lịch.', 'warning'); return; }
+  const existing = (_sgSlotMap[key] || '').split(',').map(x=>x.trim()).filter(Boolean);
+  const allAlreadyFree = grades.every(g => existing.includes(g));
+  let newSet;
+  if (allAlreadyFree) {
+    newSet = existing.filter(g => !grades.includes(g));
+  } else {
+    newSet = [...new Set([...existing, ...grades])];
+  }
+  if (newSet.length) {
+    _sgSlotMap[key] = newSet.sort().join(',');
+  } else {
+    delete _sgSlotMap[key];
+  }
+  const [bg, bdr, lbl] = _sgCellColor(key);
+  el.style.background = bg; el.style.borderColor = bdr; el.textContent = lbl;
+}
+
+async function saveSubjSched() {
+  if (!_sgCurGroup) return;
+  const schedType = document.getElementById('subjSchedTypeCustom').checked ? 'custom' : 'room';
+  const errEl = document.getElementById('subjSchedError');
+  errEl.classList.add('d-none');
+  try {
+    await fetch(`/admin/subject-group-settings/${encodeURIComponent(_sgCurGroup)}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({schedule_type: schedType})
+    });
+    if (schedType === 'custom') {
+      await fetch(`/admin/subject-group-schedule/${encodeURIComponent(_sgCurGroup)}`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({slot_map: _sgSlotMap})
+      });
+    }
+    const grp = _sgGroups.find(g => g.name === _sgCurGroup);
+    if (grp) grp.schedule_type = schedType;
+    bootstrap.Modal.getInstance(document.getElementById('modalSubjGrpSched')).hide();
+    showAlert('Đã lưu lịch trống.', 'success');
+    _renderSgList();
+  } catch {
+    errEl.textContent = 'Lỗi kết nối.'; errEl.classList.remove('d-none');
+  }
+}
+
+// ── Số tiết ──────────────────────────────────────────────────
+function _openSubjSlotMode(name) {
+  _sgCurGroup = name;
+  document.getElementById('subjSlotGroupName').textContent = name;
+  const grp = _sgGroups.find(g => g.name === name);
+  const mode  = grp ? grp.slot_mode    : 'free';
+  const fixed = grp ? grp.fixed_slots  : 1;
+  document.getElementById('subjSlotFree').checked  = mode !== 'fixed';
+  document.getElementById('subjSlotFixed').checked = mode === 'fixed';
+  document.getElementById('subjSlotFixedVal').value = fixed;
+  document.getElementById('subjSlotFixedWrap').classList.toggle('d-none', mode !== 'fixed');
+  document.getElementById('subjSlotFree').onchange  = () => document.getElementById('subjSlotFixedWrap').classList.add('d-none');
+  document.getElementById('subjSlotFixed').onchange = () => document.getElementById('subjSlotFixedWrap').classList.remove('d-none');
+  new bootstrap.Modal(document.getElementById('modalSubjGrpSlotMode')).show();
+}
+
+async function saveSubjSlotMode() {
+  if (!_sgCurGroup) return;
+  const mode = document.getElementById('subjSlotFixed').checked ? 'fixed' : 'free';
+  const fixedSlots = parseInt(document.getElementById('subjSlotFixedVal').value) || 1;
+  try {
+    const res = await fetch(`/admin/subject-group-settings/${encodeURIComponent(_sgCurGroup)}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({slot_mode: mode, fixed_slots: fixedSlots})
+    });
+    if ((await res.json()).ok) {
+      const grp = _sgGroups.find(g => g.name === _sgCurGroup);
+      if (grp) { grp.slot_mode = mode; grp.fixed_slots = fixedSlots; }
+      bootstrap.Modal.getInstance(document.getElementById('modalSubjGrpSlotMode')).hide();
+      showAlert('Đã lưu cài đặt số tiết.', 'success');
+      _renderSgList();
+    }
+  } catch { showAlert('Lỗi kết nối.', 'error'); }
+}
 </script>
+
+<!-- ══ MODAL: Cài đặt môn học (tổ bộ môn) ══ -->
+<div class="modal fade" id="modalSubjGrp" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable modal-fullscreen-sm-down">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#065F46,#10B981);border:none;">
+        <h5 class="modal-title fw-bold text-white"><i class="bi bi-sliders me-2"></i>Cài đặt môn học</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-3">
+        <div id="subjGrpList"><div class="text-center text-muted p-4">Đang tải...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Lịch trống tổ bộ môn ══ -->
+<div class="modal fade" id="modalSubjGrpSched" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable modal-fullscreen-sm-down">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#1E40AF,#3B82F6);border:none;">
+        <h5 class="modal-title fw-bold text-white"><i class="bi bi-calendar-week me-2"></i>Lịch trống — <span id="subjSchedGroupName"></span></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-3">
+        <div id="subjSchedError" class="alert alert-danger d-none mb-2"></div>
+        <div class="d-flex gap-4 mb-3 flex-wrap">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="subjSchedType" id="subjSchedTypeRoom" value="room">
+            <label class="form-check-label fw-semibold" for="subjSchedTypeRoom" style="font-size:.84rem;">
+              <i class="bi bi-building me-1"></i>Lịch phòng
+              <span class="text-muted fw-normal" style="font-size:.74rem;"> — theo lịch phòng trống</span>
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="subjSchedType" id="subjSchedTypeCustom" value="custom">
+            <label class="form-check-label fw-semibold" for="subjSchedTypeCustom" style="font-size:.84rem;">
+              <i class="bi bi-grid-3x3 me-1"></i>Lịch riêng
+              <span class="text-muted fw-normal" style="font-size:.74rem;"> — admin tự đặt khung giờ</span>
+            </label>
+          </div>
+        </div>
+        <div id="subjSchedCustomWrap" class="d-none">
+          <div class="mb-2 d-flex align-items-center gap-3 flex-wrap">
+            <span class="fw-semibold" style="font-size:.8rem;color:#1E40AF;">Khối đang xếp lịch:</span>
+            <div class="form-check form-check-inline m-0">
+              <input class="form-check-input" type="checkbox" id="sgK10" value="10">
+              <label class="form-check-label fw-bold" for="sgK10" style="color:#0369A1;font-size:.82rem;">K10</label>
+            </div>
+            <div class="form-check form-check-inline m-0">
+              <input class="form-check-input" type="checkbox" id="sgK11" value="11">
+              <label class="form-check-label fw-bold" for="sgK11" style="color:#0369A1;font-size:.82rem;">K11</label>
+            </div>
+            <div class="form-check form-check-inline m-0">
+              <input class="form-check-input" type="checkbox" id="sgK12" value="12">
+              <label class="form-check-label fw-bold" for="sgK12" style="color:#0369A1;font-size:.82rem;">K12</label>
+            </div>
+          </div>
+          <p class="text-muted mb-2" style="font-size:.71rem;"><i class="bi bi-info-circle me-1"></i>Click ô để toggle rảnh/bận cho khối đang chọn. Mặc định bận tất cả.</p>
+          <div class="d-flex gap-3 mb-2 flex-wrap" style="font-size:.71rem;color:#64748B;">
+            <span><span style="display:inline-block;width:12px;height:12px;background:#FEE2E2;border:1.5px solid #FCA5A5;border-radius:3px;vertical-align:middle;"></span> Bận tất cả</span>
+            <span><span style="display:inline-block;width:12px;height:12px;background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:3px;vertical-align:middle;"></span> Rảnh tất cả</span>
+            <span><span style="display:inline-block;width:12px;height:12px;background:#EDE9FE;border:1.5px solid #A78BFA;border-radius:3px;vertical-align:middle;"></span> Rảnh 1 số khối</span>
+          </div>
+          <div style="overflow-x:auto;"><div id="subjSchedGrid"></div></div>
+        </div>
+      </div>
+      <div class="modal-footer border-top" style="padding:12px 16px;">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal" style="border-radius:8px;">Huỷ</button>
+        <button type="button" class="btn btn-primary" style="border-radius:8px;" onclick="saveSubjSched()">
+          <i class="bi bi-check2 me-1"></i>Lưu lịch
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Cài đặt số tiết ══ -->
+<div class="modal fade" id="modalSubjGrpSlotMode" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);border:none;">
+        <h5 class="modal-title fw-bold text-white"><i class="bi bi-123 me-2"></i>Số tiết — <span id="subjSlotGroupName"></span></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div class="mb-3">
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="radio" name="subjSlotMode" id="subjSlotFree" value="free">
+            <label class="form-check-label" for="subjSlotFree">
+              <span class="fw-semibold" style="font-size:.85rem;">Tự do</span>
+              <span class="text-muted d-block" style="font-size:.76rem;">GV tự chọn số tiết (2 hoặc 4 tiết) khi đăng ký</span>
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="subjSlotMode" id="subjSlotFixed" value="fixed">
+            <label class="form-check-label" for="subjSlotFixed">
+              <span class="fw-semibold" style="font-size:.85rem;">Cố định</span>
+              <span class="text-muted d-block" style="font-size:.76rem;">GV chỉ được đăng ký theo số tiết admin đặt</span>
+            </label>
+          </div>
+        </div>
+        <div id="subjSlotFixedWrap" class="d-none ps-3 pt-1">
+          <label class="form-label fw-semibold mb-1" style="font-size:.82rem;">Số tiết cố định:</label>
+          <select id="subjSlotFixedVal" class="form-select form-select-sm" style="max-width:140px;">
+            <option value="1">2 tiết (1 cặp)</option>
+            <option value="2">4 tiết (cả buổi)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer border-top" style="padding:12px 16px;">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal" style="border-radius:8px;">Huỷ</button>
+        <button type="button" class="btn fw-bold text-white" style="border-radius:8px;background:#7C3AED;border-color:#7C3AED;" onclick="saveSubjSlotMode()">
+          <i class="bi bi-check2 me-1"></i>Lưu
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}

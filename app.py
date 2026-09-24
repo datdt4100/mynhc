@@ -186,6 +186,25 @@ room_grade_slots = Table(
     Column("available_grades", Text, nullable=False),  # "10", "11", "10,11"
 )
 
+subject_group_settings = Table(
+    "subject_group_settings", metadata,
+    Column("name", Text, primary_key=True),
+    Column("can_register", Integer, nullable=False, server_default="1"),
+    Column("schedule_type", Text, nullable=False, server_default="room"),
+    Column("slot_mode", Text, nullable=False, server_default="free"),
+    Column("fixed_slots", Integer, nullable=False, server_default="1"),
+)
+
+subject_group_slots = Table(
+    "subject_group_slots", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("subject_group", Text, nullable=False),
+    Column("day_of_week", Integer, nullable=False),
+    Column("session_type", Text, nullable=False),
+    Column("tiet", Integer, nullable=False),
+    Column("free_grades", Text, nullable=False, server_default=""),
+)
+
 settings_table = Table(
     "settings", metadata,
     Column("key", Text, primary_key=True),
@@ -353,6 +372,24 @@ def init_db():
         try:
             conn.execute(text("ALTER TABLE rooms ADD COLUMN conflict_check INTEGER NOT NULL DEFAULT 1"))
             conn.execute(text("UPDATE rooms SET conflict_check = 1 WHERE conflict_check IS NULL"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+        try:
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS subject_group_settings "
+                "(name TEXT PRIMARY KEY, can_register INTEGER NOT NULL DEFAULT 1, "
+                "schedule_type TEXT NOT NULL DEFAULT 'room', "
+                "slot_mode TEXT NOT NULL DEFAULT 'free', fixed_slots INTEGER NOT NULL DEFAULT 1)"
+            ))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS subject_group_slots "
+                "(id INTEGER PRIMARY KEY AUTOINCREMENT, subject_group TEXT NOT NULL, "
+                "day_of_week INTEGER NOT NULL, session_type TEXT NOT NULL, tiet INTEGER NOT NULL, "
+                "free_grades TEXT NOT NULL DEFAULT '', "
+                "UNIQUE(subject_group, day_of_week, session_type, tiet))"
+            ))
             conn.commit()
         except Exception:
             conn.rollback()
@@ -742,6 +779,31 @@ def _time_conflict(student_id, new_class):
 
 def _norm_subj(s):
     return s.strip() if s else s
+
+
+def _get_subj_grp_setting(conn, name):
+    row = conn.execute(
+        select(subject_group_settings).where(subject_group_settings.c.name == name)
+    ).fetchone()
+    if row:
+        return {"can_register": bool(row.can_register),
+                "schedule_type": row.schedule_type or "room",
+                "slot_mode": row.slot_mode or "free",
+                "fixed_slots": row.fixed_slots or 1}
+    return {"can_register": True, "schedule_type": "room", "slot_mode": "free", "fixed_slots": 1}
+
+def _upsert_subj_grp(conn, name, **kwargs):
+    existing = conn.execute(
+        select(subject_group_settings.c.name).where(subject_group_settings.c.name == name)
+    ).fetchone()
+    if existing:
+        conn.execute(
+            subject_group_settings.update().where(subject_group_settings.c.name == name).values(**kwargs)
+        )
+    else:
+        defaults = {"can_register": 1, "schedule_type": "room", "slot_mode": "free", "fixed_slots": 1}
+        defaults.update(kwargs)
+        conn.execute(insert(subject_group_settings).values(name=name, **defaults))
 
 
 def _slots_overlap_dict(a, b):
@@ -1404,6 +1466,10 @@ def teacher_dashboard():
     schedule_constraint = get_setting("schedule_constraint", "1") == "1"
     teacher_view_enrollments = get_setting("teacher_view_enrollments", "0") == "1"
     teacher_room_select = get_setting("teacher_room_select", "0") == "1"
+    subj_grp_settings = {}
+    if teacher_row and teacher_row.subject_group:
+        with engine.connect() as _c:
+            subj_grp_settings = _get_subj_grp_setting(_c, teacher_row.subject_group)
     return render_template(
         "teacher/dashboard.html",
         teacher=teacher_row,
@@ -1421,6 +1487,7 @@ def teacher_dashboard():
         gvcn_col_settings=get_gvcn_col_settings(),
         day_name=day_name,
         session_label=session_label,
+        subj_grp_settings=subj_grp_settings,
     )
 
 
@@ -1429,6 +1496,16 @@ def teacher_dashboard():
 def teacher_register_class():
     if get_setting("teacher_reg_open", "0") != "1":
         return jsonify(ok=False, error="Chưa mở đăng ký lớp.")
+
+    # Check subject group permission
+    _subj_grp_name = session.get("subject_group") or ""
+    if _subj_grp_name:
+        with engine.connect() as _c:
+            _sg = _get_subj_grp_setting(_c, _subj_grp_name)
+        if not _sg["can_register"]:
+            return jsonify(ok=False, error="Tổ bộ môn của bạn chưa được phép đăng ký mở lớp.")
+    else:
+        _sg = {"can_register": True, "schedule_type": "room", "slot_mode": "free", "fixed_slots": 1}
 
     data = request.get_json(force=True)
     teacher_id = session["user_id"]
@@ -1459,6 +1536,18 @@ def teacher_register_class():
 
     subject  = session.get("subject_group") or (data.get("subject") or "").strip() or None
     end_session = start_session + duration - 1
+
+    # Validate slot against subject group custom schedule
+    if _subj_grp_name and _sg.get("schedule_type") == "custom":
+        with engine.connect() as _c:
+            _sg_rows = _c.execute(
+                select(subject_group_slots).where(subject_group_slots.c.subject_group == _subj_grp_name)
+            ).fetchall()
+        _free_map = {(r.day_of_week, r.session_type, r.tiet): r.free_grades for r in _sg_rows}
+        for _t in range(start_session, start_session + duration):
+            _fg = _free_map.get((day_of_week, session_type, _t), "")
+            if not _fg or str(grade) not in [x.strip() for x in _fg.split(",")]:
+                return jsonify(ok=False, error="Khung giờ này không nằm trong lịch trống của tổ bộ môn bạn.")
 
     # Heavy combo check — only when admin has not disabled the constraint
     if subject and get_setting("schedule_constraint", "1") == "1":
@@ -2992,6 +3081,25 @@ def api_slot_impact_grid():
         for t in range(c.start_session, end + 1):
             teacher_occupied.add((c.day_of_week, c.session_type, t))
 
+    # Subject group custom schedule blocking
+    sg_blocked_tiets = set()
+    sg_settings = {"schedule_type": "room", "slot_mode": "free", "fixed_slots": 1}
+    if subject:
+        with engine.connect() as _c:
+            sg_settings = _get_subj_grp_setting(_c, subject)
+        if sg_settings["schedule_type"] == "custom":
+            with engine.connect() as _c:
+                sg_rows = _c.execute(
+                    select(subject_group_slots).where(subject_group_slots.c.subject_group == subject)
+                ).fetchall()
+            free_map = {(r.day_of_week, r.session_type, r.tiet): r.free_grades for r in sg_rows}
+            for _dow in range(2, 8):
+                for _ses in ("morning", "afternoon"):
+                    for _t in range(1, 5):
+                        fg = free_map.get((_dow, _ses, _t), "")
+                        if not fg or str(grade) not in [x.strip() for x in fg.split(",")]:
+                            sg_blocked_tiets.add((_dow, _ses, _t))
+
     def _teacher_conflict(dow, ses, start):
         """True nếu GV đã có lớp chồng tiết với slot [start, start+dur-1]."""
         end = start + dur - 1
@@ -3014,12 +3122,16 @@ def api_slot_impact_grid():
             for start in range(1, 5):
                 key = f"{dow}_{ses}_{start}"
                 if start not in valid_starts:
-                    grid[key] = -1  # not an allowed starting tiet
+                    grid[key] = -1
                 elif _teacher_conflict(dow, ses, start):
-                    grid[key] = -1  # GV đã có lớp ở khung giờ này
+                    grid[key] = -1
+                elif sg_settings.get("schedule_type") == "custom" and any(
+                    (dow, ses, t) in sg_blocked_tiets for t in range(start, start + dur)
+                ):
+                    grid[key] = -1
                 else:
                     grid[key] = _combos_for_slot(dow, ses, start)
-    return jsonify(grid=grid, max_combos=max_combos)
+    return jsonify(grid=grid, max_combos=max_combos, sg_settings=sg_settings)
 
 
 @app.route("/api/available-rooms")
@@ -6183,6 +6295,74 @@ def student_set_email():
         conn.execute(
             update(students).where(students.c.id == student_id).values(email=email)
         )
+    return jsonify(ok=True)
+
+
+@app.route("/admin/subject-group-settings")
+@admin_required
+def admin_subj_grp_settings():
+    with engine.connect() as conn:
+        all_teachers = conn.execute(select(teachers.c.subject_group)).fetchall()
+        groups = sorted({r.subject_group for r in all_teachers if r.subject_group})
+        result = []
+        for name in groups:
+            s = _get_subj_grp_setting(conn, name)
+            result.append({"name": name, **s})
+    return jsonify(groups=result)
+
+@app.route("/admin/subject-group-settings/<path:group_name>", methods=["POST"])
+@admin_required
+def admin_subj_grp_settings_update(group_name):
+    data = request.get_json(force=True) or {}
+    updates = {}
+    if "can_register" in data:
+        updates["can_register"] = 1 if data["can_register"] else 0
+    if "schedule_type" in data and data["schedule_type"] in ("room", "custom"):
+        updates["schedule_type"] = data["schedule_type"]
+    if "slot_mode" in data and data["slot_mode"] in ("free", "fixed"):
+        updates["slot_mode"] = data["slot_mode"]
+    if "fixed_slots" in data and data["fixed_slots"] in (1, 2):
+        updates["fixed_slots"] = data["fixed_slots"]
+    with engine.begin() as conn:
+        _upsert_subj_grp(conn, group_name, **updates)
+    return jsonify(ok=True)
+
+@app.route("/admin/subject-group-schedule/<path:group_name>")
+@admin_required
+def admin_subj_grp_schedule_get(group_name):
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(subject_group_slots).where(subject_group_slots.c.subject_group == group_name)
+        ).fetchall()
+        slot_map = {f"{r.day_of_week}_{r.session_type}_{r.tiet}": r.free_grades for r in rows}
+    return jsonify(slot_map=slot_map)
+
+@app.route("/admin/subject-group-schedule/<path:group_name>", methods=["POST"])
+@admin_required
+def admin_subj_grp_schedule_set(group_name):
+    data = request.get_json(force=True) or {}
+    slot_map = data.get("slot_map", {})
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM subject_group_slots WHERE subject_group = :g"), {"g": group_name})
+        for key, free_grades in slot_map.items():
+            if not free_grades:
+                continue
+            parts = key.split("_")
+            if len(parts) != 3:
+                continue
+            dow_s, ses, tiet_s = parts
+            try:
+                dow_i, tiet_i = int(dow_s), int(tiet_s)
+            except ValueError:
+                continue
+            if ses not in ("morning", "afternoon"):
+                continue
+            conn.execute(
+                text("INSERT OR REPLACE INTO subject_group_slots "
+                     "(subject_group, day_of_week, session_type, tiet, free_grades) "
+                     "VALUES (:g, :d, :s, :t, :fg)"),
+                {"g": group_name, "d": dow_i, "s": ses, "t": tiet_i, "fg": free_grades}
+            )
     return jsonify(ok=True)
 
 

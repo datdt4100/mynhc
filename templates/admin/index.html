@@ -2708,6 +2708,8 @@ function _closeManTeacherList() {
 }
 
 document.addEventListener('focusin', function(e) {
+  const list = document.getElementById('manTeacherList');
+  if (!list || list.style.display === 'none') return;
   const wrap = document.getElementById('manTeacherWrap');
   if (wrap && !wrap.contains(e.target)) _closeManTeacherList();
 });

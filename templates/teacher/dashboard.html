@@ -787,8 +787,8 @@
           </div>
           <div class="col-6">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Số tiết</label>
-            <input type="hidden" id="regDuration" value="{% if subj_grp_settings and subj_grp_settings.get('slot_mode')=='fixed' and subj_grp_settings.get('fixed_slots')==2 %}4{% else %}2{% endif %}">
-            <div class="custom-input d-flex align-items-center" style="font-size:.85rem; color:#374151; background:#F9FAFB; pointer-events:none;" id="regDurationLabel">{% if subj_grp_settings and subj_grp_settings.get('slot_mode')=='fixed' and subj_grp_settings.get('fixed_slots')==2 %}4{% else %}2{% endif %} tiết{% if subj_grp_settings and subj_grp_settings.get('slot_mode')=='fixed' %} <span class="badge ms-2" style="background:#EDE9FE;color:#5B21B6;font-size:.65rem;">Cố định</span>{% endif %}</div>
+            <input type="hidden" id="regDuration" value="{% if subj_grp_settings and subj_grp_settings.get('slot_mode')=='fixed' %}{{ subj_grp_settings.get('fixed_slots', 1) }}{% else %}2{% endif %}">
+            <div class="custom-input d-flex align-items-center" style="font-size:.85rem; color:#374151; background:#F9FAFB; pointer-events:none;" id="regDurationLabel">{% if subj_grp_settings and subj_grp_settings.get('slot_mode')=='fixed' %}{{ subj_grp_settings.get('fixed_slots', 1) }} tiết <span class="badge ms-2" style="background:#EDE9FE;color:#5B21B6;font-size:.65rem;">Cố định</span>{% else %}2 tiết{% endif %}</div>
           </div>
         </div>
 
@@ -1506,7 +1506,7 @@ const _subjGrpSettings = {{ subj_grp_settings | tojson | safe }};
 
 // Lock duration if slot_mode is fixed
 if (_subjGrpSettings && _subjGrpSettings.slot_mode === 'fixed') {
-  const fixedDur = (_subjGrpSettings.fixed_slots || 1) === 2 ? 4 : 2;
+  const fixedDur = _subjGrpSettings.fixed_slots || 1;
   const sel = document.getElementById('regDuration');
   if (sel) {
     sel.value = String(fixedDur);

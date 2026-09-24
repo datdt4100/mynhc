@@ -1521,8 +1521,8 @@ def teacher_register_class():
 
     if grade not in (10, 11, 12):
         return jsonify(ok=False, error="Khối phải là 10, 11 hoặc 12.")
-    if duration not in (2, 4):
-        return jsonify(ok=False, error="Số tiết phải là 2 hoặc 4.")
+    if duration not in (1, 2, 4):
+        return jsonify(ok=False, error="Số tiết phải là 1, 2 hoặc 4.")
     if not (2 <= day_of_week <= 7):
         return jsonify(ok=False, error="Thứ phải từ 2 đến 7.")
     if session_type not in ("morning", "afternoon"):
@@ -3060,8 +3060,8 @@ def api_slot_impact_grid():
     dur   = request.args.get("duration", type=int)
     if grade not in (10, 11, 12):
         return jsonify(error="Khối không hợp lệ"), 400
-    if dur not in (2, 4):
-        return jsonify(error="Số tiết phải là 2 hoặc 4"), 400
+    if dur not in (1, 2, 4):
+        return jsonify(error="Số tiết phải là 1, 2 hoặc 4"), 400
 
     teacher_id = session["user_id"]
     subject = _norm_subj(session.get("subject_group") or "")
@@ -3115,7 +3115,7 @@ def api_slot_impact_grid():
         _backtrack(tmp, others, 0, [new_slot], count, 100)
         return count[0]
 
-    valid_starts = [1, 3] if dur == 2 else [1]
+    valid_starts = [1, 2, 3, 4] if dur == 1 else ([1, 3] if dur == 2 else [1])
     grid = {}
     for dow in range(2, 8):
         for ses in ("morning", "afternoon"):
@@ -4614,8 +4614,8 @@ def admin_register_class():
 
     if grade not in (10, 11, 12):
         return jsonify(ok=False, error="Khối phải là 10, 11 hoặc 12.")
-    if duration not in (2, 4):
-        return jsonify(ok=False, error="Số tiết phải là 2 hoặc 4.")
+    if duration not in (1, 2, 4):
+        return jsonify(ok=False, error="Số tiết phải là 1, 2 hoặc 4.")
     if session_type not in ("morning", "afternoon"):
         return jsonify(ok=False, error="Buổi không hợp lệ.")
 

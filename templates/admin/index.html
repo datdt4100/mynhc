@@ -3083,7 +3083,7 @@ function _renderSgList() {
       ? '<span class="badge ms-1" style="background:#DBEAFE;color:#1E40AF;font-size:.62rem;">Lịch riêng</span>'
       : '<span class="badge ms-1" style="background:#F1F5F9;color:#64748B;font-size:.62rem;">Lịch phòng</span>';
     const slotBadge = g.slot_mode === 'fixed'
-      ? `<span class="badge ms-1" style="background:#EDE9FE;color:#6D28D9;font-size:.62rem;">Cố định ${g.fixed_slots===2?'4':'2'} tiết</span>`
+      ? `<span class="badge ms-1" style="background:#EDE9FE;color:#6D28D9;font-size:.62rem;">Cố định ${g.fixed_slots===2?'2':'1'} tiết</span>`
       : '<span class="badge ms-1" style="background:#F0FDF4;color:#065F46;font-size:.62rem;">Số tiết tự do</span>';
     h += `<div class="d-flex align-items-center gap-2 p-2 mb-2" style="background:#F8FAFC;border-radius:10px;border:1px solid #E2E8F0;">
       <div class="flex-grow-1 min-w-0">
@@ -3374,7 +3374,7 @@ async function saveSubjSlotMode() {
             <input class="form-check-input" type="radio" name="subjSlotMode" id="subjSlotFree" value="free">
             <label class="form-check-label" for="subjSlotFree">
               <span class="fw-semibold" style="font-size:.85rem;">Tự do</span>
-              <span class="text-muted d-block" style="font-size:.76rem;">GV tự chọn số tiết (2 hoặc 4 tiết) khi đăng ký</span>
+              <span class="text-muted d-block" style="font-size:.76rem;">GV tự chọn số tiết (2 hoặc 4 tiết) khi đăng ký lớp</span>
             </label>
           </div>
           <div class="form-check">
@@ -3388,8 +3388,8 @@ async function saveSubjSlotMode() {
         <div id="subjSlotFixedWrap" class="d-none ps-3 pt-1">
           <label class="form-label fw-semibold mb-1" style="font-size:.82rem;">Số tiết cố định:</label>
           <select id="subjSlotFixedVal" class="form-select form-select-sm" style="max-width:140px;">
-            <option value="1">2 tiết (1 cặp)</option>
-            <option value="2">4 tiết (cả buổi)</option>
+            <option value="1">1 tiết</option>
+            <option value="2">2 tiết</option>
           </select>
         </div>
       </div>

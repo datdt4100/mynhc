@@ -53,6 +53,7 @@
     display: block;
     transition: box-shadow .2s, transform .2s, border-color .2s;
     height: 100%;
+    contain: layout style paint;
   }
   .nav-box:hover {
     box-shadow: 0 8px 28px rgba(14,165,233,.18);
@@ -1594,7 +1595,7 @@
             <input id="manChuyenDe" type="text" class="form-control form-control-sm"
                    placeholder="VD: Văn học dân gian, Đại số và giải tích..."
                    style="font-size:.82rem;border-radius:8px;"
-                   autocomplete="off" spellcheck="false">
+                   autocomplete="off" spellcheck="false" inputmode="text">
           </div>
           <div class="col-12">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Ghi chú <span class="text-muted fw-normal">(hiển thị cho học sinh)</span></label>

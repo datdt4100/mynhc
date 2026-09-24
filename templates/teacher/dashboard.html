@@ -60,6 +60,7 @@
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   border-radius: 0 0 16px 16px;
+  contain: layout style paint;
 }
 
 /* ── Calendar table ── */
@@ -823,7 +824,7 @@
           <label class="form-label fw-semibold mb-1" style="font-size:.82rem;">Chuyên đề <span class="text-muted fw-normal" style="font-size:.74rem;">(không bắt buộc)</span></label>
           <input type="text" id="regChuyenDe" class="form-control custom-input"
                  placeholder="VD: Văn học dân gian, Đại số và giải tích..."
-                 style="font-size:.82rem;" autocomplete="off" spellcheck="false">
+                 style="font-size:.82rem;" autocomplete="off" spellcheck="false" inputmode="text">
         </div>
 
       </div>

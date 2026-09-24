@@ -318,7 +318,7 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 
-<div class="container pb-5">
+<div class="container pb-5" id="mainContent">
   <div class="d-flex align-items-center gap-2 mb-4 pt-4">
     <h1 style="font-size:1.15rem; font-weight:800; color:#0c4a6e; margin:0;">
       <i class="bi bi-grid-1x2-fill me-2" style="color:#0EA5E9;"></i>Quản trị mynhc
@@ -958,7 +958,7 @@
       </button>
       <div class="search-box ms-auto">
         <i class="bi bi-search"></i>
-        <input type="search" id="searchTeacher" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterTeachers()">
+        <input type="search" id="searchTeacher" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterTeachers()" autocomplete="off" spellcheck="false">
       </div>
       <form method="POST" action="{{ url_for('admin_teachers_clear') }}" class="mb-0">
         <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
@@ -1098,7 +1098,7 @@
       </button>
       <div class="search-box ms-auto">
         <i class="bi bi-search"></i>
-        <input type="search" id="searchStudent" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterStudents()">
+        <input type="search" id="searchStudent" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterStudents()" autocomplete="off" spellcheck="false">
       </div>
       <form method="POST" action="{{ url_for('admin_students_reset_all') }}" class="mb-0">
         <button type="button" class="btn btn-sm btn-outline-warning fw-semibold" style="border-radius:8px; font-size:.78rem;"
@@ -1307,7 +1307,7 @@
         <div id="addRoomError" class="alert alert-danger d-none mb-3"></div>
         <div class="mb-4">
           <label class="form-label fw-semibold" style="font-size:.85rem;">Tên phòng <span class="text-danger">*</span></label>
-          <input type="text" id="newRoomName" class="form-control custom-input" placeholder="VD: A101, Hội trường B..." maxlength="50">
+          <input type="text" id="newRoomName" class="form-control custom-input" placeholder="VD: A101, Hội trường B..." maxlength="50" autocomplete="off" spellcheck="false" inputmode="text">
         </div>
         <div class="mb-3">
           <div class="form-check d-flex align-items-center gap-2" style="padding-left:0;">
@@ -1357,11 +1357,11 @@
         <div class="modal-body p-4">
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Họ tên <span class="text-danger">*</span></label>
-            <input type="text" name="full_name" class="form-control custom-input" placeholder="Nguyễn Văn A" required>
+            <input type="text" name="full_name" class="form-control custom-input" placeholder="Nguyễn Văn A" autocomplete="off" spellcheck="false" inputmode="text" required>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Mã đăng nhập <span class="text-danger">*</span></label>
-            <input type="text" name="cccd" class="form-control custom-input" placeholder="Nhập mã đăng nhập" required>
+            <input type="text" name="cccd" class="form-control custom-input" placeholder="Nhập mã đăng nhập" autocomplete="off" spellcheck="false" inputmode="text" required>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Giới tính</label>
@@ -1372,7 +1372,7 @@
           </div>
           <div class="mb-1">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Tổ bộ môn <span class="text-danger">*</span></label>
-            <input type="text" name="subject_group" class="form-control custom-input" placeholder="Tổ Toán – Lý – Tin" required>
+            <input type="text" name="subject_group" class="form-control custom-input" placeholder="Tổ Toán – Lý – Tin" autocomplete="off" spellcheck="false" inputmode="text" required>
           </div>
         </div>
         <div class="modal-footer border-top" style="padding:16px 20px;">
@@ -1403,15 +1403,15 @@
         <div class="modal-body p-4">
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Họ tên <span class="text-danger">*</span></label>
-            <input type="text" name="full_name" class="form-control custom-input" placeholder="Trần Thị B" required>
+            <input type="text" name="full_name" class="form-control custom-input" placeholder="Trần Thị B" autocomplete="off" spellcheck="false" inputmode="text" required>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Mã đăng nhập <span class="text-danger">*</span></label>
-            <input type="text" name="cccd" class="form-control custom-input" placeholder="Nhập mã đăng nhập" required>
+            <input type="text" name="cccd" class="form-control custom-input" placeholder="Nhập mã đăng nhập" autocomplete="off" spellcheck="false" inputmode="text" required>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Lớp <span class="text-danger">*</span></label>
-            <input type="text" name="class_name" class="form-control custom-input" placeholder="10A1" required>
+            <input type="text" name="class_name" class="form-control custom-input" placeholder="10A1" autocomplete="off" spellcheck="false" inputmode="text" required>
           </div>
           <div class="mb-1">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Khối <span class="text-danger">*</span></label>
@@ -3314,6 +3314,14 @@ async function saveSubjSlotMode() {
     }
   } catch { showAlert('Lỗi kết nối.', 'error'); }
 }
+
+/* ── Hide main content while any modal is open to eliminate focus lag ── */
+(function() {
+  const mc = document.getElementById('mainContent');
+  if (!mc) return;
+  document.body.addEventListener('show.bs.modal', () => { mc.style.contentVisibility = 'hidden'; });
+  document.body.addEventListener('hidden.bs.modal', () => { mc.style.contentVisibility = ''; });
+})();
 </script>
 
 <!-- ══ MODAL: Cài đặt môn học (tổ bộ môn) ══ -->

@@ -210,6 +210,18 @@
           });
         });
       }).observe(document.documentElement, { childList: true, subtree: true });
+
+      /* Block Grammarly's input/keydown bubble listeners (causes 12s lag while typing).
+         Registered here (before Grammarly's content_script.js injects) so our listener
+         fires first in bubble phase → stopImmediatePropagation stops Grammarly's handler.
+         Inline oninput= handlers still fire normally (they run at target phase, before bubble). */
+      function _blockGrammarly(e) {
+        var t = e.target.tagName;
+        if (t === 'INPUT' || t === 'TEXTAREA') e.stopImmediatePropagation();
+      }
+      document.addEventListener('input',   _blockGrammarly);
+      document.addEventListener('keydown', _blockGrammarly);
+      document.addEventListener('keyup',   _blockGrammarly);
     })();
 
   </script>

@@ -1667,6 +1667,59 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════
+     MODAL: Cài đặt lịch đăng ký môn học
+══════════════════════════════════════════ -->
+<div class="modal fade" id="modalSubjectSlots" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content" style="border-radius:14px;border:none;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#1e40af,#3b82f6);border:none;padding:12px 18px;">
+        <div class="fw-bold text-white" style="font-size:.88rem;">
+          <i class="bi bi-calendar-week me-2"></i>Lịch đăng ký: <span id="slotsSubjectName"></span> — Khối <span id="slotsGradeName"></span>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:14px 16px;">
+        <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+          <label class="btn btn-sm btn-outline-primary" style="border-radius:8px;font-size:.78rem;margin:0;cursor:pointer;">
+            <i class="bi bi-upload me-1"></i>Tải Excel
+            <input type="file" id="slotsExcelFile" accept=".xlsx,.xls" style="display:none">
+          </label>
+          <span class="text-muted" style="font-size:.74rem;">
+            Format: hàng = Sáng/Chiều T1–T4 · cột = Thứ 2–7 · ô = mã lớp ngăn cách bởi <code>-</code>
+          </span>
+          <span class="badge bg-secondary ms-auto" style="font-size:.7rem;">
+            <strong>C</strong>=K10 &nbsp;<strong>B</strong>=K11 &nbsp;<strong>A</strong>=K12
+          </span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table id="slotsGrid" class="table table-bordered table-sm mb-2" style="min-width:680px;table-layout:fixed;">
+            <thead>
+              <tr style="background:#EFF6FF;">
+                <th style="width:82px;font-size:.74rem;"></th>
+                <th style="font-size:.74rem;text-align:center;">Thứ 2</th>
+                <th style="font-size:.74rem;text-align:center;">Thứ 3</th>
+                <th style="font-size:.74rem;text-align:center;">Thứ 4</th>
+                <th style="font-size:.74rem;text-align:center;">Thứ 5</th>
+                <th style="font-size:.74rem;text-align:center;">Thứ 6</th>
+                <th style="font-size:.74rem;text-align:center;">Thứ 7</th>
+              </tr>
+            </thead>
+            <tbody id="slotsGridBody"></tbody>
+          </table>
+        </div>
+        <div class="text-muted" style="font-size:.72rem;">Nhiều lớp ngăn cách bằng <code>-</code> (VD: <code>C01-C05-B12</code>). Để trống nếu không có lớp nào.</div>
+      </div>
+      <div class="modal-footer" style="border-top:1.5px solid #E2E8F0;padding:8px 16px;gap:8px;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" style="border-radius:8px;font-size:.8rem;">Đóng</button>
+        <button class="btn btn-sm btn-primary" onclick="_saveSubjectSlots()" style="border-radius:8px;font-size:.8rem;">
+          <i class="bi bi-check2 me-1"></i>Lưu lịch
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -3005,6 +3058,9 @@ function _renderGd2Vis(list) {
       subjHeader.innerHTML = `
         <span style="font-size:.78rem;font-weight:700;color:#374151;">${subj || '(Chưa có môn)'}</span>
         <div class="d-flex gap-1 flex-wrap">
+          <button class="btn btn-xs" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #3B82F6;color:#3B82F6;border-radius:6px;background:transparent;"
+                  onclick="_openSubjectSlots(${JSON.stringify(subj || '')},${g})">
+            <i class="bi bi-calendar-week" style="font-size:.65rem;"></i> Lịch</button>
           <button class="btn btn-xs" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #10B981;color:#10B981;border-radius:6px;background:transparent;"
                   data-gd2-setall="${safeKey}" data-gd2-val="1">Bật tất</button>
           <button class="btn btn-xs" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #EF4444;color:#EF4444;border-radius:6px;background:transparent;"
@@ -3080,6 +3136,140 @@ function _gd2VisSetAll(safeKey, enabled) {
     });
   });
 }
+
+// ════════════════════════════════════════
+// Subject Slot Schedule (Lịch đăng ký môn)
+// ════════════════════════════════════════
+const _SLOT_ROWS = [
+  {label:'Sáng T1', session:'morning',   tiet:1},
+  {label:'Sáng T2', session:'morning',   tiet:2},
+  {label:'Sáng T3', session:'morning',   tiet:3},
+  {label:'Sáng T4', session:'morning',   tiet:4},
+  {label:'Chiều T1',session:'afternoon', tiet:1},
+  {label:'Chiều T2',session:'afternoon', tiet:2},
+  {label:'Chiều T3',session:'afternoon', tiet:3},
+  {label:'Chiều T4',session:'afternoon', tiet:4},
+];
+const _SLOT_DAYS = [2, 3, 4, 5, 6, 7];
+let _slotsSubject = '', _slotsGrade = 0;
+
+function _openSubjectSlots(subject, grade) {
+  _slotsSubject = subject;
+  _slotsGrade   = grade;
+  document.getElementById('slotsSubjectName').textContent = subject;
+  document.getElementById('slotsGradeName').textContent   = grade;
+  _buildSlotsGrid();
+  new bootstrap.Modal(document.getElementById('modalSubjectSlots')).show();
+  fetch('/admin/subject-slots?subject=' + encodeURIComponent(subject) + '&grade=' + grade)
+    .then(r => r.json())
+    .then(d => { if (d.ok) _fillSlotsGrid(d.slots); });
+}
+
+function _buildSlotsGrid() {
+  const tbody = document.getElementById('slotsGridBody');
+  tbody.innerHTML = '';
+  _SLOT_ROWS.forEach(row => {
+    const tr = document.createElement('tr');
+    const isAfternoon = row.session === 'afternoon';
+    const bgLabel = isAfternoon ? '#FFF7ED' : '#F0F9FF';
+    tr.innerHTML = `<td class="fw-semibold" style="font-size:.73rem;white-space:nowrap;background:${bgLabel};vertical-align:middle;">${row.label}</td>`;
+    _SLOT_DAYS.forEach(day => {
+      const td = document.createElement('td');
+      td.style = 'padding:3px;';
+      const inp = document.createElement('input');
+      inp.type  = 'text';
+      inp.className = 'form-control form-control-sm';
+      inp.style = 'font-size:.71rem;border-radius:4px;text-transform:uppercase;padding:2px 5px;';
+      inp.dataset.session = row.session;
+      inp.dataset.tiet    = row.tiet;
+      inp.dataset.day     = day;
+      inp.placeholder     = 'C01-B12';
+      inp.setAttribute('data-gramm','false');
+      inp.setAttribute('data-gramm_editor','false');
+      inp.setAttribute('autocomplete','off');
+      inp.setAttribute('spellcheck','false');
+      td.appendChild(inp);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+function _fillSlotsGrid(slots) {
+  const map = {};
+  slots.forEach(s => {
+    const key = s.session_type + '_' + s.start_session + '_' + s.day_of_week;
+    if (!map[key]) map[key] = [];
+    map[key].push(_toShortCode(s.class_name));
+  });
+  document.querySelectorAll('#slotsGridBody input[data-session]').forEach(inp => {
+    const key = inp.dataset.session + '_' + inp.dataset.tiet + '_' + inp.dataset.day;
+    inp.value = (map[key] || []).join('-').toUpperCase();
+  });
+}
+
+function _toShortCode(cn) {
+  const m = cn.match(/^(10|11|12)([A-C])(.+)$/i);
+  return m ? (m[2] + m[3]).toUpperCase() : cn;
+}
+
+function _fromShortCode(code) {
+  code = code.trim().toUpperCase();
+  if (code.startsWith('C')) return '10C' + code.slice(1);
+  if (code.startsWith('B')) return '11B' + code.slice(1);
+  if (code.startsWith('A')) return '12A' + code.slice(1);
+  return code;
+}
+
+async function _saveSubjectSlots() {
+  const slots = [];
+  document.querySelectorAll('#slotsGridBody input[data-session]').forEach(inp => {
+    const val = inp.value.trim();
+    if (!val) return;
+    val.split(/[-,;\s]+/).filter(Boolean).forEach(code => {
+      if (/^[ABC]\d+$/i.test(code.trim())) {
+        slots.push({
+          class_name:    _fromShortCode(code.trim()),
+          day_of_week:   parseInt(inp.dataset.day),
+          session_type:  inp.dataset.session,
+          start_session: parseInt(inp.dataset.tiet),
+        });
+      }
+    });
+  });
+  const res = await fetch('/admin/subject-slots', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({subject: _slotsSubject, grade: _slotsGrade, slots}),
+  });
+  const d = await res.json();
+  if (d.ok) {
+    bootstrap.Modal.getInstance(document.getElementById('modalSubjectSlots'))?.hide();
+    showAlert('Đã lưu lịch đăng ký.', 'success');
+  } else {
+    showAlert(d.error || 'Lỗi lưu lịch.', 'error');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('slotsExcelFile').addEventListener('change', async function() {
+    const file = this.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('subject', _slotsSubject);
+    fd.append('grade', _slotsGrade);
+    const res = await fetch('/admin/subject-slots/upload', {method:'POST', body: fd});
+    const d   = await res.json();
+    if (d.ok) {
+      _fillSlotsGrid(d.slots);
+      showAlert(`Đã đọc ${d.count} slot từ file. Kiểm tra lại rồi nhấn Lưu.`, 'success');
+    } else {
+      showAlert(d.error || 'Lỗi đọc file.', 'error');
+    }
+    this.value = '';
+  });
+});
 
 // ════════════════════════════════════════
 // Subject Group Settings

@@ -213,6 +213,17 @@ settings_table = Table(
     Column("value", Text, nullable=True),
 )
 
+class_subject_slots = Table(
+    "class_subject_slots", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("subject", Text, nullable=False),
+    Column("grade", Integer, nullable=False),
+    Column("class_name", Text, nullable=False),      # e.g. "10C01"
+    Column("day_of_week", Integer, nullable=False),  # 2-7
+    Column("session_type", Text, nullable=False),    # 'morning' or 'afternoon'
+    Column("start_session", Integer, nullable=False),# 1-4
+)
+
 homeroom_classes = Table(
     "homeroom_classes", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -408,6 +419,17 @@ def init_db():
             conn.rollback()
         try:
             conn.execute(text("ALTER TABLE classes ADD COLUMN chuyen_de TEXT"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS class_subject_slots "
+                "(id INTEGER PRIMARY KEY AUTOINCREMENT, subject TEXT NOT NULL, "
+                "grade INTEGER NOT NULL, class_name TEXT NOT NULL, "
+                "day_of_week INTEGER NOT NULL, session_type TEXT NOT NULL, "
+                "start_session INTEGER NOT NULL)"
+            ))
             conn.commit()
         except Exception:
             conn.rollback()
@@ -6445,6 +6467,134 @@ def admin_class_publish(class_id):
             update(classes).where(classes.c.id == class_id).values(is_published=publish)
         )
     return jsonify(ok=True, is_published=bool(publish))
+
+
+@app.route("/admin/subject-slots", methods=["GET"])
+@admin_required
+def admin_subject_slots_get():
+    subject = request.args.get("subject", "").strip()
+    try:
+        grade = int(request.args.get("grade", 0))
+    except (ValueError, TypeError):
+        grade = 0
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(class_subject_slots).where(
+                class_subject_slots.c.subject == subject,
+                class_subject_slots.c.grade == grade,
+            )
+        ).fetchall()
+    return jsonify(ok=True, slots=[
+        {"class_name": r.class_name, "day_of_week": r.day_of_week,
+         "session_type": r.session_type, "start_session": r.start_session}
+        for r in rows
+    ])
+
+
+@app.route("/admin/subject-slots", methods=["POST"])
+@admin_required
+def admin_subject_slots_save():
+    data = request.get_json(force=True, silent=True) or {}
+    subject = (data.get("subject") or "").strip()
+    try:
+        grade = int(data.get("grade") or 0)
+    except (ValueError, TypeError):
+        grade = 0
+    slots = data.get("slots") or []
+    if not subject:
+        return jsonify(ok=False, error="Thiếu tên môn học")
+    with engine.begin() as conn:
+        conn.execute(delete(class_subject_slots).where(
+            class_subject_slots.c.subject == subject,
+            class_subject_slots.c.grade == grade,
+        ))
+        for s in slots:
+            cn = (s.get("class_name") or "").strip()
+            dow = int(s.get("day_of_week") or 0)
+            ses = (s.get("session_type") or "").strip()
+            st  = int(s.get("start_session") or 0)
+            if cn and 2 <= dow <= 7 and ses in ("morning", "afternoon") and 1 <= st <= 4:
+                conn.execute(insert(class_subject_slots).values(
+                    subject=subject, grade=grade,
+                    class_name=cn, day_of_week=dow,
+                    session_type=ses, start_session=st,
+                ))
+    return jsonify(ok=True)
+
+
+@app.route("/admin/subject-slots/upload", methods=["POST"])
+@admin_required
+def admin_subject_slots_upload():
+    import re as _re_slots
+    f = request.files.get("file")
+    if not f:
+        return jsonify(ok=False, error="Không có file")
+    try:
+        wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+        ws = wb.active
+        raw_rows = list(ws.iter_rows(values_only=True))
+    except Exception as e:
+        return jsonify(ok=False, error=f"Không đọc được file: {e}")
+    if len(raw_rows) < 2:
+        return jsonify(ok=False, error="File quá ngắn")
+
+    # Header row → day_of_week per column index
+    col_day = {}
+    for i, cell in enumerate(raw_rows[0]):
+        if i == 0 or cell is None:
+            continue
+        m = _re_slots.search(r'(\d)', str(cell))
+        if m:
+            d = int(m.group(1))
+            if 2 <= d <= 7:
+                col_day[i] = d
+
+    if not col_day:
+        return jsonify(ok=False, error="Không tìm thấy cột Thứ trong dòng đầu tiên")
+
+    PREFIX_GRADE = {"C": 10, "B": 11, "A": 12}
+
+    def parse_cell(cell):
+        if cell is None:
+            return []
+        codes = _re_slots.split(r'[,;\-\s/]+', str(cell).strip())
+        result = []
+        for code in codes:
+            code = code.strip().upper()
+            if not code:
+                continue
+            m = _re_slots.match(r'^([ABC])(\d+)$', code)
+            if m:
+                g = PREFIX_GRADE.get(m.group(1))
+                if g:
+                    result.append((f"{g}{m.group(1)}{m.group(2)}", g))
+        return result
+
+    slots = []
+    for row in raw_rows[1:]:
+        if not row or row[0] is None:
+            continue
+        label = str(row[0]).strip().lower()
+        if "sáng" in label or "sang" in label:
+            session = "morning"
+        elif "chiều" in label or "chieu" in label:
+            session = "afternoon"
+        else:
+            continue
+        m = _re_slots.search(r'(\d)', label)
+        if not m:
+            continue
+        start = int(m.group(1))
+        if not (1 <= start <= 4):
+            continue
+        for col_i, day in col_day.items():
+            if col_i >= len(row):
+                continue
+            for cn, _g in parse_cell(row[col_i]):
+                slots.append({"class_name": cn, "day_of_week": day,
+                               "session_type": session, "start_session": start})
+
+    return jsonify(ok=True, slots=slots, count=len(slots))
 
 
 @app.route("/admin/classes/<int:class_id>", methods=["DELETE"])

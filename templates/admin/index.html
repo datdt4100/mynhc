@@ -3059,13 +3059,18 @@ function _renderGd2Vis(list) {
         <span style="font-size:.78rem;font-weight:700;color:#374151;">${subj || '(Chưa có môn)'}</span>
         <div class="d-flex gap-1 flex-wrap">
           <button class="btn btn-xs" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #3B82F6;color:#3B82F6;border-radius:6px;background:transparent;"
-                  onclick="_openSubjectSlots(${JSON.stringify(subj || '')},${g})">
+                  data-slots-subj data-slots-grade="${g}">
             <i class="bi bi-calendar-week" style="font-size:.65rem;"></i> Lịch</button>
           <button class="btn btn-xs" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #10B981;color:#10B981;border-radius:6px;background:transparent;"
                   data-gd2-setall="${safeKey}" data-gd2-val="1">Bật tất</button>
           <button class="btn btn-xs" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #EF4444;color:#EF4444;border-radius:6px;background:transparent;"
                   data-gd2-setall="${safeKey}" data-gd2-val="0">Tắt tất</button>
         </div>`;
+      const slotsBtn = subjHeader.querySelector('[data-slots-subj]');
+      if (slotsBtn) {
+        slotsBtn.dataset.slotsSubj = subj || '';
+        slotsBtn.onclick = () => _openSubjectSlots(subj || '', g);
+      }
       subjHeader.querySelectorAll('[data-gd2-setall]').forEach(btn => {
         btn.onclick = () => _gd2VisSetAll(safeKey, btn.dataset.gd2Val === '1');
       });

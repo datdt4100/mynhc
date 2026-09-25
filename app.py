@@ -5759,34 +5759,54 @@ def admin_add_class_manual():
             if not teacher_row:
                 return jsonify(ok=False, error=f"Không tìm thấy giáo viên '{teacher_name}'.")
 
-        # Duplicate check
-        dup = conn.execute(
-            select(classes.c.id).where(and_(
-                classes.c.teacher_id    == teacher_row.id,
-                classes.c.grade         == grade,
-                classes.c.day_of_week   == day_of_week,
-                classes.c.session_type  == session_type,
-                classes.c.start_session == start_session,
-            ))
-        ).fetchone()
-        if dup:
-            return jsonify(ok=False, error="Lớp này đã tồn tại (trùng giáo viên / khối / thời gian).")
-
-        # Teacher time-overlap check
-        conflict = conn.execute(
-            select(classes.c.grade.label("g"), classes.c.start_session.label("s"),
-                   classes.c.duration.label("d")).where(and_(
-                classes.c.teacher_id   == teacher_row.id,
-                classes.c.day_of_week  == day_of_week,
-                classes.c.session_type == session_type,
-                classes.c.start_session < start_session + duration,
-                (classes.c.start_session + classes.c.duration) > start_session,
-            ))
-        ).fetchone()
-        if conflict:
-            return jsonify(ok=False,
-                error=f"Giáo viên đã có lớp K{conflict.g} tiết {conflict.s}–{conflict.s+conflict.d-1}"
-                      f" trùng khung giờ tiết {start_session}–{start_session+duration-1}.")
+        if school_assign:
+            # School-assigned: allow multiple classes at same slot+subject IF chuyen_de differs
+            existing_same = conn.execute(
+                select(classes.c.id, classes.c.chuyen_de).where(and_(
+                    classes.c.teacher_id    == teacher_row.id,
+                    classes.c.grade         == grade,
+                    classes.c.day_of_week   == day_of_week,
+                    classes.c.session_type  == session_type,
+                    classes.c.start_session == start_session,
+                    classes.c.subject       == subject_input,
+                ))
+            ).fetchall()
+            if existing_same:
+                if not chuyen_de_input:
+                    return jsonify(ok=False,
+                        error="Đã có lớp cùng môn cùng khung giờ. Nhập Chuyên đề để phân biệt hai lớp.")
+                taken = {(r.chuyen_de or "").strip() for r in existing_same}
+                if chuyen_de_input in taken:
+                    return jsonify(ok=False,
+                        error=f"Chuyên đề '{chuyen_de_input}' đã tồn tại ở môn này cùng khung giờ.")
+            # No time-overlap check for school-assigned placeholder
+        else:
+            # Normal teacher: strict duplicate + time-overlap check
+            dup = conn.execute(
+                select(classes.c.id).where(and_(
+                    classes.c.teacher_id    == teacher_row.id,
+                    classes.c.grade         == grade,
+                    classes.c.day_of_week   == day_of_week,
+                    classes.c.session_type  == session_type,
+                    classes.c.start_session == start_session,
+                ))
+            ).fetchone()
+            if dup:
+                return jsonify(ok=False, error="Lớp này đã tồn tại (trùng giáo viên / khối / thời gian).")
+            conflict = conn.execute(
+                select(classes.c.grade.label("g"), classes.c.start_session.label("s"),
+                       classes.c.duration.label("d")).where(and_(
+                    classes.c.teacher_id   == teacher_row.id,
+                    classes.c.day_of_week  == day_of_week,
+                    classes.c.session_type == session_type,
+                    classes.c.start_session < start_session + duration,
+                    (classes.c.start_session + classes.c.duration) > start_session,
+                ))
+            ).fetchone()
+            if conflict:
+                return jsonify(ok=False,
+                    error=f"Giáo viên đã có lớp K{conflict.g} tiết {conflict.s}–{conflict.s+conflict.d-1}"
+                          f" trùng khung giờ tiết {start_session}–{start_session+duration-1}.")
 
         subject = subject_input or teacher_row.subject_group or ""
         try:
@@ -5943,8 +5963,8 @@ def admin_import_classes_excel():
                 if thu not in range(2, 8):
                     errors_list.append(f"Dòng {i}: Thứ '{thu}' không hợp lệ.")
                     continue
-                if tiet not in (1, 3):
-                    errors_list.append(f"Dòng {i}: Tiết bắt đầu '{tiet}' không hợp lệ (phải là 1 hoặc 3).")
+                if tiet not in (1, 2, 3, 4):
+                    errors_list.append(f"Dòng {i}: Tiết bắt đầu '{tiet}' không hợp lệ (phải là 1, 2, 3 hoặc 4).")
                     continue
 
                 # Resolve teacher
@@ -5974,20 +5994,42 @@ def admin_import_classes_excel():
                         continue
                     subject = canonical  # normalize to DB canonical form
 
-                # Check duplicate: same class already exists (include subject so same-slot diff-subject rows are not collapsed)
-                dup = conn.execute(
-                    select(classes.c.id).where(and_(
-                        classes.c.teacher_id    == teacher_row.id,
-                        classes.c.grade         == grade,
-                        classes.c.subject       == subject,
-                        classes.c.day_of_week   == thu,
-                        classes.c.session_type  == buoi,
-                        classes.c.start_session == tiet,
-                    ))
-                ).fetchone()
-                if dup:
-                    skipped += 1
-                    continue
+                # Check duplicate
+                if is_school_assign:
+                    # School-assigned: allow multiple at same slot+subject if chuyen_de differs
+                    existing_slot = conn.execute(
+                        select(classes.c.id, classes.c.chuyen_de).where(and_(
+                            classes.c.teacher_id    == teacher_row.id,
+                            classes.c.grade         == grade,
+                            classes.c.subject       == subject,
+                            classes.c.day_of_week   == thu,
+                            classes.c.session_type  == buoi,
+                            classes.c.start_session == tiet,
+                        ))
+                    ).fetchall()
+                    if existing_slot:
+                        taken_cd = {(r.chuyen_de or "").strip() for r in existing_slot}
+                        cur_cd   = (chuyen_de_val or "").strip()
+                        if cur_cd in taken_cd:
+                            skipped += 1
+                            continue
+                        if not cur_cd:
+                            errors_list.append(f"Dòng {i}: Đã có lớp cùng môn cùng khung giờ. Cần nhập Chuyên đề để phân biệt.")
+                            continue
+                else:
+                    dup = conn.execute(
+                        select(classes.c.id).where(and_(
+                            classes.c.teacher_id    == teacher_row.id,
+                            classes.c.grade         == grade,
+                            classes.c.subject       == subject,
+                            classes.c.day_of_week   == thu,
+                            classes.c.session_type  == buoi,
+                            classes.c.start_session == tiet,
+                        ))
+                    ).fetchone()
+                    if dup:
+                        skipped += 1
+                        continue
 
                 # Check teacher time conflict (skip for placeholder — admin assigns real teacher later)
                 if teacher_row.cccd != _UNASSIGNED_CCCD:

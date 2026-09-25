@@ -3170,6 +3170,24 @@ function _openSubjectSlots(subject, grade) {
     .then(d => { if (d.ok) _fillSlotsGrid(d.slots); });
 }
 
+function _slotCellColor(inp) {
+  const val = inp.value.trim();
+  if (!val) {
+    inp.style.background = '#fff';
+    inp.style.borderColor = '#dee2e6';
+    return;
+  }
+  const codes = val.split(/[-,;\s]+/).filter(Boolean);
+  const allValid = codes.every(c => /^[ABC]\d+$/i.test(c.trim()));
+  if (allValid) {
+    inp.style.background = '#DBEAFE';  /* blue-100 */
+    inp.style.borderColor = '#3B82F6';
+  } else {
+    inp.style.background = '#FEE2E2';  /* red-100 */
+    inp.style.borderColor = '#EF4444';
+  }
+}
+
 function _buildSlotsGrid() {
   const tbody = document.getElementById('slotsGridBody');
   tbody.innerHTML = '';
@@ -3184,7 +3202,7 @@ function _buildSlotsGrid() {
       const inp = document.createElement('input');
       inp.type  = 'text';
       inp.className = 'form-control form-control-sm';
-      inp.style = 'font-size:.71rem;border-radius:4px;text-transform:uppercase;padding:2px 5px;';
+      inp.style = 'font-size:.71rem;border-radius:4px;text-transform:uppercase;padding:2px 5px;transition:background .1s,border-color .1s;';
       inp.dataset.session = row.session;
       inp.dataset.tiet    = row.tiet;
       inp.dataset.day     = day;
@@ -3193,6 +3211,7 @@ function _buildSlotsGrid() {
       inp.setAttribute('data-gramm_editor','false');
       inp.setAttribute('autocomplete','off');
       inp.setAttribute('spellcheck','false');
+      inp.addEventListener('input', function() { _slotCellColor(this); });
       td.appendChild(inp);
       tr.appendChild(td);
     });
@@ -3210,6 +3229,7 @@ function _fillSlotsGrid(slots) {
   document.querySelectorAll('#slotsGridBody input[data-session]').forEach(inp => {
     const key = inp.dataset.session + '_' + inp.dataset.tiet + '_' + inp.dataset.day;
     inp.value = (map[key] || []).join('-').toUpperCase();
+    _slotCellColor(inp);
   });
 }
 

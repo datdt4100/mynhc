@@ -82,8 +82,9 @@ def _bump(event_type="class", grade=None):
     _counts_cache_invalidate()  # flush stale cache on any change
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///classreg.db")
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+# Normalize any postgres/postgresql variant to use psycopg2 (psycopg2-binary installed)
+import re as _re
+DATABASE_URL = _re.sub(r'^postgres(?:ql)?(?:\+\w+)?://', 'postgresql+psycopg2://', DATABASE_URL)
 
 _engine_kwargs = {"future": True, "pool_pre_ping": True}
 if not DATABASE_URL.startswith("sqlite"):

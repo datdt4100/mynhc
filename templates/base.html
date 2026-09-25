@@ -184,6 +184,34 @@
       onScroll();
     })();
 
+    /* Disable Grammarly extension on all text inputs to prevent 5-second focus lag */
+    (function () {
+      function disableGrammarly(root) {
+        root.querySelectorAll('input:not([data-gramm]),textarea:not([data-gramm])').forEach(function(el) {
+          el.setAttribute('data-gramm', 'false');
+          el.setAttribute('data-gramm_editor', 'false');
+        });
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { disableGrammarly(document); });
+      } else {
+        disableGrammarly(document);
+      }
+      new MutationObserver(function(mutations) {
+        mutations.forEach(function(m) {
+          m.addedNodes.forEach(function(node) {
+            if (node.nodeType !== 1) return;
+            if (node.matches('input,textarea')) {
+              node.setAttribute('data-gramm', 'false');
+              node.setAttribute('data-gramm_editor', 'false');
+            } else {
+              disableGrammarly(node);
+            }
+          });
+        });
+      }).observe(document.documentElement, { childList: true, subtree: true });
+    })();
+
   </script>
 </body>
 </html>

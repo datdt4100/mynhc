@@ -958,7 +958,7 @@
       </button>
       <div class="search-box ms-auto">
         <i class="bi bi-search"></i>
-        <input type="search" id="searchTeacher" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterTeachers()" autocomplete="off" spellcheck="false">
+        <input type="search" id="searchTeacher" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterTeachers()" autocomplete="off" spellcheck="false" data-gramm="false" data-gramm_editor="false">
       </div>
       <form method="POST" action="{{ url_for('admin_teachers_clear') }}" class="mb-0">
         <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" style="border-radius:8px; font-size:.78rem;"
@@ -1098,7 +1098,7 @@
       </button>
       <div class="search-box ms-auto">
         <i class="bi bi-search"></i>
-        <input type="search" id="searchStudent" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterStudents()" autocomplete="off" spellcheck="false">
+        <input type="search" id="searchStudent" placeholder="Tìm tên hoặc mã đăng nhập…" oninput="filterStudents()" autocomplete="off" spellcheck="false" data-gramm="false" data-gramm_editor="false">
       </div>
       <form method="POST" action="{{ url_for('admin_students_reset_all') }}" class="mb-0">
         <button type="button" class="btn btn-sm btn-outline-warning fw-semibold" style="border-radius:8px; font-size:.78rem;"
@@ -1307,7 +1307,7 @@
         <div id="addRoomError" class="alert alert-danger d-none mb-3"></div>
         <div class="mb-4">
           <label class="form-label fw-semibold" style="font-size:.85rem;">Tên phòng <span class="text-danger">*</span></label>
-          <input type="text" id="newRoomName" class="form-control" placeholder="VD: A101, Hội trường B..." maxlength="50" autocomplete="off" spellcheck="false" inputmode="text">
+          <input type="text" id="newRoomName" class="form-control" placeholder="VD: A101, Hội trường B..." maxlength="50" autocomplete="off" spellcheck="false" inputmode="text" data-gramm="false" data-gramm_editor="false">
         </div>
         <div class="mb-3">
           <div class="form-check d-flex align-items-center gap-2" style="padding-left:0;">
@@ -1357,11 +1357,11 @@
         <div class="modal-body p-4">
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Họ tên <span class="text-danger">*</span></label>
-            <input type="text" name="full_name" class="form-control" placeholder="Nguyễn Văn A" autocomplete="off" spellcheck="false" inputmode="text" required>
+            <input type="text" name="full_name" class="form-control" placeholder="Nguyễn Văn A" autocomplete="off" spellcheck="false" inputmode="text" data-gramm="false" data-gramm_editor="false" required>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Mã đăng nhập <span class="text-danger">*</span></label>
-            <input type="text" name="cccd" class="form-control" placeholder="Nhập mã đăng nhập" autocomplete="off" spellcheck="false" inputmode="text" required>
+            <input type="text" name="cccd" class="form-control" placeholder="Nhập mã đăng nhập" autocomplete="off" spellcheck="false" inputmode="text" data-gramm="false" data-gramm_editor="false" required>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Giới tính</label>
@@ -1372,7 +1372,7 @@
           </div>
           <div class="mb-1">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Tổ bộ môn <span class="text-danger">*</span></label>
-            <input type="text" name="subject_group" class="form-control" placeholder="Tổ Toán – Lý – Tin" autocomplete="off" spellcheck="false" inputmode="text" required>
+            <input type="text" name="subject_group" class="form-control" placeholder="Tổ Toán – Lý – Tin" autocomplete="off" spellcheck="false" inputmode="text" data-gramm="false" data-gramm_editor="false" required>
           </div>
         </div>
         <div class="modal-footer border-top" style="padding:16px 20px;">
@@ -1403,15 +1403,15 @@
         <div class="modal-body p-4">
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Họ tên <span class="text-danger">*</span></label>
-            <input type="text" name="full_name" class="form-control" placeholder="Trần Thị B" autocomplete="off" spellcheck="false" inputmode="text" required>
+            <input type="text" name="full_name" class="form-control" placeholder="Trần Thị B" autocomplete="off" spellcheck="false" inputmode="text" data-gramm="false" data-gramm_editor="false" required>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Mã đăng nhập <span class="text-danger">*</span></label>
-            <input type="text" name="cccd" class="form-control" placeholder="Nhập mã đăng nhập" autocomplete="off" spellcheck="false" inputmode="text" required>
+            <input type="text" name="cccd" class="form-control" placeholder="Nhập mã đăng nhập" autocomplete="off" spellcheck="false" inputmode="text" data-gramm="false" data-gramm_editor="false" required>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Lớp <span class="text-danger">*</span></label>
-            <input type="text" name="class_name" class="form-control" placeholder="10A1" autocomplete="off" spellcheck="false" inputmode="text" required>
+            <input type="text" name="class_name" class="form-control" placeholder="10A1" autocomplete="off" spellcheck="false" inputmode="text" data-gramm="false" data-gramm_editor="false" required>
           </div>
           <div class="mb-1">
             <label class="form-label fw-semibold" style="font-size:.85rem;">Khối <span class="text-danger">*</span></label>
@@ -1600,14 +1600,16 @@
             <input id="manChuyenDe" type="text" class="form-control form-control-sm"
                    placeholder="VD: Văn học dân gian, Đại số và giải tích..."
                    style="font-size:.82rem;border-radius:8px;"
-                   autocomplete="off" spellcheck="false" inputmode="text">
+                   autocomplete="off" spellcheck="false" inputmode="text"
+                   data-gramm="false" data-gramm_editor="false">
           </div>
           <div class="col-12">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Ghi chú <span class="text-muted fw-normal">(hiển thị cho học sinh)</span></label>
             <textarea id="manNotes" rows="2" class="form-control form-control-sm"
                       placeholder="Ví dụ: Lớp dành cho HS chọn ban tự nhiên..."
                       style="font-size:.82rem;border-radius:8px;resize:none;"
-                      autocomplete="off" spellcheck="false" inputmode="text"></textarea>
+                      autocomplete="off" spellcheck="false" inputmode="text"
+                      data-gramm="false" data-gramm_editor="false"></textarea>
           </div>
         </div>
         <div id="manualResult" class="mt-3" style="display:none;"></div>
@@ -2707,12 +2709,21 @@ function _closeManTeacherList() {
   document.getElementById('manTeacherChevron').classList.remove('open');
 }
 
+/* Capture-phase focusin: runs before Grammarly's bubble-phase listener.
+   stopPropagation() prevents Grammarly's querySelectorAll DOM scan (11s lag). */
 document.addEventListener('focusin', function(e) {
-  const list = document.getElementById('manTeacherList');
-  if (!list || list.style.display === 'none') return;
-  const wrap = document.getElementById('manTeacherWrap');
-  if (wrap && !wrap.contains(e.target)) _closeManTeacherList();
-});
+  const tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+    // Teacher dropdown close logic (our own)
+    const list = document.getElementById('manTeacherList');
+    if (list && list.style.display !== 'none') {
+      const wrap = document.getElementById('manTeacherWrap');
+      if (wrap && !wrap.contains(e.target)) _closeManTeacherList();
+    }
+    // Block Grammarly's focusin from bubbling to document
+    e.stopPropagation();
+  }
+}, true /* capture */);
 
 function _manSelectTeacher(item) {
   document.querySelectorAll('.man-teacher-item').forEach(el => {

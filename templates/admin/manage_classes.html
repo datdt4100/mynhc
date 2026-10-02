@@ -2,18 +2,8 @@
 {% block title %}Quản lý lớp học{% endblock %}
 
 {% block hero_content %}
-<div class="d-flex align-items-center gap-3">
-  <a href="{{ url_for('admin_index') }}"
-     style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.28);border:1.5px solid rgba(255,255,255,.55);color:#fff;text-decoration:none;font-size:1rem;flex-shrink:0;transition:background .15s;"
-     onmouseenter="this.style.background='rgba(255,255,255,.42)'"
-     onmouseleave="this.style.background='rgba(255,255,255,.28)'">
-    <i class="bi bi-arrow-left"></i>
-  </a>
-  <div>
-    <h1 class="hero-title" style="font-size:1.5rem;">Quản lý lớp học</h1>
-    <p class="hero-sub" style="font-size:.88rem;margin:0;">Lớp hoạt động · Danh sách học sinh</p>
-  </div>
-</div>
+<h1 class="hero-title" style="font-size:1.5rem;">Quản lý lớp học</h1>
+<p class="hero-sub" style="font-size:.88rem;margin:0;">Lớp hoạt động · Danh sách học sinh</p>
 {% endblock %}
 
 {% block content %}
@@ -38,6 +28,16 @@
 </style>
 
 <div class="container py-4">
+  <div class="d-flex align-items-center gap-2 mb-4">
+    <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+       style="border-radius:8px;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;padding:0;" title="Quay lại">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h1 style="font-size:1.1rem;font-weight:800;color:#0c4a6e;margin:0;">
+      <i class="bi bi-mortarboard-fill me-2" style="color:#16A34A;"></i>Quản lý lớp học
+    </h1>
+  </div>
+
   <!-- Filter bar -->
   <div class="mb-4 p-3" style="background:#fff;border-radius:12px;border:1px solid #E2E8F0;box-shadow:0 1px 4px rgba(0,0,0,.05);">
     <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
@@ -107,9 +107,9 @@ function _setGrade(g) {
 
 function _setSubject(s) {
   _filterSubject = s;
-  document.querySelectorAll('[id^="subjTab_"]').forEach(btn => {
-    const key = btn.id.replace('subjTab_', '');
-    btn.className = 'filter-tab' + ((s === null && key === 'all') || s === key ? ' active' : '');
+  document.querySelectorAll('.subj-tab-btn').forEach(btn => {
+    const v = btn.dataset.subj;
+    btn.className = 'filter-tab subj-tab-btn' + ((s === null ? v === '' : v === s) ? ' active' : '');
   });
   _renderClasses();
 }
@@ -118,11 +118,10 @@ function _buildSubjectTabs(classes) {
   const subjects = [...new Set(classes.map(c => c.subject || c.subject_group || '').filter(Boolean))].sort();
   const row = document.getElementById('subjectFilterRow');
   row.innerHTML = '<span style="font-size:.74rem;font-weight:700;color:#374151;min-width:36px;">Môn</span>' +
-    '<button class="filter-tab active" id="subjTab_all" onclick="_setSubject(null)">Tất cả</button>' +
-    subjects.map(s => {
-      const safe = s.replace(/[^a-zA-Z0-9]/g, '_');
-      return `<button class="filter-tab" id="subjTab_${safe}" onclick="_setSubject('${s.replace(/'/g,"\\'")}')">` + s + '</button>';
-    }).join('');
+    `<button class="filter-tab subj-tab-btn active" data-subj="" onclick="_setSubject(null)">Tất cả</button>` +
+    subjects.map(s =>
+      `<button class="filter-tab subj-tab-btn" data-subj="${s.replace(/"/g,'&quot;')}" onclick="_setSubject(${JSON.stringify(s)})">${s}</button>`
+    ).join('');
 }
 
 async function _loadClasses() {

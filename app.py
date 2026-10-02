@@ -7797,9 +7797,9 @@ def admin_manage_classes_data():
                 classes.c.max_capacity,
                 classes.c.location,
                 classes.c.is_published,
-                classes.c.is_active,
                 teachers.c.full_name.label("teacher_name"),
                 teachers.c.subject_group,
+                teachers.c.cccd.label("teacher_cccd"),
             )
             .select_from(classes.outerjoin(teachers, classes.c.teacher_id == teachers.c.id))
             .order_by(classes.c.grade, classes.c.subject, classes.c.day_of_week, classes.c.start_session)
@@ -7825,7 +7825,7 @@ def admin_manage_classes_data():
             "enrolled": enroll_counts.get(r.id, 0),
             "location": r.location or "",
             "is_published": bool(r.is_published),
-            "is_active": bool(r.is_active),
+            "is_active": bool(r.location and r.teacher_cccd and r.teacher_cccd != _UNASSIGNED_CCCD),
         }
         for r in rows
     ]

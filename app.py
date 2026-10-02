@@ -133,6 +133,7 @@ students = Table(
     Column("must_change_password", Integer, default=0),
     Column("activated_at", Text, nullable=True),
     Column("last_seen_at", Text, nullable=True),
+    Column("reg_locked", Integer, default=0),
 )
 
 classes = Table(
@@ -151,6 +152,7 @@ classes = Table(
     Column("extra_data", Text, nullable=True),        # JSON blob
     Column("notes", Text, nullable=True),             # Admin note shown to students
     Column("is_published", Integer, default=0),
+    Column("is_active", Integer, default=0),
     Column("created_at", Text, default="CURRENT_TIMESTAMP"),
 )
 
@@ -232,6 +234,12 @@ homeroom_classes = Table(
     Column("subject_group", Text, nullable=True),              # Tổ bộ môn GVCN
     Column("show_student_tab", Integer, default=0),            # 1 = GVCN thấy tab Quản lý HS
     Column("phase2_enabled", Integer, nullable=False, server_default="1"),  # 1 = lớp được đăng ký GĐ2
+)
+
+subject_schedule_settings = Table(
+    "subject_schedule_settings", metadata,
+    Column("subject", Text, primary_key=True),
+    Column("schedule_enforced", Integer, nullable=False, server_default="0"),
 )
 
 operators = Table(
@@ -423,12 +431,31 @@ def init_db():
         except Exception:
             conn.rollback()
         try:
+            conn.execute(text("ALTER TABLE classes ADD COLUMN is_active INTEGER NOT NULL DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            conn.execute(text("ALTER TABLE students ADD COLUMN reg_locked INTEGER NOT NULL DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS class_subject_slots "
                 "(id INTEGER PRIMARY KEY AUTOINCREMENT, subject TEXT NOT NULL, "
                 "grade INTEGER NOT NULL, class_name TEXT NOT NULL, "
                 "day_of_week INTEGER NOT NULL, session_type TEXT NOT NULL, "
                 "start_session INTEGER NOT NULL)"
+            ))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+        try:
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS subject_schedule_settings "
+                "(subject TEXT PRIMARY KEY, schedule_enforced INTEGER NOT NULL DEFAULT 0)"
             ))
             conn.commit()
         except Exception:
@@ -2031,6 +2058,37 @@ def student_dashboard():
                     else:
                         student_schedule[key] = {"status": "blocked"}
 
+    # Filter published_classes based on per-subject schedule enforcement
+    with engine.connect() as _enf_conn:
+        _enf_rows = _enf_conn.execute(
+            select(subject_schedule_settings.c.subject)
+            .where(subject_schedule_settings.c.schedule_enforced == 1)
+        ).fetchall()
+        _enforced = {r.subject for r in _enf_rows}
+        if _enforced and student_row and student_row.class_name:
+            _allowed_rows = _enf_conn.execute(
+                select(
+                    class_subject_slots.c.subject,
+                    class_subject_slots.c.day_of_week,
+                    class_subject_slots.c.session_type,
+                    class_subject_slots.c.start_session,
+                ).where(
+                    class_subject_slots.c.class_name == student_row.class_name,
+                    class_subject_slots.c.subject.in_(_enforced),
+                )
+            ).fetchall()
+            _allowed_map: dict = {}
+            for _r in _allowed_rows:
+                _allowed_map.setdefault(_r.subject, set()).add(
+                    (_r.day_of_week, _r.session_type, _r.start_session)
+                )
+            published_classes = [
+                c for c in published_classes
+                if (c.subject or "") not in _enforced
+                or (c.day_of_week, c.session_type, c.start_session)
+                    in _allowed_map.get(c.subject or "", set())
+            ]
+
     student_reg_open    = get_setting("student_reg_open",    "0") == "1"
     supplement_reg_open = get_setting("supplement_reg_open", "0") == "1"
     require_5_subjects  = get_setting("require_5_subjects",  "1") == "1"
@@ -2078,6 +2136,7 @@ def student_dashboard():
         day_name=day_name,
         session_label=session_label,
         phase2_allowed=phase2_allowed,
+        reg_locked=bool(student_row.reg_locked if student_row and hasattr(student_row, 'reg_locked') and student_row.reg_locked else 0),
     )
 
 
@@ -2361,6 +2420,13 @@ def student_enroll():
                 ).fetchone()
                 if hroom is not None and not hroom.phase2_enabled:
                     return jsonify(ok=False, error="Lớp của bạn chưa được mở khoá để đăng ký giai đoạn 2.")
+
+    with engine.connect() as conn:
+        _st_lock = conn.execute(
+            select(students.c.reg_locked).where(students.c.id == session.get("user_id"))
+        ).fetchone()
+        if _st_lock and _st_lock.reg_locked:
+            return jsonify(ok=False, error="Tài khoản của bạn đang bị khoá đăng ký. Vui lòng liên hệ nhà trường.")
 
     data = request.get_json(force=True)
     student_id = session["user_id"]
@@ -6480,6 +6546,11 @@ def admin_gd2_classes():
             ).fetchall()
         }
 
+        schedule_settings = {
+            r.subject: bool(r.schedule_enforced)
+            for r in conn.execute(select(subject_schedule_settings)).fetchall()
+        }
+
     result = [
         {
             "id": r.id,
@@ -6496,7 +6567,7 @@ def admin_gd2_classes():
         }
         for r in rows
     ]
-    return jsonify(ok=True, classes=result)
+    return jsonify(ok=True, classes=result, schedule_settings=schedule_settings)
 
 
 @app.route("/admin/classes/<int:class_id>/publish", methods=["POST"])
@@ -6520,17 +6591,20 @@ def admin_subject_slots_get():
     except (ValueError, TypeError):
         grade = 0
     with engine.connect() as conn:
-        rows = conn.execute(
-            select(class_subject_slots).where(
-                class_subject_slots.c.subject == subject,
-                class_subject_slots.c.grade == grade,
-            )
-        ).fetchall()
+        q = select(class_subject_slots).where(class_subject_slots.c.subject == subject)
+        if grade != 0:
+            q = q.where(class_subject_slots.c.grade == grade)
+        rows = conn.execute(q).fetchall()
     return jsonify(ok=True, slots=[
         {"class_name": r.class_name, "day_of_week": r.day_of_week,
          "session_type": r.session_type, "start_session": r.start_session}
         for r in rows
     ])
+
+
+def _grade_from_classname(cn: str):
+    m = re.match(r'^(10|11|12)', cn)
+    return int(m.group(1)) if m else None
 
 
 @app.route("/admin/subject-slots", methods=["POST"])
@@ -6546,21 +6620,39 @@ def admin_subject_slots_save():
     if not subject:
         return jsonify(ok=False, error="Thiếu tên môn học")
     with engine.begin() as conn:
-        conn.execute(delete(class_subject_slots).where(
-            class_subject_slots.c.subject == subject,
-            class_subject_slots.c.grade == grade,
-        ))
-        for s in slots:
-            cn = (s.get("class_name") or "").strip()
-            dow = int(s.get("day_of_week") or 0)
-            ses = (s.get("session_type") or "").strip()
-            st  = int(s.get("start_session") or 0)
-            if cn and 2 <= dow <= 7 and ses in ("morning", "afternoon") and 1 <= st <= 4:
-                conn.execute(insert(class_subject_slots).values(
-                    subject=subject, grade=grade,
-                    class_name=cn, day_of_week=dow,
-                    session_type=ses, start_session=st,
-                ))
+        if grade == 0:
+            # Delete all grades for this subject and re-derive from class_name
+            conn.execute(delete(class_subject_slots).where(
+                class_subject_slots.c.subject == subject,
+            ))
+            for s in slots:
+                cn  = (s.get("class_name") or "").strip()
+                dow = int(s.get("day_of_week") or 0)
+                ses = (s.get("session_type") or "").strip()
+                st  = int(s.get("start_session") or 0)
+                cls_grade = _grade_from_classname(cn)
+                if cn and cls_grade and 2 <= dow <= 7 and ses in ("morning", "afternoon") and 1 <= st <= 4:
+                    conn.execute(insert(class_subject_slots).values(
+                        subject=subject, grade=cls_grade,
+                        class_name=cn, day_of_week=dow,
+                        session_type=ses, start_session=st,
+                    ))
+        else:
+            conn.execute(delete(class_subject_slots).where(
+                class_subject_slots.c.subject == subject,
+                class_subject_slots.c.grade == grade,
+            ))
+            for s in slots:
+                cn  = (s.get("class_name") or "").strip()
+                dow = int(s.get("day_of_week") or 0)
+                ses = (s.get("session_type") or "").strip()
+                st  = int(s.get("start_session") or 0)
+                if cn and 2 <= dow <= 7 and ses in ("morning", "afternoon") and 1 <= st <= 4:
+                    conn.execute(insert(class_subject_slots).values(
+                        subject=subject, grade=grade,
+                        class_name=cn, day_of_week=dow,
+                        session_type=ses, start_session=st,
+                    ))
     return jsonify(ok=True)
 
 
@@ -6637,6 +6729,34 @@ def admin_subject_slots_upload():
                                "session_type": session, "start_session": start})
 
     return jsonify(ok=True, slots=slots, count=len(slots))
+
+
+@app.route("/admin/subject-schedule-enforce", methods=["POST"])
+@admin_required
+def admin_subject_schedule_enforce():
+    data = request.get_json(force=True, silent=True) or {}
+    subject = (data.get("subject") or "").strip()
+    if not subject:
+        return jsonify(ok=False, error="Thiếu tên môn học")
+    enforced = 1 if data.get("enforced") else 0
+    with engine.begin() as conn:
+        existing = conn.execute(
+            select(subject_schedule_settings.c.subject)
+            .where(subject_schedule_settings.c.subject == subject)
+        ).fetchone()
+        if existing:
+            conn.execute(
+                update(subject_schedule_settings)
+                .where(subject_schedule_settings.c.subject == subject)
+                .values(schedule_enforced=enforced)
+            )
+        else:
+            conn.execute(
+                insert(subject_schedule_settings).values(
+                    subject=subject, schedule_enforced=enforced
+                )
+            )
+    return jsonify(ok=True, enforced=bool(enforced))
 
 
 @app.route("/admin/classes/<int:class_id>", methods=["DELETE"])
@@ -7355,7 +7475,7 @@ def api_admin_enrollment_delete(enrollment_id):
 def admin_enrollment_students(class_id):
     with engine.connect() as conn:
         enrolled = conn.execute(
-            select(students, enrollments.c.enrolled_at)
+            select(students, enrollments.c.enrolled_at, enrollments.c.id.label("enrollment_id"))
             .join(enrollments, students.c.id == enrollments.c.student_id)
             .where(enrollments.c.class_id == class_id)
             .order_by(students.c.class_name, students.c.full_name)
@@ -7369,6 +7489,7 @@ def admin_enrollment_students(class_id):
             "class_name": s.class_name,
             "grade": s.grade,
             "enrolled_at": s.enrolled_at,
+            "enrollment_id": s.enrollment_id,
             "last_seen_at": s.last_seen_at if hasattr(s, "last_seen_at") else None,
         }
         for s in enrolled
@@ -7622,6 +7743,129 @@ def admin_logs_clear():
     with engine.begin() as conn:
         conn.execute(delete(admin_action_log))
     return jsonify(ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Manage Classes
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/classes/<int:class_id>/toggle-active", methods=["POST"])
+@admin_required
+def admin_class_toggle_active(class_id):
+    with engine.connect() as conn:
+        cls = conn.execute(select(classes.c.is_active).where(classes.c.id == class_id)).fetchone()
+    if not cls:
+        return jsonify(ok=False, error="Không tìm thấy lớp"), 404
+    new_val = 0 if cls.is_active else 1
+    with engine.begin() as conn:
+        conn.execute(update(classes).where(classes.c.id == class_id).values(is_active=new_val))
+    return jsonify(ok=True, is_active=bool(new_val))
+
+
+@app.route("/admin/students/<int:student_id>/toggle-reg-lock", methods=["POST"])
+@admin_required
+def admin_student_toggle_reg_lock(student_id):
+    with engine.connect() as conn:
+        st = conn.execute(select(students.c.reg_locked).where(students.c.id == student_id)).fetchone()
+    if not st:
+        return jsonify(ok=False, error="Không tìm thấy học sinh"), 404
+    new_val = 0 if (st.reg_locked or 0) else 1
+    with engine.begin() as conn:
+        conn.execute(update(students).where(students.c.id == student_id).values(reg_locked=new_val))
+    return jsonify(ok=True, reg_locked=bool(new_val))
+
+
+@app.route("/admin/manage-classes")
+@admin_required
+def admin_manage_classes():
+    return render_template("admin/manage_classes.html")
+
+
+@app.route("/admin/manage-classes/data")
+@admin_required
+def admin_manage_classes_data():
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(
+                classes.c.id,
+                classes.c.grade,
+                classes.c.subject,
+                classes.c.day_of_week,
+                classes.c.session_type,
+                classes.c.start_session,
+                classes.c.duration,
+                classes.c.max_capacity,
+                classes.c.location,
+                classes.c.is_published,
+                classes.c.is_active,
+                teachers.c.full_name.label("teacher_name"),
+                teachers.c.subject_group,
+            )
+            .select_from(classes.outerjoin(teachers, classes.c.teacher_id == teachers.c.id))
+            .order_by(classes.c.grade, classes.c.subject, classes.c.day_of_week, classes.c.start_session)
+        ).fetchall()
+        enroll_counts = {
+            r.class_id: r.cnt
+            for r in conn.execute(
+                select(enrollments.c.class_id, func.count().label("cnt")).group_by(enrollments.c.class_id)
+            ).fetchall()
+        }
+    result = [
+        {
+            "id": r.id,
+            "grade": r.grade,
+            "subject": r.subject or "",
+            "subject_group": r.subject_group or "",
+            "teacher": r.teacher_name or "",
+            "day_of_week": r.day_of_week,
+            "session_type": r.session_type,
+            "start_session": r.start_session,
+            "duration": r.duration,
+            "max_capacity": r.max_capacity or 0,
+            "enrolled": enroll_counts.get(r.id, 0),
+            "location": r.location or "",
+            "is_published": bool(r.is_published),
+            "is_active": bool(r.is_active),
+        }
+        for r in rows
+    ]
+    return jsonify(ok=True, classes=result)
+
+
+@app.route("/admin/classes/<int:class_id>/export-students")
+@admin_required
+def admin_class_export_students(class_id):
+    import io as _io
+    with engine.connect() as conn:
+        cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        if not cls:
+            return "Không tìm thấy lớp", 404
+        teacher_row = conn.execute(select(teachers).where(teachers.c.id == cls.teacher_id)).fetchone()
+        enrolled = conn.execute(
+            select(students, enrollments.c.enrolled_at, enrollments.c.id.label("enrollment_id"))
+            .join(enrollments, students.c.id == enrollments.c.student_id)
+            .where(enrollments.c.class_id == class_id)
+            .order_by(students.c.class_name, students.c.full_name)
+        ).fetchall()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ses_label = "Sáng" if cls.session_type == "morning" else "Chiều"
+    ws.title = f"Lớp {class_id}"
+    ws.append([
+        f"Môn: {cls.subject or ''}",
+        f"GV: {_name_fmt(teacher_row.full_name) if teacher_row else ''}",
+        f"T{cls.day_of_week} {ses_label} T{cls.start_session}",
+        f"Phòng: {cls.location or '(chưa xếp)'}",
+    ])
+    ws.append([])
+    ws.append(["STT", "Họ và tên", "Lớp", "CCCD/CMND", "Ngày sinh", "Giới tính", "Email", "Thời gian đăng ký"])
+    for i, s in enumerate(enrolled, 1):
+        ws.append([i, _name_fmt(s.full_name), s.class_name, s.cccd, s.dob or "", s.gender or "", s.email or "", s.enrolled_at or ""])
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"lop_{class_id}_danhsach.xlsx"
+    return send_file(buf, download_name=fname, as_attachment=True, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 # ---------------------------------------------------------------------------

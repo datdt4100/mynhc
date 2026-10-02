@@ -674,6 +674,23 @@
     </div>
   </div>
 
+  <!-- ── Quản lý lớp học ── -->
+  <div class="row g-3 mb-4">
+    <div class="col-12">
+      <div class="nav-box d-flex align-items-center gap-3 py-3 px-4"
+           style="cursor:pointer;" onclick="location.href='{{ url_for('admin_manage_classes') }}'">
+        <div class="nav-box-icon flex-shrink-0" style="background:#F0FDF4;">
+          <i class="bi bi-mortarboard-fill" style="color:#16A34A;"></i>
+        </div>
+        <div class="flex-grow-1">
+          <h5 style="margin-bottom:2px;">Quản lý lớp học</h5>
+          <p>Xem danh sách lớp hoạt động, danh sách học sinh từng lớp, xuất Excel.</p>
+        </div>
+        <i class="bi bi-arrow-right-circle nav-box-arrow ms-1 flex-shrink-0" style="color:#16A34A;"></i>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Quản lý tài khoản quản trị lớp học ── -->
   <div class="row g-3 mb-4">
     <div class="col-12">
@@ -1225,6 +1242,13 @@
                             title="Reset đăng ký môn học"><i class="bi bi-arrow-counterclockwise"></i></button>
                   </form>
                   {% endif %}
+                  <button type="button"
+                          class="adm-icon-btn {% if s.reg_locked %}btn-outline-danger{% else %}btn-outline-secondary{% endif %}"
+                          onclick="toggleStudentLock({{ s.id }}, {{ 'true' if s.reg_locked else 'false' }}, '{{ s.full_name | name_fmt | e }}')"
+                          title="{% if s.reg_locked %}Đang khoá đăng ký — Click để mở khoá{% else %}Click để khoá đăng ký{% endif %}"
+                          id="lockBtn_{{ s.id }}">
+                    <i class="bi bi-{% if s.reg_locked %}lock-fill{% else %}unlock{% endif %}"></i>
+                  </button>
                   <button type="button" class="adm-icon-btn btn-outline-danger"
                           onclick="deleteAccount('student', {{ s.id }}, '{{ s.full_name | name_fmt | e }}')"
                           title="Xóa học sinh"><i class="bi bi-trash"></i></button>
@@ -1675,7 +1699,7 @@
     <div class="modal-content" style="border-radius:14px;border:none;">
       <div class="modal-header" style="background:linear-gradient(135deg,#1e40af,#3b82f6);border:none;padding:12px 18px;">
         <div class="fw-bold text-white" style="font-size:.88rem;">
-          <i class="bi bi-calendar-week me-2"></i>Lịch đăng ký: <span id="slotsSubjectName"></span> — Khối <span id="slotsGradeName"></span>
+          <i class="bi bi-calendar-week me-2"></i>Lịch đăng ký: <span id="slotsSubjectName"></span> — <span id="slotsGradeName"></span>
         </div>
         <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
       </div>
@@ -3021,13 +3045,18 @@ function _idxP2SetAll(grade, enabled) {
 }
 
 // ── Môn được mở đăng ký modal ──
+let _scheduleSettings = {};
+
 function openGd2VisModal() {
   const body = document.getElementById('gd2VisBody');
   body.innerHTML = '<div class="text-center text-muted py-4" style="font-size:.82rem;">Đang tải...</div>';
   new bootstrap.Modal(document.getElementById('idxModalGd2Vis')).show();
   fetch('/admin/gd2-classes')
     .then(r => r.json())
-    .then(d => _renderGd2Vis(d.classes || []))
+    .then(d => {
+      _scheduleSettings = d.schedule_settings || {};
+      _renderGd2Vis(d.classes || []);
+    })
     .catch(() => { body.innerHTML = '<div class="text-danger text-center py-3">Lỗi tải dữ liệu</div>'; });
 }
 
@@ -3035,54 +3064,84 @@ function _renderGd2Vis(list) {
   const body = document.getElementById('gd2VisBody');
   body.innerHTML = '';
   const dayNames = {2:'T2',3:'T3',4:'T4',5:'T5',6:'T6',7:'T7'};
-  [10, 11, 12].forEach(g => {
-    const gCls = list.filter(c => c.grade === g);
-    if (!gCls.length) return;
-    const gradeDiv = document.createElement('div');
-    gradeDiv.className = 'mb-4';
-    const gradeHeader = document.createElement('div');
-    gradeHeader.className = 'fw-bold mb-2 pb-1';
-    gradeHeader.style = 'font-size:.82rem;color:#1D4ED8;border-bottom:1.5px solid #DBEAFE;';
-    gradeHeader.textContent = 'Khối ' + g;
-    gradeDiv.appendChild(gradeHeader);
-    // group by subject
-    const subjects = {};
-    gCls.forEach(c => { (subjects[c.subject] = subjects[c.subject] || []).push(c); });
-    Object.keys(subjects).sort().forEach(subj => {
-      const clsList = subjects[subj];
+
+  // Build subject → { classes[], enforced } map
+  const subjMap = {};
+  list.forEach(c => {
+    if (!subjMap[c.subject]) subjMap[c.subject] = { classes: [], enforced: !!_scheduleSettings[c.subject] };
+    subjMap[c.subject].classes.push(c);
+  });
+
+  if (!Object.keys(subjMap).length) {
+    body.innerHTML = '<div class="text-center text-muted py-4" style="font-size:.82rem;">Chưa có lớp nào được mở.</div>';
+    return;
+  }
+
+  Object.keys(subjMap).sort().forEach(subj => {
+    const { classes: subjCls, enforced } = subjMap[subj];
+    const safeSubjKey = subj.replace(/[^a-zA-Z0-9]/g, '_');
+
+    const outerDiv = document.createElement('div');
+    outerDiv.className = 'mb-4 p-3';
+    outerDiv.style = 'background:#F8FAFC;border-radius:12px;border:1px solid #E2E8F0;';
+
+    // ── Subject header ──
+    const subjHeader = document.createElement('div');
+    subjHeader.className = 'd-flex align-items-center justify-content-between mb-2 pb-2 flex-wrap gap-1';
+    subjHeader.style = 'border-bottom:1.5px solid #E2E8F0;';
+    subjHeader.innerHTML = `
+      <span style="font-size:.85rem;font-weight:800;color:#1E3A8A;">${subj || '(Chưa có môn)'}</span>
+      <div class="d-flex gap-1 flex-wrap align-items-center">
+        <button class="btn btn-xs" data-all-slots-btn
+                style="font-size:.69rem;padding:2px 8px;border:1.5px solid #3B82F6;color:#3B82F6;border-radius:6px;background:transparent;">
+          <i class="bi bi-calendar2-week" style="font-size:.65rem;"></i> Lịch tất cả khối</button>
+        <button id="enforceBtn_${safeSubjKey}"
+                class="btn btn-xs"
+                style="font-size:.69rem;padding:2px 8px;border-radius:6px;border:1.5px solid ${enforced ? '#10B981' : '#94A3B8'};color:${enforced ? '#10B981' : '#94A3B8'};background:${enforced ? '#F0FDF4' : 'transparent'};">
+          <i class="bi bi-shield-check" style="font-size:.65rem;"></i> Kiểm tra lịch: <strong class="enforce-label">${enforced ? 'BẬT' : 'TẮT'}</strong>
+        </button>
+      </div>`;
+    subjHeader.querySelector('[data-all-slots-btn]').onclick = () => _openSubjectSlots(subj, 0);
+    subjHeader.querySelector('#enforceBtn_' + safeSubjKey).onclick = () => _toggleScheduleEnforce(subj);
+    outerDiv.appendChild(subjHeader);
+
+    // ── Grade sub-sections ──
+    [10, 11, 12].forEach(g => {
+      const gCls = subjCls.filter(c => c.grade === g);
+      if (!gCls.length) return;
       const safeKey = (g + '_' + subj).replace(/[^a-zA-Z0-9]/g, '_');
-      const subjDiv = document.createElement('div');
-      subjDiv.className = 'mb-3';
-      const subjHeader = document.createElement('div');
-      subjHeader.className = 'd-flex align-items-center justify-content-between mb-1 flex-wrap gap-1';
-      subjHeader.innerHTML = `
-        <span style="font-size:.78rem;font-weight:700;color:#374151;">${subj || '(Chưa có môn)'}</span>
+
+      const gradeSection = document.createElement('div');
+      gradeSection.className = 'mb-3';
+
+      const gradeHeader = document.createElement('div');
+      gradeHeader.className = 'd-flex align-items-center justify-content-between mb-1 flex-wrap gap-1';
+      gradeHeader.innerHTML = `
+        <span style="font-size:.78rem;font-weight:700;color:#1D4ED8;">Khối ${g}</span>
         <div class="d-flex gap-1 flex-wrap">
-          <button class="btn btn-xs" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #3B82F6;color:#3B82F6;border-radius:6px;background:transparent;"
-                  data-slots-subj data-slots-grade="${g}">
+          <button class="btn btn-xs" data-grade-slots-btn
+                  style="font-size:.69rem;padding:2px 8px;border:1.5px solid #3B82F6;color:#3B82F6;border-radius:6px;background:transparent;">
             <i class="bi bi-calendar-week" style="font-size:.65rem;"></i> Lịch</button>
           <button class="btn btn-xs" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #10B981;color:#10B981;border-radius:6px;background:transparent;"
                   data-gd2-setall="${safeKey}" data-gd2-val="1">Bật tất</button>
           <button class="btn btn-xs" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #EF4444;color:#EF4444;border-radius:6px;background:transparent;"
                   data-gd2-setall="${safeKey}" data-gd2-val="0">Tắt tất</button>
         </div>`;
-      const slotsBtn = subjHeader.querySelector('[data-slots-subj]');
-      if (slotsBtn) {
-        slotsBtn.dataset.slotsSubj = subj || '';
-        slotsBtn.onclick = () => _openSubjectSlots(subj || '', g);
-      }
-      subjHeader.querySelectorAll('[data-gd2-setall]').forEach(btn => {
+      gradeHeader.querySelector('[data-grade-slots-btn]').onclick = () => _openSubjectSlots(subj, g);
+      gradeHeader.querySelectorAll('[data-gd2-setall]').forEach(btn => {
         btn.onclick = () => _gd2VisSetAll(safeKey, btn.dataset.gd2Val === '1');
       });
+
       const listDiv = document.createElement('div');
       listDiv.className = 'd-flex flex-column gap-1';
       listDiv.id = 'gd2VL_' + safeKey;
-      clsList.forEach(c => {
+
+      gCls.forEach(c => {
         const ses = c.session_type === 'morning' ? 'Sáng' : 'Chiều';
         const timeLabel = (dayNames[c.day_of_week] || '?') + ' ' + ses + ' T' + c.start_session;
         const row = document.createElement('div');
         row.className = 'd-flex align-items-center gap-2 px-2 py-2 flex-wrap';
-        row.style = 'background:#F8FAFC;border-radius:7px;border:1px solid #E2E8F0;';
+        row.style = 'background:#FFFFFF;border-radius:7px;border:1px solid #E2E8F0;';
         row.innerHTML = `
           <div style="flex:1;min-width:0;font-size:.77rem;color:#1E293B;word-break:break-word;">
             ${c.teacher ? '<span class="fw-semibold">' + c.teacher + '</span> · ' : ''}${timeLabel}
@@ -3098,11 +3157,13 @@ function _renderGd2Vis(list) {
           </button>`;
         listDiv.appendChild(row);
       });
-      subjDiv.appendChild(subjHeader);
-      subjDiv.appendChild(listDiv);
-      gradeDiv.appendChild(subjDiv);
+
+      gradeSection.appendChild(gradeHeader);
+      gradeSection.appendChild(listDiv);
+      outerDiv.appendChild(gradeSection);
     });
-    body.appendChild(gradeDiv);
+
+    body.appendChild(outerDiv);
   });
 }
 
@@ -3142,6 +3203,29 @@ function _gd2VisSetAll(safeKey, enabled) {
   });
 }
 
+async function _toggleScheduleEnforce(subject) {
+  const currentEnforced = !!_scheduleSettings[subject];
+  const newEnforced = !currentEnforced;
+  const res = await fetch('/admin/subject-schedule-enforce', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({subject, enforced: newEnforced}),
+  });
+  const d = await res.json();
+  if (!d.ok) { showAlert(d.error || 'Lỗi cập nhật', 'error'); return; }
+  _scheduleSettings[subject] = newEnforced;
+  const safeSubjKey = subject.replace(/[^a-zA-Z0-9]/g, '_');
+  const btn = document.getElementById('enforceBtn_' + safeSubjKey);
+  if (btn) {
+    btn.querySelector('.enforce-label').textContent = newEnforced ? 'BẬT' : 'TẮT';
+    btn.style.borderColor = newEnforced ? '#10B981' : '#94A3B8';
+    btn.style.color       = newEnforced ? '#10B981' : '#94A3B8';
+    btn.style.background  = newEnforced ? '#F0FDF4' : 'transparent';
+    btn.onclick = () => _toggleScheduleEnforce(subject);
+  }
+  showAlert(`Kiểm tra lịch ${newEnforced ? 'đã BẬT' : 'đã TẮT'} cho môn ${subject}`, 'success');
+}
+
 // ════════════════════════════════════════
 // Subject Slot Schedule (Lịch đăng ký môn)
 // ════════════════════════════════════════
@@ -3162,7 +3246,7 @@ function _openSubjectSlots(subject, grade) {
   _slotsSubject = subject;
   _slotsGrade   = grade;
   document.getElementById('slotsSubjectName').textContent = subject;
-  document.getElementById('slotsGradeName').textContent   = grade;
+  document.getElementById('slotsGradeName').textContent   = grade === 0 ? 'Tất cả khối' : 'Khối ' + grade;
   _buildSlotsGrid();
   new bootstrap.Modal(document.getElementById('modalSubjectSlots')).show();
   fetch('/admin/subject-slots?subject=' + encodeURIComponent(subject) + '&grade=' + grade)
@@ -3543,6 +3627,22 @@ async function saveSubjSlotMode() {
       _renderSgList();
     }
   } catch { showAlert('Lỗi kết nối.', 'error'); }
+}
+
+async function toggleStudentLock(studentId, currentLocked, name) {
+  const action = currentLocked ? 'mở khoá' : 'khoá';
+  if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} đăng ký cho học sinh ${name}?`)) return;
+  const res = await fetch(`/admin/students/${studentId}/toggle-reg-lock`, {method: 'POST'});
+  const d = await res.json();
+  if (!d.ok) { showAlert(d.error || 'Lỗi thao tác', 'error'); return; }
+  const btn = document.getElementById('lockBtn_' + studentId);
+  if (btn) {
+    btn.className = 'adm-icon-btn ' + (d.reg_locked ? 'btn-outline-danger' : 'btn-outline-secondary');
+    btn.title = d.reg_locked ? 'Đang khoá đăng ký — Click để mở khoá' : 'Click để khoá đăng ký';
+    btn.innerHTML = `<i class="bi bi-${d.reg_locked ? 'lock-fill' : 'unlock'}"></i>`;
+    btn.onclick = () => toggleStudentLock(studentId, d.reg_locked, name);
+  }
+  showAlert(`Đã ${action} đăng ký cho ${name}`, 'success');
 }
 
 </script>

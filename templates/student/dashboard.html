@@ -157,10 +157,22 @@
     <button id="btn-schedule" class="tab-btn active" onclick="showTab('schedule')">
       <i class="bi bi-calendar-week"></i>Thời khoá biểu
     </button>
+    {% if not reg_locked %}
     <button id="btn-enroll" class="tab-btn" onclick="showTab('enroll')">
       <i class="bi bi-pencil-square"></i>Đăng ký môn học
     </button>
+    {% endif %}
   </div>
+  {% if reg_locked %}
+  <div class="alert d-flex align-items-center gap-2 mb-4 reveal" role="alert"
+       style="background:#FEF2F2;border:1.5px solid #FCA5A5;color:#991B1B;">
+    <i class="bi bi-lock-fill fs-5 flex-shrink-0" style="color:#EF4444;"></i>
+    <div>
+      <span class="fw-bold">Tài khoản đăng ký của bạn đang bị khoá.</span>
+      <span style="font-size:.88rem;"> Vui lòng liên hệ nhà trường để được hỗ trợ.</span>
+    </div>
+  </div>
+  {% endif %}
 
   {# ── Subject progress — shown on BOTH tabs (only when require_5_subjects is ON) ── #}
   {% if require_5_subjects and required_subjects %}

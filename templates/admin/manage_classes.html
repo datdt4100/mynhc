@@ -3,8 +3,11 @@
 
 {% block hero_content %}
 <div class="d-flex align-items-center gap-3">
-  <a href="{{ url_for('admin_index') }}" class="btn btn-sm text-white" style="background:rgba(255,255,255,.18);border-radius:20px;padding:5px 14px;font-size:.82rem;">
-    <i class="bi bi-arrow-left me-1"></i>Trang chủ
+  <a href="{{ url_for('admin_index') }}"
+     style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.28);border:1.5px solid rgba(255,255,255,.55);color:#fff;text-decoration:none;font-size:1rem;flex-shrink:0;transition:background .15s;"
+     onmouseenter="this.style.background='rgba(255,255,255,.42)'"
+     onmouseleave="this.style.background='rgba(255,255,255,.28)'">
+    <i class="bi bi-arrow-left"></i>
   </a>
   <div>
     <h1 class="hero-title" style="font-size:1.5rem;">Quản lý lớp học</h1>
@@ -14,20 +17,42 @@
 {% endblock %}
 
 {% block content %}
+<style>
+.filter-tab {
+  padding: 4px 14px;
+  font-size: .75rem;
+  font-weight: 600;
+  border-radius: 20px;
+  border: 1.5px solid #E2E8F0;
+  background: #F8FAFC;
+  color: #64748B;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+  white-space: nowrap;
+}
+.filter-tab.active {
+  background: #1D4ED8;
+  color: #fff;
+  border-color: #1D4ED8;
+}
+</style>
+
 <div class="container py-4">
-  <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-    <span class="text-muted" style="font-size:.82rem;">Hiển thị:</span>
-    <button class="btn btn-sm fw-semibold" id="filterActiveBtn"
-            style="background:#F0FDF4;color:#15803D;border:1.5px solid #86EFAC;border-radius:8px;font-size:.75rem;"
-            onclick="_setFilter('active')">
-      <i class="bi bi-check-circle-fill me-1"></i>Đang hoạt động
-    </button>
-    <button class="btn btn-sm fw-semibold" id="filterAllBtn"
-            style="background:#F8FAFC;color:#475569;border:1.5px solid #E2E8F0;border-radius:8px;font-size:.75rem;"
-            onclick="_setFilter('all')">
-      <i class="bi bi-list-ul me-1"></i>Tất cả lớp
-    </button>
+  <!-- Filter bar -->
+  <div class="mb-4 p-3" style="background:#fff;border-radius:12px;border:1px solid #E2E8F0;box-shadow:0 1px 4px rgba(0,0,0,.05);">
+    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+      <span style="font-size:.74rem;font-weight:700;color:#374151;min-width:36px;">Khối</span>
+      <button class="filter-tab active" id="gradeTab_all"  onclick="_setGrade(null)">Tất cả</button>
+      <button class="filter-tab"        id="gradeTab_10"   onclick="_setGrade(10)">Khối 10</button>
+      <button class="filter-tab"        id="gradeTab_11"   onclick="_setGrade(11)">Khối 11</button>
+      <button class="filter-tab"        id="gradeTab_12"   onclick="_setGrade(12)">Khối 12</button>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap" id="subjectFilterRow">
+      <span style="font-size:.74rem;font-weight:700;color:#374151;min-width:36px;">Môn</span>
+      <button class="filter-tab active" id="subjTab_all" onclick="_setSubject(null)">Tất cả</button>
+    </div>
   </div>
+
   <div id="classesBody">
     <div class="text-center text-muted py-5"><div class="spinner-border spinner-border-sm"></div> Đang tải...</div>
   </div>
@@ -45,7 +70,10 @@
         <div id="classDetailInfo" style="padding:14px 16px 10px;background:#F8FAFC;border-bottom:1px solid #E2E8F0;font-size:.82rem;"></div>
         <div style="padding:10px 16px;">
           <div class="d-flex align-items-center justify-content-between mb-2">
-            <span class="fw-bold" style="font-size:.82rem;color:#374151;">Danh sách học sinh <span id="classStudentCount" class="badge bg-primary ms-1" style="font-size:.7rem;"></span></span>
+            <span class="fw-bold" style="font-size:.82rem;color:#374151;">
+              Danh sách học sinh
+              <span id="classStudentCount" class="badge bg-primary ms-1" style="font-size:.7rem;"></span>
+            </span>
             <a id="exportStudentsBtn" href="#" class="btn btn-sm btn-outline-success" style="font-size:.74rem;border-radius:8px;">
               <i class="bi bi-file-earmark-excel me-1"></i>Xuất Excel
             </a>
@@ -62,36 +90,65 @@
 
 {% block scripts %}
 <script>
-let _allClasses = [];
-let _currentFilter = 'active';
+let _allClasses   = [];
+let _filterGrade  = null;
+let _filterSubject = null;
 let _currentClassId = null;
 const DAY_NAMES = {2:'Thứ 2',3:'Thứ 3',4:'Thứ 4',5:'Thứ 5',6:'Thứ 6',7:'Thứ 7'};
 
-function _setFilter(f) {
-  _currentFilter = f;
-  document.getElementById('filterActiveBtn').style.background = f === 'active' ? '#F0FDF4' : '#F8FAFC';
-  document.getElementById('filterActiveBtn').style.color = f === 'active' ? '#15803D' : '#475569';
-  document.getElementById('filterAllBtn').style.background = f === 'all' ? '#EFF6FF' : '#F8FAFC';
-  document.getElementById('filterAllBtn').style.color = f === 'all' ? '#1D4ED8' : '#475569';
+function _setGrade(g) {
+  _filterGrade = g;
+  ['all','10','11','12'].forEach(k => {
+    const btn = document.getElementById('gradeTab_' + k);
+    if (btn) btn.className = 'filter-tab' + (String(g ?? 'all') === k ? ' active' : '');
+  });
   _renderClasses();
+}
+
+function _setSubject(s) {
+  _filterSubject = s;
+  document.querySelectorAll('[id^="subjTab_"]').forEach(btn => {
+    const key = btn.id.replace('subjTab_', '');
+    btn.className = 'filter-tab' + ((s === null && key === 'all') || s === key ? ' active' : '');
+  });
+  _renderClasses();
+}
+
+function _buildSubjectTabs(classes) {
+  const subjects = [...new Set(classes.map(c => c.subject || c.subject_group || '').filter(Boolean))].sort();
+  const row = document.getElementById('subjectFilterRow');
+  row.innerHTML = '<span style="font-size:.74rem;font-weight:700;color:#374151;min-width:36px;">Môn</span>' +
+    '<button class="filter-tab active" id="subjTab_all" onclick="_setSubject(null)">Tất cả</button>' +
+    subjects.map(s => {
+      const safe = s.replace(/[^a-zA-Z0-9]/g, '_');
+      return `<button class="filter-tab" id="subjTab_${safe}" onclick="_setSubject('${s.replace(/'/g,"\\'")}')">` + s + '</button>';
+    }).join('');
 }
 
 async function _loadClasses() {
   try {
     const d = await (await fetch('/admin/manage-classes/data')).json();
     _allClasses = d.classes || [];
+    _buildSubjectTabs(_allClasses);
     _renderClasses();
   } catch(e) {
     document.getElementById('classesBody').innerHTML = '<div class="text-danger text-center py-4">Lỗi tải dữ liệu.</div>';
   }
 }
 
+function _filtered() {
+  return _allClasses.filter(c => {
+    if (_filterGrade !== null && c.grade !== _filterGrade) return false;
+    if (_filterSubject !== null && (c.subject || c.subject_group || '') !== _filterSubject) return false;
+    return true;
+  });
+}
+
 function _renderClasses() {
-  const list = _currentFilter === 'active' ? _allClasses.filter(c => c.is_active) : _allClasses;
+  const list = _filtered();
   const body = document.getElementById('classesBody');
   if (!list.length) {
-    body.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size:2rem;display:block;margin-bottom:8px;"></i>' +
-      (_currentFilter === 'active' ? 'Chưa có lớp nào được đánh dấu hoạt động.' : 'Chưa có lớp nào.') + '</div>';
+    body.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-inbox" style="font-size:2rem;display:block;margin-bottom:8px;"></i>Không có lớp nào phù hợp.</div>';
     return;
   }
   const grades = {};
@@ -110,12 +167,12 @@ function _renderClasses() {
       </div>`;
     Object.keys(grades[g]).sort().forEach(subj => {
       html += `<div class="mb-3">
-        <div class="fw-semibold mb-2" style="font-size:.82rem;color:#374151;padding-left:4px;border-left:3px solid #93C5FD;">&nbsp;${subj}</div>
+        <div class="fw-semibold mb-2" style="font-size:.82rem;color:#374151;padding-left:6px;border-left:3px solid #93C5FD;">&nbsp;${subj}</div>
         <div class="row g-2">`;
       grades[g][subj].forEach(c => {
         const ses = c.session_type === 'morning' ? 'Sáng' : 'Chiều';
         const slot = `${DAY_NAMES[c.day_of_week] || '?'} ${ses} T${c.start_session}`;
-        const pct = c.max_capacity ? Math.round(c.enrolled / c.max_capacity * 100) : 0;
+        const pct  = c.max_capacity ? Math.round(c.enrolled / c.max_capacity * 100) : 0;
         const full = c.max_capacity && c.enrolled >= c.max_capacity;
         html += `<div class="col-12 col-md-6 col-xl-4">
           <div class="p-3 h-100" style="background:#fff;border-radius:10px;border:1.5px solid ${c.is_active ? '#86EFAC' : '#E2E8F0'};cursor:pointer;transition:box-shadow .15s;"
@@ -130,11 +187,11 @@ function _renderClasses() {
                 ${c.is_active ? 'Hoạt động' : 'Chưa đủ điều kiện'}
               </span>
             </div>
-            <div style="font-size:.75rem;color:#64748B;margin-bottom:4px;">
+            <div style="font-size:.75rem;color:#64748B;margin-bottom:6px;">
               <i class="bi bi-clock me-1"></i>${slot}
               ${c.location ? `<span class="ms-2"><i class="bi bi-geo-alt me-1"></i>${c.location}</span>` : ''}
             </div>
-            <div class="d-flex align-items-center gap-2 mt-2">
+            <div class="d-flex align-items-center gap-2 mt-1">
               <div style="flex:1;background:#F1F5F9;border-radius:20px;height:6px;overflow:hidden;">
                 <div style="width:${Math.min(pct,100)}%;height:100%;background:${full ? '#EF4444' : '#22C55E'};border-radius:20px;"></div>
               </div>
@@ -152,12 +209,11 @@ function _renderClasses() {
   body.innerHTML = html;
 }
 
-
 async function _openClassDetail(classId) {
   _currentClassId = classId;
   const c = _allClasses.find(x => x.id === classId);
   if (!c) return;
-  const ses = c.session_type === 'morning' ? 'Sáng' : 'Chiều';
+  const ses  = c.session_type === 'morning' ? 'Sáng' : 'Chiều';
   const slot = `${DAY_NAMES[c.day_of_week] || '?'} ${ses} T${c.start_session}${c.duration > 1 ? '–' + (c.start_session + c.duration - 1) : ''}`;
   document.getElementById('classDetailTitle').textContent = `${c.subject || c.subject_group || 'Lớp'} — Khối ${c.grade}`;
   document.getElementById('classDetailInfo').innerHTML = `
@@ -194,8 +250,7 @@ function _renderStudentList(students) {
         <th class="d-none d-md-table-cell">CCCD</th>
         <th style="width:48px;"></th>
       </tr>
-    </thead>
-    <tbody>`;
+    </thead><tbody>`;
   let prevClass = '';
   students.forEach((s, i) => {
     if (s.class_name !== prevClass) {
@@ -210,7 +265,7 @@ function _renderStudentList(students) {
       <td class="d-none d-md-table-cell text-muted" style="font-size:.72rem;">${s.cccd}</td>
       <td>
         <button class="btn btn-xs" style="border:1.5px solid #EF4444;color:#EF4444;background:transparent;border-radius:6px;padding:1px 6px;font-size:.68rem;"
-                onclick="_removeStudent(${s.enrollment_id}, '${s.full_name.replace(/'/g, "\\'")}')">
+                onclick="_removeStudent(${s.enrollment_id}, '${s.full_name.replace(/'/g,"\\'")}')">
           <i class="bi bi-x"></i>
         </button>
       </td>
@@ -223,14 +278,14 @@ function _renderStudentList(students) {
 async function _removeStudent(enrollmentId, name) {
   if (!confirm(`Xoá học sinh ${name} khỏi lớp này?`)) return;
   const res = await fetch(`/api/admin/enrollment/${enrollmentId}`, {method: 'DELETE'});
-  const d = await res.json();
+  const d   = await res.json();
   if (!d.ok) { showAlert(d.error || 'Lỗi xoá', 'error'); return; }
   const row = document.getElementById('stuRow_' + enrollmentId);
   if (row) row.remove();
   const c = _allClasses.find(x => x.id === _currentClassId);
   if (c && c.enrolled > 0) c.enrolled--;
   const cnt = document.getElementById('classStudentCount');
-  if (cnt) cnt.textContent = parseInt(cnt.textContent || 0) - 1;
+  if (cnt) cnt.textContent = Math.max(0, parseInt(cnt.textContent || 0) - 1);
   showAlert(`Đã xoá ${name} khỏi lớp.`, 'success');
 }
 

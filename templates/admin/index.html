@@ -3629,20 +3629,33 @@ async function saveSubjSlotMode() {
   } catch { showAlert('Lỗi kết nối.', 'error'); }
 }
 
-async function toggleStudentLock(studentId, currentLocked, name) {
-  const action = currentLocked ? 'mở khoá' : 'khoá';
-  if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} đăng ký cho học sinh ${name}?`)) return;
-  const res = await fetch(`/admin/students/${studentId}/toggle-reg-lock`, {method: 'POST'});
-  const d = await res.json();
-  if (!d.ok) { showAlert(d.error || 'Lỗi thao tác', 'error'); return; }
-  const btn = document.getElementById('lockBtn_' + studentId);
-  if (btn) {
-    btn.className = 'adm-icon-btn ' + (d.reg_locked ? 'btn-outline-danger' : 'btn-outline-secondary');
-    btn.title = d.reg_locked ? 'Đang khoá đăng ký — Click để mở khoá' : 'Click để khoá đăng ký';
-    btn.innerHTML = `<i class="bi bi-${d.reg_locked ? 'lock-fill' : 'unlock'}"></i>`;
-    btn.onclick = () => toggleStudentLock(studentId, d.reg_locked, name);
-  }
-  showAlert(`Đã ${action} đăng ký cho ${name}`, 'success');
+function toggleStudentLock(studentId, currentLocked, name) {
+  const locking = !currentLocked;
+  showConfirm(
+    locking ? 'Khoá đăng ký' : 'Mở khoá đăng ký',
+    locking
+      ? `Học sinh <strong>${name}</strong> sẽ không thể đăng ký thêm bất kỳ lớp nào.`
+      : `Học sinh <strong>${name}</strong> sẽ được phép đăng ký lớp trở lại.`,
+    async () => {
+      const res = await fetch(`/admin/students/${studentId}/toggle-reg-lock`, {method: 'POST'});
+      const d = await res.json();
+      if (!d.ok) { showAlert(d.error || 'Lỗi thao tác', 'error'); return; }
+      const btn = document.getElementById('lockBtn_' + studentId);
+      if (btn) {
+        btn.className = 'adm-icon-btn ' + (d.reg_locked ? 'btn-outline-danger' : 'btn-outline-secondary');
+        btn.title = d.reg_locked ? 'Đang khoá đăng ký — Click để mở khoá' : 'Click để khoá đăng ký';
+        btn.innerHTML = `<i class="bi bi-${d.reg_locked ? 'lock-fill' : 'unlock'}"></i>`;
+        btn.onclick = () => toggleStudentLock(studentId, d.reg_locked, name);
+      }
+      showAlert(`Đã ${locking ? 'khoá' : 'mở khoá'} đăng ký cho ${name}`, 'success');
+    },
+    {
+      confirmText: locking ? 'Khoá' : 'Mở khoá',
+      confirmClass: locking ? 'btn-danger' : 'btn-success',
+      icon: locking ? '<i class="bi bi-lock-fill" style="color:#EF4444;"></i>' : '<i class="bi bi-unlock-fill" style="color:#16A34A;"></i>',
+      iconBg: locking ? '#FEF2F2' : '#F0FDF4',
+    }
+  );
 }
 
 </script>

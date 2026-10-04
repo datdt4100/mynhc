@@ -806,6 +806,103 @@ def session_label(session_type, start, duration):
     return f"{label}, tiết {start}-{end}"
 
 
+def _build_attendance_excel(cls, teacher_row, enrolled, filename):
+    """Build an attendance-sheet Excel for a class and return it as a Flask send_file response."""
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Điểm danh"
+
+    hdr_fill = PatternFill("solid", fgColor="1E40AF")
+    att_fill = PatternFill("solid", fgColor="EFF6FF")
+    hdr_font = Font(bold=True, color="FFFFFF")
+    att_font = Font(bold=True, color="1E40AF")
+    bold14   = Font(bold=True, size=13)
+    bold_lbl = Font(bold=True)
+    center   = Alignment(horizontal="center", vertical="center")
+    left     = Alignment(horizontal="left",   vertical="center")
+    thin     = Side(style="thin", color="CBD5E1")
+    border   = Border(left=thin, right=thin, top=thin, bottom=thin)
+    TOTAL_COLS = 9
+
+    # ── Title (row 1)
+    title = f"DANH SÁCH HỌC SINH ĐĂNG KÝ — {cls.subject or ''} Khối {cls.grade}"
+    ws.append([title])
+    ws.merge_cells(f"A1:{get_column_letter(TOTAL_COLS)}1")
+    ws["A1"].font = bold14
+    ws["A1"].alignment = center
+    ws["A1"].fill = PatternFill("solid", fgColor="DBEAFE")
+    ws.row_dimensions[1].height = 22
+
+    # ── Info block (rows 2–6)
+    ses_lbl  = "Sáng" if cls.session_type == "morning" else "Chiều"
+    tiet_end = cls.start_session + cls.duration - 1
+    tiet_str = f"Tiết {cls.start_session}" if cls.duration == 1 else f"Tiết {cls.start_session}–{tiet_end}"
+    time_str = f"{day_name(cls.day_of_week)}, {ses_lbl}, {tiet_str}"
+    info_rows = [
+        ("Giáo viên", _name_fmt(teacher_row.full_name) if teacher_row else ""),
+        ("Tổ bộ môn", teacher_row.subject_group if teacher_row and teacher_row.subject_group else cls.subject or ""),
+        ("Thời gian",  time_str),
+        ("Địa điểm",  cls.location or "(chưa xếp)"),
+        ("Sĩ số",     f"{len(enrolled)} / {cls.max_capacity or '?'}"),
+    ]
+    for label, val in info_rows:
+        ws.append([label, val])
+        r = ws.max_row
+        ws.cell(r, 1).font = bold_lbl
+        ws.merge_cells(f"B{r}:{get_column_letter(TOTAL_COLS)}{r}")
+
+    ws.append([])  # blank row 7
+
+    # ── Column headers (row 8)
+    ATT_HDR = "..…/…."
+    headers = ["STT", "Họ tên", "Lớp", "Khối", "Thời gian đăng ký",
+               ATT_HDR, ATT_HDR, ATT_HDR, ATT_HDR]
+    ws.append(headers)
+    hdr_row = ws.max_row
+    for col, _ in enumerate(headers, 1):
+        cell = ws.cell(hdr_row, col)
+        cell.alignment = center
+        cell.border = border
+        is_att = col > 5
+        cell.font = att_font if is_att else hdr_font
+        cell.fill = att_fill if is_att else hdr_fill
+
+    # ── Data rows
+    for i, s in enumerate(enrolled, 1):
+        ts = ""
+        if s.enrolled_at:
+            try:
+                dt = datetime.fromisoformat(str(s.enrolled_at))
+                ts = dt.strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                ts = str(s.enrolled_at)
+        row_data = [i, _name_fmt(s.full_name), s.class_name or "",
+                    s.grade if hasattr(s, "grade") else cls.grade, ts,
+                    "", "", "", ""]
+        ws.append(row_data)
+        r = ws.max_row
+        alt = PatternFill("solid", fgColor="F8FAFC") if i % 2 == 0 else None
+        for col in range(1, TOTAL_COLS + 1):
+            cell = ws.cell(r, col)
+            cell.border = border
+            cell.alignment = center if col in (1, 3, 4, 6, 7, 8, 9) else left
+            if col > 5:
+                cell.fill = att_fill
+            elif alt:
+                cell.fill = alt
+
+    # ── Column widths
+    for col_letter, w in zip("ABCDEFGHI", [6, 28, 10, 8, 20, 11, 11, 11, 11]):
+        ws.column_dimensions[col_letter].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name=filename,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 def _time_conflict(student_id, new_class):
     """Return the conflicting class row if any, else None."""
     with engine.connect() as conn:
@@ -1783,6 +1880,9 @@ def teacher_class_students_export(class_id):
         ).fetchone()
         if not cls:
             return "Không tìm thấy lớp.", 404
+        teacher_row = conn.execute(
+            select(teachers).where(teachers.c.id == teacher_id)
+        ).fetchone()
         enrolled = conn.execute(
             select(students, enrollments.c.enrolled_at)
             .join(enrollments, students.c.id == enrollments.c.student_id)
@@ -1790,85 +1890,13 @@ def teacher_class_students_export(class_id):
             .order_by(students.c.class_name, students.c.full_name)
         ).fetchall()
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
     slot = session_label(cls.session_type, cls.start_session, cls.duration)
-    ws.title = "Danh sách"
-
-    # Header info rows
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    bold = Font(bold=True)
-    hdr_fill = PatternFill("solid", fgColor="1E40AF")
-    hdr_font = Font(bold=True, color="FFFFFF")
-    center = Alignment(horizontal="center", vertical="center")
-    thin = Side(style="thin", color="CBD5E1")
-    border = Border(left=thin, right=thin, top=thin, bottom=thin)
-
-    title_row = [
-        f"Danh sách đăng ký — Khối {cls.grade}"
-        + (f" — {cls.subject}" if cls.subject else "")
-        + f" — {day_name(cls.day_of_week)} {slot}"
-        + (f" — Phòng: {cls.location}" if cls.location else "")
-    ]
-    ws.append(title_row)
-    ws.merge_cells("A1:E1")
-    ws["A1"].font = Font(bold=True, size=12)
-    ws["A1"].alignment = center
-
-    ws.append([f"Tổng số học sinh: {len(enrolled)}"])
-    ws.merge_cells("A2:E2")
-    ws["A2"].font = Font(italic=True, color="64748B")
-    ws["A2"].alignment = center
-
-    ws.append([])  # blank row
-
-    # Column headers
-    headers = ["STT", "Họ và tên", "Lớp", "Giới tính", "Thời gian đăng ký"]
-    ws.append(headers)
-    for col, _ in enumerate(headers, 1):
-        cell = ws.cell(row=4, column=col)
-        cell.font = hdr_font
-        cell.fill = hdr_fill
-        cell.alignment = center
-        cell.border = border
-
-    # Data rows
-    for i, s in enumerate(enrolled, 1):
-        ts = ""
-        if s.enrolled_at:
-            try:
-                dt = datetime.fromisoformat(str(s.enrolled_at))
-                ts = dt.strftime("%d/%m/%Y %H:%M")
-            except Exception:
-                ts = str(s.enrolled_at)
-        row_data = [i, s.full_name, s.class_name or "", s.gender or "", ts]
-        ws.append(row_data)
-        row_num = ws.max_row
-        for col, _ in enumerate(row_data, 1):
-            cell = ws.cell(row=row_num, column=col)
-            cell.border = border
-            cell.alignment = Alignment(vertical="center",
-                                       horizontal="center" if col in (1, 3, 4) else "left")
-            if i % 2 == 0:
-                cell.fill = PatternFill("solid", fgColor="F8FAFC")
-
-    ws.column_dimensions["A"].width = 6
-    ws.column_dimensions["B"].width = 28
-    ws.column_dimensions["C"].width = 10
-    ws.column_dimensions["D"].width = 10
-    ws.column_dimensions["E"].width = 20
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
     slug = f"Khoi{cls.grade}"
     if cls.subject:
         slug += f"_{cls.subject.replace(' ', '_')}"
     slug += f"_{day_name(cls.day_of_week).replace(' ', '')}_{slot[:4].replace(',','').replace(' ','')}"
-    ts_str = datetime.now().strftime("%Y%m%d_%H%M")
-    filename = f"DanhSach_{slug}_{ts_str}.xlsx"
-    return send_file(buf, as_attachment=True, download_name=filename,
-                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    filename = f"DiemDanh_{slug}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return _build_attendance_excel(cls, teacher_row, enrolled, filename)
 
 
 @app.route("/admin/classes/<int:class_id>/students")
@@ -7835,7 +7863,6 @@ def admin_manage_classes_data():
 @app.route("/admin/classes/<int:class_id>/export-students")
 @admin_required
 def admin_class_export_students(class_id):
-    import io as _io
     with engine.connect() as conn:
         cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
         if not cls:
@@ -7847,25 +7874,8 @@ def admin_class_export_students(class_id):
             .where(enrollments.c.class_id == class_id)
             .order_by(students.c.class_name, students.c.full_name)
         ).fetchall()
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ses_label = "Sáng" if cls.session_type == "morning" else "Chiều"
-    ws.title = f"Lớp {class_id}"
-    ws.append([
-        f"Môn: {cls.subject or ''}",
-        f"GV: {_name_fmt(teacher_row.full_name) if teacher_row else ''}",
-        f"T{cls.day_of_week} {ses_label} T{cls.start_session}",
-        f"Phòng: {cls.location or '(chưa xếp)'}",
-    ])
-    ws.append([])
-    ws.append(["STT", "Họ và tên", "Lớp", "CCCD/CMND", "Ngày sinh", "Giới tính", "Email", "Thời gian đăng ký"])
-    for i, s in enumerate(enrolled, 1):
-        ws.append([i, _name_fmt(s.full_name), s.class_name, s.cccd, s.dob or "", s.gender or "", s.email or "", s.enrolled_at or ""])
-    buf = _io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    fname = f"lop_{class_id}_danhsach.xlsx"
-    return send_file(buf, download_name=fname, as_attachment=True, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return _build_attendance_excel(cls, teacher_row, enrolled,
+                                   f"DiemDanh_lop{class_id}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx")
 
 
 # ---------------------------------------------------------------------------

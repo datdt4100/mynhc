@@ -806,13 +806,9 @@ def session_label(session_type, start, duration):
     return f"{label}, tiết {start}-{end}"
 
 
-def _build_attendance_excel(cls, teacher_row, enrolled, filename):
-    """Build an attendance-sheet Excel for a class and return it as a Flask send_file response."""
+def _fill_attendance_sheet(ws, cls, teacher_row, enrolled):
+    """Write attendance data + GVBM signature row into an existing worksheet."""
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Điểm danh"
-
     hdr_fill = PatternFill("solid", fgColor="1E40AF")
     att_fill = PatternFill("solid", fgColor="EFF6FF")
     hdr_font = Font(bold=True, color="FFFFFF")
@@ -892,10 +888,37 @@ def _build_attendance_excel(cls, teacher_row, enrolled, filename):
             elif alt:
                 cell.fill = alt
 
+    # ── Signature row
+    ws.append([])  # blank spacer
+    ws.append([])
+    sig_row = ws.max_row
+    ws.cell(sig_row, 7, "Giáo viên bộ môn")
+    ws.merge_cells(f"G{sig_row}:{get_column_letter(TOTAL_COLS)}{sig_row}")
+    ws.cell(sig_row, 7).font = Font(bold=True, size=11)
+    ws.cell(sig_row, 7).alignment = center
+    ws.append([])
+    sub_row = ws.max_row
+    ws.cell(sub_row, 7, "(Ký, ghi rõ họ tên)")
+    ws.merge_cells(f"G{sub_row}:{get_column_letter(TOTAL_COLS)}{sub_row}")
+    ws.cell(sub_row, 7).font = Font(italic=True, size=9, color="64748B")
+    ws.cell(sub_row, 7).alignment = center
+    # blank name line below
+    ws.append([])
+    name_row = ws.max_row
+    ws.merge_cells(f"G{name_row}:{get_column_letter(TOTAL_COLS)}{name_row}")
+    ws.cell(name_row, 7).border = Border(bottom=Side(style="thin", color="94A3B8"))
+
     # ── Column widths
     for col_letter, w in zip("ABCDEFGHI", [6, 28, 10, 8, 20, 11, 11, 11, 11]):
         ws.column_dimensions[col_letter].width = w
 
+
+def _build_attendance_excel(cls, teacher_row, enrolled, filename):
+    """Build an attendance-sheet Excel for a class and return it as a Flask send_file response."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Điểm danh"
+    _fill_attendance_sheet(ws, cls, teacher_row, enrolled)
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -7876,6 +7899,120 @@ def admin_class_export_students(class_id):
         ).fetchall()
     return _build_attendance_excel(cls, teacher_row, enrolled,
                                    f"DiemDanh_lop{class_id}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx")
+
+
+@app.route("/admin/manage-classes/export-all")
+@admin_required
+def admin_manage_classes_export_all():
+    """Export all classes into one Excel: summary sheet + one sheet per class."""
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(
+                classes,
+                teachers.c.full_name.label("teacher_name"),
+                teachers.c.subject_group,
+                teachers.c.cccd.label("teacher_cccd"),
+            )
+            .select_from(classes.outerjoin(teachers, classes.c.teacher_id == teachers.c.id))
+            .order_by(classes.c.grade, classes.c.subject, classes.c.day_of_week, classes.c.start_session)
+        ).fetchall()
+        enrolled_map = {}
+        for r in rows:
+            enrolled_map[r.id] = conn.execute(
+                select(students, enrollments.c.enrolled_at, enrollments.c.id.label("enrollment_id"))
+                .join(enrollments, students.c.id == enrollments.c.student_id)
+                .where(enrollments.c.class_id == r.id)
+                .order_by(students.c.class_name, students.c.full_name)
+            ).fetchall()
+        teacher_map = {
+            r.id: conn.execute(select(teachers).where(teachers.c.id == r.teacher_id)).fetchone()
+            for r in rows if r.teacher_id
+        }
+
+    wb = openpyxl.Workbook()
+    ws_sum = wb.active
+    ws_sum.title = "Tổng hợp"
+
+    # ── Summary sheet
+    hdr_fill = PatternFill("solid", fgColor="1E3A8A")
+    hdr_font = Font(bold=True, color="FFFFFF", size=10)
+    center   = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left     = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+    thin     = Side(style="thin", color="CBD5E1")
+    border   = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    title_fill = PatternFill("solid", fgColor="DBEAFE")
+    ws_sum.append(["TỔNG HỢP DANH SÁCH LỚP ĐĂNG KÝ TỰ CHỌN"])
+    ws_sum.merge_cells("A1:I1")
+    ws_sum["A1"].font = Font(bold=True, size=13)
+    ws_sum["A1"].alignment = center
+    ws_sum["A1"].fill = title_fill
+    ws_sum.row_dimensions[1].height = 22
+
+    sum_headers = ["STT", "Môn", "Khối", "Giáo viên", "Tổ bộ môn", "Lịch", "Địa điểm", "Sĩ số ĐK", "Sĩ số tối đa"]
+    ws_sum.append(sum_headers)
+    hr = ws_sum.max_row
+    for col in range(1, len(sum_headers) + 1):
+        c = ws_sum.cell(hr, col)
+        c.font = hdr_font
+        c.fill = hdr_fill
+        c.alignment = center
+        c.border = border
+    ws_sum.row_dimensions[hr].height = 18
+
+    used_sheet_names: set[str] = {"Tổng hợp"}
+
+    for idx, r in enumerate(rows, 1):
+        enrolled = enrolled_map.get(r.id, [])
+        teacher_row = teacher_map.get(r.id)
+        ses = "Sáng" if r.session_type == "morning" else "Chiều"
+        tiet_end = r.start_session + r.duration - 1
+        tiet_str = f"T{r.start_session}" if r.duration == 1 else f"T{r.start_session}–{tiet_end}"
+        slot = f"{day_name(r.day_of_week)}, {ses}, {tiet_str}"
+        alt = PatternFill("solid", fgColor="F8FAFC") if idx % 2 == 0 else None
+        row_data = [
+            idx,
+            r.subject or "",
+            r.grade,
+            _name_fmt(teacher_row.full_name) if teacher_row else "",
+            r.subject_group or r.subject or "",
+            slot,
+            r.location or "(chưa xếp)",
+            len(enrolled),
+            r.max_capacity or "",
+        ]
+        ws_sum.append(row_data)
+        data_r = ws_sum.max_row
+        for col in range(1, len(sum_headers) + 1):
+            c = ws_sum.cell(data_r, col)
+            c.border = border
+            c.alignment = center if col in (1, 3, 8, 9) else left
+            if alt:
+                c.fill = alt
+
+        # ── Per-class sheet
+        raw_name = f"K{r.grade}_{r.subject or 'Lop'}_{r.id}"
+        sheet_name = raw_name[:31]
+        suffix = 1
+        while sheet_name in used_sheet_names:
+            base = raw_name[:28]
+            sheet_name = f"{base}_{suffix}"
+            suffix += 1
+        used_sheet_names.add(sheet_name)
+        ws_cls = wb.create_sheet(title=sheet_name)
+        _fill_attendance_sheet(ws_cls, r, teacher_row, enrolled)
+
+    # summary column widths
+    for col_letter, w in zip("ABCDEFGHI", [5, 16, 7, 22, 14, 22, 14, 9, 10]):
+        ws_sum.column_dimensions[col_letter].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"TongHop_TatCaLop_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(buf, as_attachment=True, download_name=fname,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 # ---------------------------------------------------------------------------

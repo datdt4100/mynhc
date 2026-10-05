@@ -888,25 +888,12 @@ def _fill_attendance_sheet(ws, cls, teacher_row, enrolled):
             elif alt:
                 cell.fill = alt
 
-    # ── Signature row
-    ws.append([])  # blank spacer
-    ws.append([])
+    # ── Signature row (immediately after last student, matching sample format)
+    ws.append(["Giáo viên bộ môn ký xác nhận"])
     sig_row = ws.max_row
-    ws.cell(sig_row, 7, "Giáo viên bộ môn")
-    ws.merge_cells(f"G{sig_row}:{get_column_letter(TOTAL_COLS)}{sig_row}")
-    ws.cell(sig_row, 7).font = Font(bold=True, size=11)
-    ws.cell(sig_row, 7).alignment = center
-    ws.append([])
-    sub_row = ws.max_row
-    ws.cell(sub_row, 7, "(Ký, ghi rõ họ tên)")
-    ws.merge_cells(f"G{sub_row}:{get_column_letter(TOTAL_COLS)}{sub_row}")
-    ws.cell(sub_row, 7).font = Font(italic=True, size=9, color="64748B")
-    ws.cell(sub_row, 7).alignment = center
-    # blank name line below
-    ws.append([])
-    name_row = ws.max_row
-    ws.merge_cells(f"G{name_row}:{get_column_letter(TOTAL_COLS)}{name_row}")
-    ws.cell(name_row, 7).border = Border(bottom=Side(style="thin", color="94A3B8"))
+    ws.merge_cells(f"A{sig_row}:E{sig_row}")
+    ws.cell(sig_row, 1).font = Font(size=11)
+    ws.cell(sig_row, 1).alignment = center
 
     # ── Column widths
     for col_letter, w in zip("ABCDEFGHI", [6, 28, 10, 8, 20, 11, 11, 11, 11]):

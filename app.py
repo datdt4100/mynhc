@@ -842,11 +842,14 @@ def _fill_attendance_sheet(ws, cls, teacher_row, enrolled):
         ("Địa điểm",  cls.location or "(chưa xếp)"),
         ("Sĩ số",     f"{len(enrolled)} / {cls.max_capacity or '?'}"),
     ]
+    info_border = Border(left=thin, right=thin, top=thin, bottom=thin)
     for label, val in info_rows:
         ws.append([label, val])
         r = ws.max_row
         ws.cell(r, 1).font = bold_lbl
+        ws.cell(r, 1).border = info_border
         ws.merge_cells(f"B{r}:{get_column_letter(TOTAL_COLS)}{r}")
+        ws.cell(r, 2).border = info_border
 
     ws.append([])  # blank row 7
 
@@ -894,9 +897,10 @@ def _fill_attendance_sheet(ws, cls, teacher_row, enrolled):
     ws.merge_cells(f"A{sig_row}:E{sig_row}")
     ws.cell(sig_row, 1).font = Font(size=11)
     ws.cell(sig_row, 1).alignment = center
+    ws.cell(sig_row, 1).fill = PatternFill("solid", fgColor="DBEAFE")
 
-    # ── Column widths
-    for col_letter, w in zip("ABCDEFGHI", [6, 28, 10, 8, 20, 11, 11, 11, 11]):
+    # ── Column widths (A wider to fit info labels like "Thời gian")
+    for col_letter, w in zip("ABCDEFGHI", [14, 28, 10, 8, 20, 11, 11, 11, 11]):
         ws.column_dimensions[col_letter].width = w
 
 
@@ -1948,86 +1952,25 @@ def admin_class_students(class_id):
 @app.route("/admin/classes/<int:class_id>/students/export")
 @admin_required
 def admin_class_students_export(class_id):
-    """Excel export of enrolled students for any class (admin version)."""
+    """Excel export of enrolled students for any class (admin version, attendance format)."""
     with engine.connect() as conn:
         cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
         if not cls:
             return "Không tìm thấy lớp.", 404
+        teacher_row = conn.execute(select(teachers).where(teachers.c.id == cls.teacher_id)).fetchone() if cls.teacher_id else None
         enrolled = conn.execute(
             select(students, enrollments.c.enrolled_at)
             .join(enrollments, students.c.id == enrollments.c.student_id)
             .where(enrollments.c.class_id == class_id)
             .order_by(students.c.class_name, students.c.full_name)
         ).fetchall()
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
     slot = session_label(cls.session_type, cls.start_session, cls.duration)
-    ws.title = "Danh sách"
-
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    hdr_fill = PatternFill("solid", fgColor="1E40AF")
-    hdr_font = Font(bold=True, color="FFFFFF")
-    center = Alignment(horizontal="center", vertical="center")
-    thin = Side(style="thin", color="CBD5E1")
-    border = Border(left=thin, right=thin, top=thin, bottom=thin)
-
-    title = (f"Danh sách đăng ký — Khối {cls.grade}"
-             + (f" — {cls.subject}" if cls.subject else "")
-             + f" — {day_name(cls.day_of_week)} {slot}"
-             + (f" — Phòng: {cls.location}" if cls.location else ""))
-    ws.append([title])
-    ws.merge_cells("A1:E1")
-    ws["A1"].font = Font(bold=True, size=12)
-    ws["A1"].alignment = center
-    ws.append([f"Tổng số học sinh: {len(enrolled)}"])
-    ws.merge_cells("A2:E2")
-    ws["A2"].font = Font(italic=True, color="64748B")
-    ws["A2"].alignment = center
-    ws.append([])
-
-    headers = ["STT", "Họ và tên", "Lớp", "Giới tính", "Thời gian đăng ký"]
-    ws.append(headers)
-    for col, _ in enumerate(headers, 1):
-        cell = ws.cell(row=4, column=col)
-        cell.font = hdr_font; cell.fill = hdr_fill
-        cell.alignment = center; cell.border = border
-
-    for i, s in enumerate(enrolled, 1):
-        ts = ""
-        if s.enrolled_at:
-            try:
-                dt = datetime.fromisoformat(str(s.enrolled_at))
-                ts = dt.strftime("%d/%m/%Y %H:%M")
-            except Exception:
-                ts = str(s.enrolled_at)
-        row_data = [i, s.full_name, s.class_name or "", s.gender or "", ts]
-        ws.append(row_data)
-        rn = ws.max_row
-        for col, _ in enumerate(row_data, 1):
-            cell = ws.cell(row=rn, column=col)
-            cell.border = border
-            cell.alignment = Alignment(vertical="center",
-                                       horizontal="center" if col in (1, 3, 4) else "left")
-            if i % 2 == 0:
-                cell.fill = PatternFill("solid", fgColor="F8FAFC")
-
-    ws.column_dimensions["A"].width = 6
-    ws.column_dimensions["B"].width = 28
-    ws.column_dimensions["C"].width = 10
-    ws.column_dimensions["D"].width = 10
-    ws.column_dimensions["E"].width = 20
-
-    buf = io.BytesIO()
-    wb.save(buf); buf.seek(0)
     slug = f"Khoi{cls.grade}"
     if cls.subject:
         slug += f"_{cls.subject.replace(' ', '_')}"
     slug += f"_{day_name(cls.day_of_week).replace(' ', '')}_{slot[:4].replace(',','').replace(' ','')}"
-    ts_str = datetime.now().strftime("%Y%m%d_%H%M")
-    filename = f"DanhSach_{slug}_{ts_str}.xlsx"
-    return send_file(buf, as_attachment=True, download_name=filename,
-                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    filename = f"DiemDanh_{slug}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return _build_attendance_excel(cls, teacher_row, enrolled, filename)
 
 
 # op wrappers for room-grid student popup

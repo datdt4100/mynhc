@@ -4142,6 +4142,39 @@ def admin_homeroom_column_settings():
     return jsonify(ok=True, cols=cols)
 
 
+@app.route("/api/teacher/homeroom-students/<int:student_id>/reset-password", methods=["POST"])
+@teacher_required
+def api_teacher_homeroom_reset_password(student_id):
+    """GVCN resets the password of a student in their own homeroom class."""
+    with engine.connect() as conn:
+        teacher_row = conn.execute(select(teachers).where(teachers.c.id == session["user_id"])).fetchone()
+        hroom = conn.execute(
+            select(homeroom_classes).where(and_(
+                homeroom_classes.c.gvcn_name == teacher_row.full_name if teacher_row else False,
+                homeroom_classes.c.show_student_tab == 1,
+            ))
+        ).fetchone() if teacher_row else None
+        if not hroom:
+            return jsonify(ok=False, error="Không có quyền."), 403
+        student = conn.execute(
+            select(students.c.id, students.c.full_name, students.c.is_first_login)
+            .where(and_(students.c.id == student_id, students.c.class_name == hroom.class_name))
+        ).fetchone()
+    if not student:
+        return jsonify(ok=False, error="Học sinh không thuộc lớp chủ nhiệm của bạn."), 404
+    if student.is_first_login:
+        return jsonify(ok=False, error="Tài khoản chưa kích hoạt, không cần khôi phục mật khẩu.")
+    temp_pw = generate_temp_password()
+    with engine.begin() as conn:
+        conn.execute(
+            update(students).where(students.c.id == student_id).values(
+                password_hash=generate_password_hash(temp_pw),
+                must_change_password=1,
+            )
+        )
+    return jsonify(ok=True, new_password=temp_pw, name=_name_fmt(student.full_name))
+
+
 @app.route("/api/teacher/homeroom-students/export")
 @teacher_required
 def api_teacher_homeroom_export():

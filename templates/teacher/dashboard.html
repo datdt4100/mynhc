@@ -340,6 +340,8 @@
 .hm-icon-btn.btn-info:hover   { background: #0369A1; color: #fff; }
 .hm-icon-btn.btn-purple { color: #7C3AED; border-color: #C4B5FD; }
 .hm-icon-btn.btn-purple:hover { background: #7C3AED; color: #fff; }
+.hm-icon-btn.btn-warn   { color: #B45309; border-color: #FCD34D; }
+.hm-icon-btn.btn-warn:hover   { background: #D97706; color: #fff; border-color:#D97706; }
 
 .hm-sched-table { font-size: .8rem; width: 100%; border-collapse: collapse; }
 .hm-sched-table th { background: #F8FAFC; padding: 7px 10px; font-weight: 700; color: #475569; border-bottom: 1.5px solid #E2E8F0; white-space: nowrap; }
@@ -651,7 +653,7 @@
                 {% if cols.get('gender') %}<th class="text-center">Giới tính</th>{% endif %}
                 {% if cols.get('status') %}<th class="text-center">Tài khoản</th>{% endif %}
                 {% if cols.get('enrolled_count') %}<th class="text-center">Số môn ĐK</th>{% endif %}
-                {% if cols.get('schedule') or cols.get('activity_log') %}<th class="text-center" style="width:80px;">Thao tác</th>{% endif %}
+                <th class="text-center" style="width:110px;">Thao tác</th>
               </tr>
             </thead>
             <tbody id="hmStudentTbody">
@@ -686,7 +688,6 @@
                         style="font-size:.7rem; min-width:28px;" data-student-enroll="{{ s.id }}">{{ ec }}</span>
                 </td>
                 {% endif %}
-                {% if cols.get('schedule') or cols.get('activity_log') %}
                 <td class="text-center" style="white-space:nowrap;">
                   {% if cols.get('schedule') %}
                   <button class="hm-icon-btn btn-info" onclick="viewHmStudentDetail({{ s.id }}, '{{ s.full_name | name_fmt | e }}')" title="Xem môn đã đăng ký">
@@ -698,8 +699,10 @@
                     <i class="bi bi-clock-history"></i>
                   </button>
                   {% endif %}
+                  <button class="hm-icon-btn btn-warn {% if cols.get('schedule') or cols.get('activity_log') %}ms-1{% endif %}" onclick="resetHmStudentPassword({{ s.id }}, '{{ s.full_name | name_fmt | e }}')" title="Khôi phục mật khẩu">
+                    <i class="bi bi-key-fill"></i>
+                  </button>
                 </td>
-                {% endif %}
               </tr>
               {% else %}
               <tr><td colspan="{{ 3 + cols.get('gender',False)|int + cols.get('status',False)|int + cols.get('enrolled_count',False)|int }}" class="text-center text-muted py-5">Chưa có học sinh nào trong lớp {{ homeroom_class.class_name }}</td></tr>
@@ -841,6 +844,29 @@
 </div>
 
 {% if homeroom_class %}
+<!-- Homeroom: temp password modal -->
+<div class="modal fade" id="hmResetPwModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header border-0" style="background:linear-gradient(135deg,#92400e,#D97706); padding:18px 20px;">
+        <h5 class="modal-title fw-bold text-white d-flex align-items-center gap-2"><i class="bi bi-key-fill"></i> Mật khẩu tạm thời</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <p class="text-muted mb-3" style="font-size:.88rem;">Mật khẩu tạm của <strong id="hmRpName"></strong>. Hãy gửi cho học sinh — em sẽ được yêu cầu đổi mật khẩu mới sau khi đăng nhập.</p>
+        <div class="d-flex align-items-center gap-2 p-3 rounded-3" style="background:#FEF3C7; border:1.5px solid #FCD34D;">
+          <code id="hmRpPw" style="font-size:1.15rem; font-weight:700; letter-spacing:.08em; color:#92400E; flex:1; word-break:break-all;"></code>
+          <button type="button" class="btn btn-sm btn-outline-secondary" style="border-radius:6px; flex-shrink:0;" onclick="copyHmTempPw()" title="Sao chép"><i class="bi bi-copy" id="hmRpCopyIcon"></i></button>
+        </div>
+        <div class="mt-3 d-flex align-items-start gap-2 p-2 rounded-2" style="background:#FFF7ED; border:1px solid #FED7AA; font-size:.78rem; color:#92400E;">
+          <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1" style="color:#F59E0B;"></i>
+          <span>Mật khẩu này chỉ hiển thị <strong>một lần</strong>. Vui lòng sao chép trước khi đóng.</span>
+        </div>
+      </div>
+      <div class="modal-footer border-top" style="padding:12px 20px;"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-radius:8px;">Đóng</button></div>
+    </div>
+  </div>
+</div>
 <!-- Homeroom: Student detail modal -->
 <div class="modal fade" id="hmDetailModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
@@ -1738,11 +1764,11 @@ function refreshHmStudents() {
           ${_GVCN_COLS.gender ? `<td class="text-center">${genderBadge}</td>` : ''}
           ${_GVCN_COLS.status ? `<td class="text-center">${activatedBadge}</td>` : ''}
           ${_GVCN_COLS.enrolled_count ? `<td class="text-center">${ecBadge}</td>` : ''}
-          ${(_GVCN_COLS.schedule || _GVCN_COLS.activity_log) ? `
           <td class="text-center" style="white-space:nowrap;">
             ${_GVCN_COLS.schedule ? `<button class="hm-icon-btn btn-info" onclick="viewHmStudentDetail(${s.id},'${s.full_name.replace(/'/g,"\\'")}')"><i class="bi bi-eye"></i></button>` : ''}
             ${_GVCN_COLS.activity_log ? `<button class="hm-icon-btn btn-purple${_GVCN_COLS.schedule?' ms-1':''}" onclick="viewHmStudentLog(${s.id},'${s.full_name.replace(/'/g,"\\'")}')"><i class="bi bi-clock-history"></i></button>` : ''}
-          </td>` : ''}
+            <button class="hm-icon-btn btn-warn${(_GVCN_COLS.schedule||_GVCN_COLS.activity_log)?' ms-1':''}" onclick="resetHmStudentPassword(${s.id},'${s.full_name.replace(/'/g,"\\'")}')" title="Khôi phục mật khẩu"><i class="bi bi-key-fill"></i></button>
+          </td>
         </tr>`;
       });
       tbody.innerHTML = html || `<tr><td colspan="6" class="text-center text-muted py-5">Chưa có học sinh nào</td></tr>`;
@@ -1764,6 +1790,33 @@ function filterHmStudents() {
   });
   const hint = document.getElementById('hmSearchHint');
   if (hint) hint.textContent = q ? `${visible} kết quả` : '';
+}
+
+/* ══ GVCN: Reset student password ══ */
+function resetHmStudentPassword(studentId, name) {
+  showConfirm(
+    'Khôi phục mật khẩu?',
+    'Tạo mật khẩu tạm thời cho <strong>' + name + '</strong>?<br><span style="font-size:.85rem;color:#64748B;">Học sinh sẽ phải đổi mật khẩu sau khi đăng nhập.</span>',
+    async function () {
+      try {
+        const res  = await fetch('/api/teacher/homeroom-students/' + studentId + '/reset-password', { method: 'POST' });
+        const data = await res.json();
+        if (!data.ok) { showAlert(data.error || 'Có lỗi xảy ra.', 'error'); return; }
+        document.getElementById('hmRpName').textContent = data.name || name;
+        document.getElementById('hmRpPw').textContent   = data.new_password;
+        document.getElementById('hmRpCopyIcon').className = 'bi bi-copy';
+        new bootstrap.Modal(document.getElementById('hmResetPwModal')).show();
+      } catch { showAlert('Lỗi kết nối máy chủ.', 'error'); }
+    },
+    { confirmText: 'Khôi phục', confirmClass: 'btn-warning' }
+  );
+}
+function copyHmTempPw() {
+  navigator.clipboard.writeText(document.getElementById('hmRpPw').textContent).then(() => {
+    const icon = document.getElementById('hmRpCopyIcon');
+    icon.className = 'bi bi-check2';
+    setTimeout(() => { icon.className = 'bi bi-copy'; }, 1500);
+  });
 }
 
 /* ══ GVCN: Student detail modal ══ */

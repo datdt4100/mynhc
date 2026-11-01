@@ -4021,6 +4021,79 @@ def admin_homeroom_upload():
     return redirect(url_for("admin_index") + "#gvcn")
 
 
+def _homeroom_available(conn):
+    """Return (classes without a GVCN, teachers not yet assigned as GVCN)."""
+    hrooms = conn.execute(select(homeroom_classes)).fetchall()
+    assigned_classes = {h.class_name for h in hrooms if (h.gvcn_name or "").strip()}
+    assigned_names = {_norm_name(h.gvcn_name) for h in hrooms if (h.gvcn_name or "").strip()}
+    all_classes = {r.class_name for r in conn.execute(
+        select(students.c.class_name).where(students.c.class_name.isnot(None)).distinct()
+    ).fetchall() if r.class_name}
+    all_classes |= {h.class_name for h in hrooms}
+    free_classes = sorted(all_classes - assigned_classes)
+    free_teachers = [
+        t for t in conn.execute(
+            select(teachers.c.id, teachers.c.full_name, teachers.c.subject_group)
+            .where(teachers.c.cccd != _UNASSIGNED_CCCD)
+            .order_by(teachers.c.full_name)
+        ).fetchall()
+        if _norm_name(t.full_name) not in assigned_names
+    ]
+    return free_classes, free_teachers
+
+
+@app.route("/admin/homeroom/options")
+@admin_required
+def admin_homeroom_options():
+    with engine.connect() as conn:
+        free_classes, free_teachers = _homeroom_available(conn)
+    return jsonify(
+        ok=True,
+        classes=free_classes,
+        teachers=[{"id": t.id, "name": _name_fmt(t.full_name), "subject_group": t.subject_group or ""}
+                  for t in free_teachers],
+    )
+
+
+@app.route("/admin/homeroom/add", methods=["POST"])
+@admin_required
+def admin_homeroom_add():
+    data = request.get_json(force=True) or {}
+    class_name = (data.get("class_name") or "").strip()
+    try:
+        teacher_id = int(data.get("teacher_id"))
+    except (TypeError, ValueError):
+        teacher_id = None
+    if not class_name or not teacher_id:
+        return jsonify(ok=False, error="Vui lòng chọn lớp và giáo viên chủ nhiệm.")
+    with engine.begin() as conn:
+        free_classes, free_teachers = _homeroom_available(conn)
+        if class_name not in free_classes:
+            return jsonify(ok=False, error="Lớp này đã có giáo viên chủ nhiệm hoặc không tồn tại.")
+        teacher = next((t for t in free_teachers if t.id == teacher_id), None)
+        if not teacher:
+            return jsonify(ok=False, error="Giáo viên này đã chủ nhiệm lớp khác hoặc không tồn tại.")
+        existing = conn.execute(
+            select(homeroom_classes.c.id).where(homeroom_classes.c.class_name == class_name)
+        ).fetchone()
+        if existing:
+            conn.execute(
+                update(homeroom_classes).where(homeroom_classes.c.class_name == class_name)
+                .values(gvcn_name=teacher.full_name, subject_group=teacher.subject_group or None)
+            )
+        else:
+            tab_on = conn.execute(
+                select(func.count()).select_from(homeroom_classes)
+                .where(homeroom_classes.c.show_student_tab == 1)
+            ).scalar() or 0
+            conn.execute(insert(homeroom_classes).values(
+                class_name=class_name, gvcn_name=teacher.full_name,
+                subject_group=teacher.subject_group or None,
+                show_student_tab=1 if tab_on else 0,
+            ))
+    return jsonify(ok=True)
+
+
 @app.route("/admin/homeroom/clear", methods=["POST"])
 @admin_required
 def admin_homeroom_clear():

@@ -793,6 +793,10 @@
               onclick="document.getElementById('fileGVCN').click()">
         <i class="bi bi-upload me-1"></i>Tải lên
       </button>
+      <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" style="border-radius:8px;font-size:.78rem;"
+              onclick="openAddGVCN()">
+        <i class="bi bi-plus-lg me-1"></i>Thêm
+      </button>
       <a href="{{ url_for('admin_homeroom_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px;font-size:.78rem;">
         <i class="bi bi-download me-1"></i>File mẫu
       </a>
@@ -889,6 +893,35 @@
     <div class="p-3 text-muted" style="font-size:.82rem;"><i class="bi bi-info-circle me-1"></i>Chưa có dữ liệu GVCN. Upload file Excel để thêm.</div>
     {% endif %}
   </div>
+
+<!-- ════ Add GVCN Modal ════ -->
+<div class="modal fade" id="addGVCNModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+    <div class="modal-content" style="border-radius:14px;border:none;box-shadow:0 8px 32px rgba(0,0,0,.15);">
+      <div class="modal-header" style="background:#1D4ED8;border-radius:14px 14px 0 0;padding:14px 20px;">
+        <h6 class="modal-title text-white fw-bold mb-0"><i class="bi bi-person-plus-fill me-2"></i>Thêm giáo viên chủ nhiệm</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:20px 24px;">
+        <div class="mb-3">
+          <label for="addGvcnClass" class="form-label fw-semibold" style="font-size:.82rem;">Lớp</label>
+          <select id="addGvcnClass" class="form-select form-select-sm"><option value="">Đang tải...</option></select>
+          <div class="form-text" style="font-size:.72rem;">Chỉ hiển thị các lớp chưa có giáo viên chủ nhiệm.</div>
+        </div>
+        <div>
+          <label for="addGvcnTeacher" class="form-label fw-semibold" style="font-size:.82rem;">Giáo viên chủ nhiệm</label>
+          <select id="addGvcnTeacher" class="form-select form-select-sm"><option value="">Đang tải...</option></select>
+          <div class="form-text" style="font-size:.72rem;">Chỉ hiển thị các giáo viên chưa chủ nhiệm lớp nào.</div>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding:12px 20px;border-top:1px solid #E5E7EB;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+        <button class="btn btn-sm fw-semibold text-white" id="btnAddGVCN" onclick="submitAddGVCN()"
+                style="background:#1D4ED8;border:none;border-radius:7px;"><i class="bi bi-check2 me-1"></i>Thêm</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ════ GVCN Column Settings Modal ════ -->
 <div class="modal fade" id="gvcnColModal" tabindex="-1" aria-hidden="true">
@@ -2944,6 +2977,39 @@ async function toggleAllGVCNStudentTab(checkbox) {
     checkbox.checked = !enable;
     showAlert('Lỗi kết nối.', 'error');
   }
+}
+
+async function openAddGVCN() {
+  const selC = document.getElementById('addGvcnClass'), selT = document.getElementById('addGvcnTeacher');
+  selC.innerHTML = selT.innerHTML = '<option value="">Đang tải...</option>';
+  new bootstrap.Modal(document.getElementById('addGVCNModal')).show();
+  try {
+    const d = await (await fetch('{{ url_for("admin_homeroom_options") }}')).json();
+    selC.innerHTML = '<option value="">-- Chọn lớp --</option>' +
+      d.classes.map(c => `<option value="${c}">${c}</option>`).join('');
+    selT.innerHTML = '<option value="">-- Chọn giáo viên --</option>' +
+      d.teachers.map(t => `<option value="${t.id}">${t.name}${t.subject_group ? ' — ' + t.subject_group : ''}</option>`).join('');
+    if (!d.classes.length) selC.innerHTML = '<option value="">(Không còn lớp nào chưa có GVCN)</option>';
+    if (!d.teachers.length) selT.innerHTML = '<option value="">(Không còn giáo viên nào chưa chủ nhiệm)</option>';
+  } catch { showAlert('Lỗi tải danh sách.', 'error'); }
+}
+
+async function submitAddGVCN() {
+  const cls = document.getElementById('addGvcnClass').value;
+  const tid = document.getElementById('addGvcnTeacher').value;
+  if (!cls || !tid) { showAlert('Vui lòng chọn lớp và giáo viên chủ nhiệm.', 'error'); return; }
+  const btn = document.getElementById('btnAddGVCN');
+  btn.disabled = true;
+  try {
+    const res  = await fetch('{{ url_for("admin_homeroom_add") }}', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({class_name: cls, teacher_id: tid})
+    });
+    const data = await res.json();
+    if (data.ok) { location.href = '{{ url_for("admin_index") }}#gvcn'; location.reload(); }
+    else showAlert(data.error || 'Không thể thêm.', 'error');
+  } catch { showAlert('Lỗi kết nối.', 'error'); }
+  finally { btn.disabled = false; }
 }
 
 async function deleteGVCN(className) {

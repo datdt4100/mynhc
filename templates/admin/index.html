@@ -709,6 +709,38 @@
             <span id="cancel-only-label">{% if cancel_only %}Bật{% else %}Tắt{% endif %}</span>
           </button>
         </div>
+        <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
+          <div>
+            <span style="font-size:.78rem; font-weight:600; color:#374151;">
+              <i class="bi bi-clock-history me-1" style="color:#0EA5E9;"></i>Đăng ký thêm giờ
+            </span>
+            <span id="p3-multi_class-desc" style="font-size:.71rem;color:#64748B;display:block;margin-top:1px;">
+              {% if p3_allow_multi_class %}Cho phép HS đăng ký nhiều lớp cùng môn{% else %}Mỗi môn chỉ được đăng ký 1 lớp{% endif %}
+            </span>
+          </div>
+          <button id="btn-p3-multi_class"
+                  class="reg-toggle {% if p3_allow_multi_class %}open{% else %}closed{% endif %}"
+                  onclick="toggleP3Setting('multi_class')">
+            <span class="toggle-dot"></span>
+            <span id="p3-multi_class-label">{% if p3_allow_multi_class %}Bật{% else %}Tắt{% endif %}</span>
+          </button>
+        </div>
+        <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
+          <div>
+            <span style="font-size:.78rem; font-weight:600; color:#374151;">
+              <i class="bi bi-people me-1" style="color:#0EA5E9;"></i>GV xem danh sách đăng ký
+            </span>
+            <span id="p3-teacher_view-desc" style="font-size:.71rem;color:#64748B;display:block;margin-top:1px;">
+              {% if p3_teacher_view_enrollments %}GV thấy nút Chi tiết để xem danh sách HS{% else %}GV không thấy danh sách HS đăng ký{% endif %}
+            </span>
+          </div>
+          <button id="btn-p3-teacher_view"
+                  class="reg-toggle {% if p3_teacher_view_enrollments %}open{% else %}closed{% endif %}"
+                  onclick="toggleP3Setting('teacher_view')">
+            <span class="toggle-dot"></span>
+            <span id="p3-teacher_view-label">{% if p3_teacher_view_enrollments %}Bật{% else %}Tắt{% endif %}</span>
+          </button>
+        </div>
         <div class="nav-footer">
           <button class="btn" onclick="openIdxPhase2Modal(3)"
                   style="background:#EFF6FF;color:#1D4ED8;border:1.5px solid #BFDBFE;">
@@ -2003,6 +2035,26 @@ function toggleReq5() {
       btn.classList.toggle('closed', !on);
       label.textContent = on ? 'Bật' : 'Tắt';
       desc.textContent  = on ? 'Bắt buộc HS đăng ký đủ 5 môn' : 'HS đăng ký tự do, không giới hạn số môn';
+    })
+    .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+    .finally(() => { btn.disabled = false; });
+}
+
+const _P3_DESC = {
+  multi_class:  ['Mỗi môn chỉ được đăng ký 1 lớp', 'Cho phép HS đăng ký nhiều lớp cùng môn'],
+  teacher_view: ['GV không thấy danh sách HS đăng ký', 'GV thấy nút Chi tiết để xem danh sách HS'],
+};
+function toggleP3Setting(key) {
+  const btn = document.getElementById('btn-p3-' + key);
+  btn.disabled = true;
+  fetch('/admin/phase3-setting/' + key + '/toggle', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { showAlert(data.error || 'Có lỗi xảy ra.', 'error'); return; }
+      btn.classList.toggle('open',   data.on);
+      btn.classList.toggle('closed', !data.on);
+      document.getElementById('p3-' + key + '-label').textContent = data.on ? 'Bật' : 'Tắt';
+      document.getElementById('p3-' + key + '-desc').textContent  = _P3_DESC[key][data.on ? 1 : 0];
     })
     .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
     .finally(() => { btn.disabled = false; });

@@ -522,6 +522,17 @@ def init_db():
             except Exception:
                 conn.rollback()
 
+        # GĐ3 has its own constraints; start from the current GĐ2 values, then evolve independently
+        for _p3_key, _p2_key, _dflt in (("p3_allow_multi_class", "allow_multi_class", "1"),
+                                        ("p3_teacher_view_enrollments", "teacher_view_enrollments", "0")):
+            try:
+                if not conn.execute(select(settings_table.c.value).where(settings_table.c.key == _p3_key)).fetchone():
+                    _src = conn.execute(select(settings_table.c.value).where(settings_table.c.key == _p2_key)).fetchone()
+                    conn.execute(insert(settings_table).values(key=_p3_key, value=_src[0] if _src else _dflt))
+                    conn.commit()
+            except Exception:
+                conn.rollback()
+
         # Seed sample data on fresh databases
         try:
             _seed_sample_data(conn)
@@ -1651,7 +1662,7 @@ def teacher_dashboard():
     teacher_reg_open = get_setting("teacher_reg_open", "0") == "1"
     maintenance = get_setting("maintenance_mode", "0") == "1"
     schedule_constraint = get_setting("schedule_constraint", "1") == "1"
-    teacher_view_enrollments = get_setting("teacher_view_enrollments", "0") == "1"
+    teacher_view_enrollments = _teacher_view_enrollments_on()
     teacher_room_select = get_setting("teacher_room_select", "0") == "1"
     subj_grp_settings = {}
     if teacher_row and teacher_row.subject_group:
@@ -2025,6 +2036,12 @@ def _cancel_only_mode() -> bool:
     return _phase3_mode() and get_setting("cancel_only", "0") == "1"
 
 
+def _teacher_view_enrollments_on() -> bool:
+    """'GV xem danh sách đăng ký' for the active phase (GĐ3 has its own switch)."""
+    key = "p3_teacher_view_enrollments" if _phase3_mode() else "teacher_view_enrollments"
+    return get_setting(key, "0") == "1"
+
+
 def _student_visible_clause(student_id, phase3):
     """Which classes a student may see: GĐ2 uses is_published; GĐ3 uses phase3_published
     (classes the student is already enrolled in always stay visible)."""
@@ -2116,7 +2133,7 @@ def student_dashboard():
     student_reg_open    = get_setting("student_reg_open",    "0") == "1"
     supplement_reg_open = phase3_mode
     cancel_only = _cancel_only_mode()
-    require_5_subjects  = get_setting("require_5_subjects",  "1") == "1"
+    require_5_subjects  = get_setting("require_5_subjects",  "1") == "1" and not phase3_mode
     # Per-homeroom-class access for the open phase (GĐ2 → phase2_enabled, GĐ3 → phase3_enabled)
     phase2_allowed = True
     if student_reg_open or supplement_reg_open:
@@ -2141,6 +2158,7 @@ def student_dashboard():
             }
     needs_email = (
         get_setting("require_email_check", "0") == "1"
+        and not phase3_mode
         and not (student_row.email or "").strip()
     )
     # Required = all distinct subjects available for this grade
@@ -2500,15 +2518,27 @@ def student_enroll():
         if existing:
             return jsonify(ok=False, error="Bạn đã đăng ký lớp này rồi.")
 
-        # Check multi-class per subject (only enforced when require_5_subjects is ON)
-        if get_setting("require_5_subjects", "1") == "1" and get_setting("allow_multi_class", "1") != "1":
-            this_subject = cls.subject_group or cls.subject or ""
+        # One class per subject. GĐ2: only when require_5_subjects is ON and allow_multi_class OFF.
+        # GĐ3: governed solely by its own "Đăng ký thêm giờ" switch.
+        if phase3:
+            one_per_subject = get_setting("p3_allow_multi_class", "1") != "1"
+        else:
+            one_per_subject = get_setting("require_5_subjects", "1") == "1" and get_setting("allow_multi_class", "1") != "1"
+        if one_per_subject:
+            cls_group = conn.execute(
+                select(teachers.c.subject_group).where(teachers.c.id == cls.teacher_id)
+            ).scalar()
+            this_subject = cls.subject or cls_group or ""
             if this_subject:
                 dup = conn.execute(
-                    select(classes.c.id).where(and_(
+                    select(classes.c.id)
+                    .select_from(
+                        enrollments.join(classes, classes.c.id == enrollments.c.class_id)
+                        .outerjoin(teachers, teachers.c.id == classes.c.teacher_id)
+                    )
+                    .where(and_(
                         enrollments.c.student_id == student_id,
-                        classes.c.id == enrollments.c.class_id,
-                        func.coalesce(classes.c.subject_group, classes.c.subject, "") == this_subject,
+                        func.coalesce(classes.c.subject, teachers.c.subject_group, "") == this_subject,
                     ))
                 ).fetchone()
                 if dup:
@@ -3494,6 +3524,8 @@ def admin_index():
     require_5_subjects = get_setting("require_5_subjects", "1") == "1"
     require_email_check = get_setting("require_email_check", "0") == "1"
     teacher_view_enrollments = get_setting("teacher_view_enrollments", "0") == "1"
+    p3_allow_multi_class = get_setting("p3_allow_multi_class", "1") == "1"
+    p3_teacher_view_enrollments = get_setting("p3_teacher_view_enrollments", "0") == "1"
     teacher_room_select = get_setting("teacher_room_select", "0") == "1"
     with engine.connect() as conn2:
         busy_room_count = conn2.execute(
@@ -3530,6 +3562,8 @@ def admin_index():
         require_5_subjects=require_5_subjects,
         require_email_check=require_email_check,
         teacher_view_enrollments=teacher_view_enrollments,
+        p3_allow_multi_class=p3_allow_multi_class,
+        p3_teacher_view_enrollments=p3_teacher_view_enrollments,
         teacher_room_select=teacher_room_select,
         room_list=room_list,
         homeroom_list=homeroom_list,
@@ -7550,6 +7584,21 @@ def admin_enrollment_toggle():
     if new_val == "1":
         set_setting("supplement_reg_open", "0")
     return jsonify(ok=True, open=new_val == "1")
+
+
+_P3_TOGGLES = {"multi_class": ("p3_allow_multi_class", "1"),
+               "teacher_view": ("p3_teacher_view_enrollments", "0")}
+
+
+@app.route("/admin/phase3-setting/<key>/toggle", methods=["POST"])
+@admin_required
+def admin_phase3_setting_toggle(key):
+    if key not in _P3_TOGGLES:
+        return jsonify(ok=False, error="Cài đặt không hợp lệ."), 404
+    setting, dflt = _P3_TOGGLES[key]
+    new_val = "0" if get_setting(setting, dflt) == "1" else "1"
+    set_setting(setting, new_val)
+    return jsonify(ok=True, on=new_val == "1")
 
 
 @app.route("/admin/enrollment/toggle-cancel-only", methods=["POST"])

@@ -152,6 +152,7 @@ classes = Table(
     Column("extra_data", Text, nullable=True),        # JSON blob
     Column("notes", Text, nullable=True),             # Admin note shown to students
     Column("is_published", Integer, default=0),
+    Column("phase3_published", Integer, nullable=False, server_default="1"),  # visible to students in GĐ3
     Column("is_active", Integer, default=0),
     Column("created_at", Text, default="CURRENT_TIMESTAMP"),
 )
@@ -162,6 +163,7 @@ enrollments = Table(
     Column("student_id", Integer, nullable=False),
     Column("class_id", Integer, nullable=False),
     Column("enrolled_at", Text, default="CURRENT_TIMESTAMP"),
+    Column("phase3_added", Integer, nullable=False, server_default="0"),  # 1 = added in GĐ3 (cancellable); 0 = locked in GĐ3
 )
 
 rooms = Table(
@@ -234,6 +236,7 @@ homeroom_classes = Table(
     Column("subject_group", Text, nullable=True),              # Tổ bộ môn GVCN
     Column("show_student_tab", Integer, default=0),            # 1 = GVCN thấy tab Quản lý HS
     Column("phase2_enabled", Integer, nullable=False, server_default="1"),  # 1 = lớp được đăng ký GĐ2
+    Column("phase3_enabled", Integer, nullable=False, server_default="1"),  # 1 = lớp được hiệu chỉnh môn học GĐ3
 )
 
 subject_schedule_settings = Table(
@@ -441,6 +444,22 @@ def init_db():
         except Exception:
             conn.rollback()
         try:
+            conn.execute(text("ALTER TABLE classes ADD COLUMN phase3_published INTEGER NOT NULL DEFAULT 1"))
+            conn.execute(text("UPDATE classes SET phase3_published = COALESCE(is_published, 0)"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            conn.execute(text("ALTER TABLE homeroom_classes ADD COLUMN phase3_enabled INTEGER NOT NULL DEFAULT 1"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            conn.execute(text("ALTER TABLE enrollments ADD COLUMN phase3_added INTEGER NOT NULL DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS class_subject_slots "
                 "(id INTEGER PRIMARY KEY AUTOINCREMENT, subject TEXT NOT NULL, "
@@ -487,6 +506,7 @@ def init_db():
                            ("teacher_reg_open", "0"),
                            ("student_reg_open", "0"),
                            ("supplement_reg_open", "0"),
+                           ("cancel_only", "0"),
                            ("maintenance_mode", "0"),
                            ("schedule_constraint", "1"),
                            ("allow_multi_class", "1"),
@@ -1994,11 +2014,34 @@ def op_class_students_export(class_id):
 # Student routes
 # ---------------------------------------------------------------------------
 
+def _phase3_mode() -> bool:
+    """GĐ3 (Hiệu chỉnh môn học) is the active phase."""
+    return (get_setting("supplement_reg_open", "0") == "1"
+            and get_setting("student_reg_open", "0") != "1")
+
+
+def _cancel_only_mode() -> bool:
+    """GĐ3 'Chỉ huỷ': students may only cancel; no new registrations."""
+    return _phase3_mode() and get_setting("cancel_only", "0") == "1"
+
+
+def _student_visible_clause(student_id, phase3):
+    """Which classes a student may see: GĐ2 uses is_published; GĐ3 uses phase3_published
+    (classes the student is already enrolled in always stay visible)."""
+    if phase3:
+        return or_(
+            classes.c.phase3_published == 1,
+            classes.c.id.in_(select(enrollments.c.class_id).where(enrollments.c.student_id == student_id)),
+        )
+    return classes.c.is_published == 1
+
+
 @app.route("/student")
 @student_required
 def student_dashboard():
     student_id = session["user_id"]
     student_grade = session.get("grade")
+    phase3_mode = _phase3_mode()
 
     with engine.connect() as conn:
         student_row = conn.execute(
@@ -2010,7 +2053,7 @@ def student_dashboard():
                    teachers.c.subject_group)
             .join(teachers, classes.c.teacher_id == teachers.c.id)
             .where(and_(
-                classes.c.is_published == 1,
+                _student_visible_clause(student_id, phase3_mode),
                 classes.c.grade == student_grade,
             ))
             .order_by(classes.c.day_of_week, classes.c.session_type, classes.c.start_session)
@@ -2071,20 +2114,31 @@ def student_dashboard():
             ]
 
     student_reg_open    = get_setting("student_reg_open",    "0") == "1"
-    supplement_reg_open = get_setting("supplement_reg_open", "0") == "1"
+    supplement_reg_open = phase3_mode
+    cancel_only = _cancel_only_mode()
     require_5_subjects  = get_setting("require_5_subjects",  "1") == "1"
-    # Phase 2 per-class access
+    # Per-homeroom-class access for the open phase (GĐ2 → phase2_enabled, GĐ3 → phase3_enabled)
     phase2_allowed = True
-    if student_reg_open:
+    if student_reg_open or supplement_reg_open:
         with engine.connect() as conn:
             hroom = conn.execute(
-                select(homeroom_classes.c.phase2_enabled)
+                select(homeroom_classes.c.phase2_enabled, homeroom_classes.c.phase3_enabled)
                 .where(homeroom_classes.c.class_name == student_row.class_name)
             ).fetchone()
             if hroom is not None:
-                phase2_allowed = bool(hroom.phase2_enabled)
-    # Classes the student enrolled in that already have a room — locked in phase 3
-    locked_class_ids = {c.id for c in published_classes if c.id in my_class_ids and c.location}
+                phase2_allowed = bool(hroom.phase3_enabled if supplement_reg_open else hroom.phase2_enabled)
+    # GĐ3: subjects registered before the adjustment phase are hard-locked (cannot be cancelled)
+    locked_class_ids = set()
+    if supplement_reg_open and not cancel_only:
+        with engine.connect() as conn:
+            locked_class_ids = {
+                r.class_id for r in conn.execute(
+                    select(enrollments.c.class_id).where(and_(
+                        enrollments.c.student_id == student_id,
+                        enrollments.c.phase3_added == 0,
+                    ))
+                ).fetchall()
+            }
     needs_email = (
         get_setting("require_email_check", "0") == "1"
         and not (student_row.email or "").strip()
@@ -2109,6 +2163,7 @@ def student_dashboard():
         student_schedule=student_schedule,
         student_reg_open=student_reg_open,
         supplement_reg_open=supplement_reg_open,
+        cancel_only=cancel_only,
         locked_class_ids=locked_class_ids,
         require_5_subjects=require_5_subjects,
         needs_email=needs_email,
@@ -2389,17 +2444,22 @@ def student_enroll():
     suppl_open = get_setting("supplement_reg_open", "0") == "1"
     if not reg_open and not suppl_open:
         return jsonify(ok=False, error="Chưa mở đăng ký.")
-    # Phase 2 per-class access gate
-    if reg_open and not suppl_open:
-        student_id_check = session.get("user_id")
-        with engine.connect() as conn:
-            st = conn.execute(select(students.c.class_name).where(students.c.id == student_id_check)).fetchone()
-            if st:
-                hroom = conn.execute(
-                    select(homeroom_classes.c.phase2_enabled)
-                    .where(homeroom_classes.c.class_name == st.class_name)
-                ).fetchone()
-                if hroom is not None and not hroom.phase2_enabled:
+    phase3 = suppl_open and not reg_open
+    if phase3 and get_setting("cancel_only", "0") == "1":
+        return jsonify(ok=False, error="Hiện chỉ cho phép huỷ môn đã đăng ký, không thể đăng ký mới.")
+    # Per-homeroom-class access gate (GĐ2 → phase2_enabled, GĐ3 → phase3_enabled)
+    student_id_check = session.get("user_id")
+    with engine.connect() as conn:
+        st = conn.execute(select(students.c.class_name).where(students.c.id == student_id_check)).fetchone()
+        if st:
+            hroom = conn.execute(
+                select(homeroom_classes.c.phase2_enabled, homeroom_classes.c.phase3_enabled)
+                .where(homeroom_classes.c.class_name == st.class_name)
+            ).fetchone()
+            if hroom is not None:
+                if phase3 and not hroom.phase3_enabled:
+                    return jsonify(ok=False, error="Lớp của bạn chưa được mở khoá để hiệu chỉnh môn học (giai đoạn 3).")
+                if not phase3 and not hroom.phase2_enabled:
                     return jsonify(ok=False, error="Lớp của bạn chưa được mở khoá để đăng ký giai đoạn 2.")
 
     with engine.connect() as conn:
@@ -2425,7 +2485,7 @@ def student_enroll():
 
         if not cls:
             return jsonify(ok=False, error="Không tìm thấy lớp.")
-        if not cls.is_published:
+        if not (cls.phase3_published if phase3 else cls.is_published):
             return jsonify(ok=False, error="Lớp chưa được mở đăng ký.")
         if cls.grade != student_grade:
             return jsonify(ok=False, error="Lớp không thuộc khối của bạn.")
@@ -2526,6 +2586,7 @@ def student_enroll():
                     student_id=student_id,
                     class_id=class_id,
                     enrolled_at=ts,
+                    phase3_added=1 if phase3 else 0,
                 )
             )
             conn.execute(insert(student_enroll_log).values(
@@ -2546,7 +2607,7 @@ def _student_covered_subjects(conn, student_id, student_grade):
         .where(and_(
             enrollments.c.student_id == student_id,
             classes.c.grade == student_grade,
-            classes.c.is_published == 1,
+            _student_visible_clause(student_id, _phase3_mode()),
         ))
     ).fetchall()
     return list({r.subject_group for r in rows if r.subject_group})
@@ -2562,11 +2623,17 @@ def student_cancel_enroll(class_id):
     student_id   = session["user_id"]
     student_grade = session.get("grade")
     with engine.connect() as conn:
-        # Phase 3 only: cannot cancel classes that already have a room assigned
-        if suppl_open and not reg_open:
-            cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
-            if cls and cls.location:
-                return jsonify(ok=False, error="Không thể huỷ lớp đã được xếp phòng trong giai đoạn đăng ký bổ sung.")
+        # GĐ3: only subjects added during this phase can be cancelled; earlier ones are hard-locked
+        # (unless "Chỉ huỷ" is on, where every registered subject may be cancelled)
+        if suppl_open and not reg_open and get_setting("cancel_only", "0") != "1":
+            row = conn.execute(
+                select(enrollments.c.phase3_added).where(and_(
+                    enrollments.c.student_id == student_id,
+                    enrollments.c.class_id == class_id,
+                ))
+            ).fetchone()
+            if row and not row.phase3_added:
+                return jsonify(ok=False, error="Môn này đã đăng ký từ trước nên bị khoá trong giai đoạn hiệu chỉnh, không thể huỷ.")
         conn.execute(
             delete(enrollments).where(
                 and_(enrollments.c.student_id == student_id,
@@ -2591,7 +2658,7 @@ def api_class_counts():
     if is_admin:
         cache_key = "admin"
     elif user_type == "student":
-        cache_key = f"student:{session.get('grade')}"
+        cache_key = f"student:{session.get('grade')}:{'p3' if _phase3_mode() else 'p2'}"
     elif user_type == "teacher":
         cache_key = f"teacher:{session.get('user_id')}"
     else:
@@ -2603,10 +2670,11 @@ def api_class_counts():
 
     with engine.connect() as conn:
         if is_admin:
-            where_clause = classes.c.is_published == 1
+            where_clause = or_(classes.c.is_published == 1, classes.c.phase3_published == 1)
         elif user_type == "student":
             where_clause = and_(
-                classes.c.is_published == 1,
+                or_(classes.c.is_published == 1, classes.c.phase3_published == 1)
+                if _phase3_mode() else classes.c.is_published == 1,
                 classes.c.grade == session.get("grade"),
             )
         else:
@@ -3419,6 +3487,7 @@ def admin_index():
     teacher_reg_open     = get_setting("teacher_reg_open", "0") == "1"
     student_reg_open     = get_setting("student_reg_open", "0") == "1"
     supplement_reg_open  = get_setting("supplement_reg_open", "0") == "1"
+    cancel_only = get_setting("cancel_only", "0") == "1"
     maintenance = get_setting("maintenance_mode", "0") == "1"
     schedule_constraint = get_setting("schedule_constraint", "1") == "1"
     allow_multi_class = get_setting("allow_multi_class", "1") == "1"
@@ -3454,6 +3523,7 @@ def admin_index():
         teacher_reg_open=teacher_reg_open,
         student_reg_open=student_reg_open,
         supplement_reg_open=supplement_reg_open,
+        cancel_only=cancel_only,
         maintenance=maintenance,
         schedule_constraint=schedule_constraint,
         allow_multi_class=allow_multi_class,
@@ -4162,6 +4232,7 @@ def admin_phase2_class_access_get():
             "class_name": r.class_name,
             "grade": grade,
             "phase2_enabled": bool(r.phase2_enabled),
+            "phase3_enabled": bool(r.phase3_enabled),
         })
     return jsonify(ok=True, classes=result)
 
@@ -4172,13 +4243,14 @@ def admin_phase2_class_access_set():
     data = request.get_json(force=True) or {}
     class_name = (data.get("class_name") or "").strip()
     enabled = 1 if data.get("enabled") else 0
+    col = "phase3_enabled" if str(data.get("phase")) == "3" else "phase2_enabled"
     if not class_name:
         return jsonify(ok=False, error="Thiếu tên lớp.")
     with engine.begin() as conn:
         conn.execute(
             update(homeroom_classes)
             .where(homeroom_classes.c.class_name == class_name)
-            .values(phase2_enabled=enabled)
+            .values({col: enabled})
         )
     return jsonify(ok=True)
 
@@ -5548,6 +5620,7 @@ def admin_class_split(class_id):
                 max_capacity  = sp_capacity,
                 extra_data    = None,
                 is_published  = cls.is_published,
+                phase3_published = cls.phase3_published,
                 created_at    = ts,
             ))
             new_cid = result.inserted_primary_key[0]
@@ -6619,6 +6692,7 @@ def admin_gd2_classes():
                 classes.c.duration,
                 classes.c.max_capacity,
                 classes.c.is_published,
+                classes.c.phase3_published,
                 teachers.c.full_name.label("teacher_name"),
             )
             .select_from(classes.outerjoin(teachers, classes.c.teacher_id == teachers.c.id))
@@ -6651,6 +6725,7 @@ def admin_gd2_classes():
             "max_capacity": r.max_capacity or 0,
             "enrolled": enroll_counts.get(r.id, 0),
             "is_published": bool(r.is_published),
+            "phase3_published": bool(r.phase3_published),
         }
         for r in rows
     ]
@@ -6662,10 +6737,12 @@ def admin_gd2_classes():
 def admin_class_publish(class_id):
     data = request.get_json(force=True, silent=True) or {}
     publish = 1 if data.get("publish") else 0
+    col = "phase3_published" if str(data.get("phase")) == "3" else "is_published"
     with engine.begin() as conn:
         conn.execute(
-            update(classes).where(classes.c.id == class_id).values(is_published=publish)
+            update(classes).where(classes.c.id == class_id).values({col: publish})
         )
+    _counts_cache_invalidate()
     return jsonify(ok=True, is_published=bool(publish))
 
 
@@ -7118,12 +7195,24 @@ def op_students_reset_password(student_id):
 @app.route("/admin/enrollment")
 @admin_required
 def admin_enrollment():
+    return _enrollment_page(2)
+
+
+@app.route("/admin/adjustment")
+@admin_required
+def admin_adjustment():
+    """GĐ3 — Hiệu chỉnh môn học: same overview as GĐ2 but for the GĐ3 open-class set."""
+    return _enrollment_page(3)
+
+
+def _enrollment_page(phase):
+    open_col = classes.c.phase3_published if phase == 3 else classes.c.is_published
     with engine.connect() as conn:
         published_classes = conn.execute(
             select(classes, teachers.c.full_name.label("teacher_name"),
                    teachers.c.subject_group)
             .join(teachers, classes.c.teacher_id == teachers.c.id)
-            .where(classes.c.is_published == 1)
+            .where(open_col == 1)
             .order_by(classes.c.grade, classes.c.day_of_week,
                       classes.c.session_type, classes.c.start_session)
         ).fetchall()
@@ -7166,6 +7255,7 @@ def admin_enrollment():
         enrolled_counts_by_student=enrolled_counts_by_student,
         student_reg_open=student_reg_open,
         supplement_reg_open=supplement_reg_open,
+        phase=phase,
         day_name=day_name,
         session_label=session_label,
     )
@@ -7300,7 +7390,7 @@ def admin_enrollment_export():
             select(classes, teachers.c.full_name.label("teacher_name"),
                    teachers.c.subject_group, teachers.c.email.label("teacher_email"))
             .join(teachers, classes.c.teacher_id == teachers.c.id)
-            .where(classes.c.is_published == 1)
+            .where((classes.c.phase3_published if request.args.get("phase") == "3" else classes.c.is_published) == 1)
             .order_by(classes.c.grade, classes.c.day_of_week,
                       classes.c.session_type, classes.c.start_session)
         ).fetchall()
@@ -7462,6 +7552,15 @@ def admin_enrollment_toggle():
     return jsonify(ok=True, open=new_val == "1")
 
 
+@app.route("/admin/enrollment/toggle-cancel-only", methods=["POST"])
+@admin_required
+def admin_enrollment_toggle_cancel_only():
+    new_val = "0" if get_setting("cancel_only", "0") == "1" else "1"
+    set_setting("cancel_only", new_val)
+    _bump()
+    return jsonify(ok=True, on=new_val == "1")
+
+
 @app.route("/admin/enrollment/toggle-supplement", methods=["POST"])
 @admin_required
 def admin_enrollment_toggle_supplement():
@@ -7557,6 +7656,17 @@ def api_admin_enrollment_delete(enrollment_id):
                    student_id=student_id, class_id=class_id)
 
 
+@app.route("/api/admin/student-enroll-counts")
+@admin_required
+def api_admin_student_enroll_counts():
+    """{student_id: number of enrolled classes} for live refresh of the student tab."""
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(enrollments.c.student_id, func.count().label("cnt")).group_by(enrollments.c.student_id)
+        ).fetchall()
+    return jsonify(ok=True, counts={str(r.student_id): r.cnt for r in rows})
+
+
 @app.route("/admin/enrollment/<int:class_id>/students")
 @admin_required
 def admin_enrollment_students(class_id):
@@ -7581,6 +7691,177 @@ def admin_enrollment_students(class_id):
         }
         for s in enrolled
     ])
+
+def _fold(s: str) -> str:
+    """Accent- and case-insensitive form for searching Vietnamese names."""
+    s = unicodedata.normalize("NFD", s or "")
+    s = "".join(c for c in s if not unicodedata.combining(c)).replace("đ", "d").replace("Đ", "D")
+    return " ".join(s.split()).lower()
+
+
+def _admin_enroll_student(cls, student):
+    """Admin adds one student to a class. Returns (ok, error_message)."""
+    if student.grade != cls.grade:
+        return False, f"Học sinh thuộc khối {student.grade}, lớp này là khối {cls.grade}"
+    with engine.connect() as conn:
+        if conn.execute(select(enrollments.c.id).where(and_(
+                enrollments.c.student_id == student.id, enrollments.c.class_id == cls.id))).fetchone():
+            return False, "Đã đăng ký lớp này"
+    conflict = _time_conflict(student.id, cls._mapping)
+    if conflict is not None:
+        return False, (f"Trùng lịch với môn {conflict.subject or ''} "
+                       f"({day_name(conflict.day_of_week)} {session_label(conflict.session_type, conflict.start_session, conflict.duration)})")
+    with _get_class_lock(cls.id):
+        with engine.begin() as conn:
+            if conn.execute(select(enrollments.c.id).where(and_(
+                    enrollments.c.student_id == student.id, enrollments.c.class_id == cls.id))).fetchone():
+                return False, "Đã đăng ký lớp này"
+            if cls.max_capacity is not None:
+                cnt = conn.execute(select(func.count()).where(enrollments.c.class_id == cls.id)).scalar()
+                if cnt >= cls.max_capacity:
+                    return False, "Lớp đã đầy"
+            ts = now_vn()
+            conn.execute(insert(enrollments).values(student_id=student.id, class_id=cls.id, enrolled_at=ts))
+            conn.execute(insert(student_enroll_log).values(student_id=student.id, class_id=cls.id, action='A', ts=ts))
+    _counts_cache_invalidate()
+    return True, None
+
+
+@app.route("/admin/students/search")
+@admin_required
+def admin_students_search():
+    """Find students (same grade as the class) by CCCD or any part of the name."""
+    q = (request.args.get("q") or "").strip()
+    try:
+        class_id = int(request.args.get("class_id"))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, error="Thiếu lớp."), 400
+    if len(q) < 2:
+        return jsonify(ok=True, students=[])
+    with engine.connect() as conn:
+        cls = conn.execute(select(classes.c.grade).where(classes.c.id == class_id)).fetchone()
+        if not cls:
+            return jsonify(ok=False, error="Không tìm thấy lớp."), 404
+        rows = conn.execute(
+            select(students.c.id, students.c.full_name, students.c.cccd, students.c.class_name)
+            .where(students.c.grade == cls.grade)
+        ).fetchall()
+        enrolled_ids = {r.student_id for r in conn.execute(
+            select(enrollments.c.student_id).where(enrollments.c.class_id == class_id)).fetchall()}
+    tokens = _fold(q).split()
+    ql = q.lower()
+    out = []
+    for r in rows:
+        name_f = _fold(r.full_name)
+        if (r.cccd and ql in r.cccd.lower()) or all(t in name_f for t in tokens):
+            out.append(r)
+    out.sort(key=lambda r: (_fold(r.full_name).split()[-1:] or [""], _fold(r.full_name)))
+    return jsonify(ok=True, truncated=len(out) > 30, students=[
+        {"id": r.id, "full_name": _name_fmt(r.full_name), "cccd": r.cccd or "",
+         "class_name": r.class_name or "", "already": r.id in enrolled_ids}
+        for r in out[:30]
+    ])
+
+
+@app.route("/admin/classes/<int:class_id>/add-student", methods=["POST"])
+@admin_required
+def admin_class_add_student(class_id):
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        student_id = int(data.get("student_id"))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, error="Thiếu học sinh.")
+    with engine.connect() as conn:
+        cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        student = conn.execute(select(students).where(students.c.id == student_id)).fetchone()
+    if not cls:
+        return jsonify(ok=False, error="Không tìm thấy lớp.")
+    if not student:
+        return jsonify(ok=False, error="Không tìm thấy học sinh.")
+    ok, err = _admin_enroll_student(cls, student)
+    return jsonify(ok=ok, error=err)
+
+
+@app.route("/admin/enrollment/students-template")
+@admin_required
+def admin_enrollment_students_template():
+    from openpyxl.styles import Font, PatternFill, Alignment
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Danh sách học sinh"
+    ws.append(["STT", "Họ và tên", "Lớp"])
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="1E40AF")
+        c.alignment = Alignment(horizontal="center")
+    ws.append([1, "Nguyễn Văn An", "12A01"])
+    ws.append([2, "Trần Thị Bình", "12A02"])
+    for col, w in zip("ABC", (8, 32, 12)):
+        ws.column_dimensions[col].width = w
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name="mau_them_hoc_sinh.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/admin/classes/<int:class_id>/add-students-upload", methods=["POST"])
+@admin_required
+def admin_class_add_students_upload(class_id):
+    f = request.files.get("file")
+    if not f or not (f.filename or "").lower().endswith(".xlsx"):
+        return jsonify(ok=False, error="Vui lòng chọn file Excel (.xlsx).")
+    try:
+        ws = openpyxl.load_workbook(f, data_only=True).active
+        rows = list(ws.iter_rows(values_only=True))
+    except Exception:
+        return jsonify(ok=False, error="Không đọc được file Excel.")
+    with engine.connect() as conn:
+        cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        all_students = conn.execute(
+            select(students.c.id, students.c.full_name, students.c.class_name, students.c.grade)
+        ).fetchall() if cls else []
+    if not cls:
+        return jsonify(ok=False, error="Không tìm thấy lớp.")
+
+    def cell(row, i):
+        return str(row[i]).strip() if len(row) > i and row[i] is not None else ""
+
+    start = 0
+    if rows and (cell(rows[0], 0).lower() in ("stt", "số thứ tự") or "họ" in cell(rows[0], 1).lower()):
+        start = 1
+    data_rows = rows[start:]
+    if len(data_rows) > 2000:
+        return jsonify(ok=False, error="File quá lớn (tối đa 2000 dòng).")
+
+    by_exact, by_fold = {}, {}
+    for st in all_students:
+        cn = (st.class_name or "").strip().lower()
+        by_exact.setdefault((_norm_name(st.full_name), cn), []).append(st)
+        by_fold.setdefault((_fold(st.full_name), cn), []).append(st)
+
+    added, errors = 0, []
+    for idx, row in enumerate(data_rows, start=start + 1):
+        name, homeroom = cell(row, 1), cell(row, 2)
+        if not name and not homeroom:
+            continue
+        def fail(reason):
+            errors.append({"row": idx, "full_name": name, "class_name": homeroom, "reason": reason})
+        if not name or not homeroom:
+            fail("Thiếu họ tên hoặc lớp"); continue
+        key_c = homeroom.lower()
+        matches = by_exact.get((_norm_name(name), key_c)) or by_fold.get((_fold(name), key_c)) or []
+        if not matches:
+            fail("Không tìm thấy học sinh"); continue
+        if len(matches) > 1:
+            fail("Trùng tên trong lớp, không xác định được học sinh"); continue
+        ok, err = _admin_enroll_student(cls, matches[0])
+        if ok:
+            added += 1
+        else:
+            fail(err)
+    return jsonify(ok=True, added=added, failed=len(errors), errors=errors)
+
 
 # ---------------------------------------------------------------------------
 # Activity log APIs

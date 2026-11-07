@@ -1,9 +1,32 @@
 {% extends "base.html" %}
-{% block title %}Quản lý đăng ký môn học – mynhc{% endblock %}
+{% block title %}{% if phase == 3 %}Hiệu chỉnh môn học{% else %}Quản lý đăng ký môn học{% endif %} – mynhc{% endblock %}
 {% block hero %}{% endblock %}
 
 {% block header_right %}
 <div class="d-flex align-items-center gap-2">
+  {% if phase == 3 %}
+  <button class="topbar-btn topbar-btn-solid" id="btn-toggle-supplement" onclick="toggleSupplementReg()"
+          style="{% if student_reg_open %}opacity:.45;{% endif %}">
+    {% if supplement_reg_open %}
+    <i class="bi bi-unlock-fill"></i><span class="d-none d-sm-inline">GĐ3 đang mở</span>
+    {% else %}
+    <i class="bi bi-lock-fill"></i><span class="d-none d-sm-inline">Mở GĐ3</span>
+    {% endif %}
+  </button>
+  <button class="topbar-btn" onclick="openPhase2ClassModal()"
+          title="Điều chỉnh lớp tham gia GĐ{{ phase }}"
+          style="background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.35);color:rgba(255,255,255,.92);">
+    <i class="bi bi-people-fill"></i><span class="d-none d-sm-inline ms-1">Phân lớp GĐ{{ phase }}</span>
+  </button>
+  <button class="topbar-btn topbar-btn-solid" id="btn-toggle-enrollment" onclick="toggleStudentReg()"
+          style="{% if supplement_reg_open %}opacity:.45;{% endif %}">
+    {% if student_reg_open %}
+    <i class="bi bi-unlock-fill"></i><span class="d-none d-sm-inline">GĐ2 đang mở</span>
+    {% else %}
+    <i class="bi bi-lock-fill"></i><span class="d-none d-sm-inline">Mở GĐ2</span>
+    {% endif %}
+  </button>
+  {% else %}
   <button class="topbar-btn topbar-btn-solid" id="btn-toggle-enrollment" onclick="toggleStudentReg()"
           style="{% if supplement_reg_open %}opacity:.45;{% endif %}">
     {% if student_reg_open %}
@@ -13,21 +36,19 @@
     {% endif %}
   </button>
   <button class="topbar-btn" onclick="openPhase2ClassModal()"
-          title="Điều chỉnh lớp tham gia GĐ2"
+          title="Điều chỉnh lớp tham gia GĐ{{ phase }}"
           style="background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.35);color:rgba(255,255,255,.92);">
-    <i class="bi bi-people-fill"></i><span class="d-none d-sm-inline ms-1">Phân lớp GĐ2</span>
+    <i class="bi bi-people-fill"></i><span class="d-none d-sm-inline ms-1">Phân lớp GĐ{{ phase }}</span>
   </button>
-  <button class="topbar-btn" id="btn-toggle-supplement" onclick="toggleSupplementReg()"
-          style="background:{% if supplement_reg_open %}#F59E0B{% else %}rgba(255,255,255,.13){% endif %};
-                 border-color:{% if supplement_reg_open %}#D97706{% else %}rgba(255,255,255,.35){% endif %};
-                 color:{% if supplement_reg_open %}#fff{% else %}rgba(255,255,255,.92){% endif %};
-                 {% if student_reg_open %}opacity:.45;{% endif %}">
+  <button class="topbar-btn topbar-btn-solid" id="btn-toggle-supplement" onclick="toggleSupplementReg()"
+          style="{% if student_reg_open %}opacity:.45;{% endif %}">
     {% if supplement_reg_open %}
-    <i class="bi bi-plus-square-fill"></i><span class="d-none d-sm-inline">GĐ3 đang mở</span>
+    <i class="bi bi-unlock-fill"></i><span class="d-none d-sm-inline">GĐ3 đang mở</span>
     {% else %}
-    <i class="bi bi-plus-square"></i><span class="d-none d-sm-inline">Mở GĐ3 bổ sung</span>
+    <i class="bi bi-lock-fill"></i><span class="d-none d-sm-inline">Mở GĐ3</span>
     {% endif %}
   </button>
+  {% endif %}
 </div>
 {% endblock %}
 
@@ -188,7 +209,7 @@
       <i class="bi bi-arrow-left"></i>
     </a>
     <h1 style="font-size:1.1rem; font-weight:800; color:#0c4a6e; margin:0;">
-      <i class="bi bi-card-checklist me-2" style="color:#10B981;"></i>Quản lý đăng ký môn học
+      {% if phase == 3 %}<i class="bi bi-pencil-square me-2" style="color:#F59E0B;"></i>Hiệu chỉnh môn học (Giai đoạn 3){% else %}<i class="bi bi-card-checklist me-2" style="color:#10B981;"></i>Quản lý đăng ký môn học{% endif %}
     </h1>
   </div>
 
@@ -249,7 +270,7 @@
             <i class="bi bi-search"></i>
             <input type="search" id="searchClasses" placeholder="Tìm giáo viên, môn, phòng…" oninput="filterClasses()">
           </div>
-          <a href="{{ url_for('admin_enrollment_export') }}" class="btn btn-sm btn-outline-success fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem; white-space:nowrap;">
+          <a href="{{ url_for('admin_enrollment_export', phase=3 if phase == 3 else None) }}" class="btn btn-sm btn-outline-success fw-semibold d-flex align-items-center gap-1" style="border-radius:8px; font-size:.78rem; white-space:nowrap;">
             <i class="bi bi-file-earmark-excel"></i><span>Xuất Excel</span>
           </a>
         </div>
@@ -464,6 +485,54 @@
   </div>
 </div>
 
+
+{% if phase == 3 %}
+<!-- ══ MODAL: Thêm học sinh vào lớp (tìm kiếm) ══ -->
+<div class="modal fade" id="modalAddStudent" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#065f46,#10B981); border:none;">
+        <h5 class="modal-title fw-bold text-white"><i class="bi bi-person-plus-fill me-2"></i>Thêm học sinh vào lớp</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="position-relative mb-2">
+          <i class="bi bi-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#94A3B8;"></i>
+          <input type="search" id="addStuQuery" class="form-control" style="padding-left:34px;border-radius:10px;"
+                 placeholder="Nhập số căn cước hoặc họ / tên học sinh…" autocomplete="off" oninput="addStuSearchDebounced()">
+        </div>
+        <div class="text-muted mb-2" style="font-size:.74rem;">Nhập ít nhất 2 ký tự. Chỉ tìm học sinh cùng khối với lớp.</div>
+        <div id="addStuResults"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Tải lên danh sách học sinh ══ -->
+<div class="modal fade" id="modalUploadStudents" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#1D4ED8,#3B82F6); border:none;">
+        <h5 class="modal-title fw-bold text-white"><i class="bi bi-upload me-2"></i>Tải lên danh sách học sinh</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="uploadStuForm">
+          <p class="text-muted mb-2" style="font-size:.82rem;">File Excel (.xlsx) gồm 3 cột: <strong>STT</strong>, <strong>Họ và tên</strong>, <strong>Lớp</strong> (lớp sinh hoạt, ví dụ 12A01).</p>
+          <a href="{{ url_for('admin_enrollment_students_template') }}" class="btn btn-sm btn-outline-secondary fw-semibold mb-3" style="border-radius:8px;font-size:.78rem;">
+            <i class="bi bi-download me-1"></i>Tải file mẫu
+          </a>
+          <input type="file" id="uploadStuFile" class="form-control mb-3" accept=".xlsx">
+          <button id="uploadStuBtn" class="btn btn-primary fw-semibold w-100" style="border-radius:10px;" onclick="submitUploadStudents()">
+            <i class="bi bi-upload me-1"></i>Tải lên và thêm học sinh
+          </button>
+        </div>
+        <div id="uploadStuResult" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <!-- ══════════════════════════════════════════
      MODAL: Chi tiết học sinh (TKB + Log)
@@ -772,7 +841,7 @@
     <div class="modal-content" style="border-radius:16px;overflow:hidden;">
       <div class="modal-header" style="background:linear-gradient(135deg,#1D4ED8,#3B82F6);border:none;padding:14px 20px;">
         <h5 class="modal-title text-white fw-bold" style="font-size:.95rem;">
-          <i class="bi bi-people-fill me-2"></i>Lớp được tham gia Giai đoạn 2
+          <i class="bi bi-people-fill me-2"></i>Lớp được tham gia Giai đoạn {{ phase }}
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
@@ -802,7 +871,24 @@ function switchTab(tab) {
   document.getElementById('pane-students').style.display = tab === 'students' ? '' : 'none';
   document.getElementById('tab-classes').classList.toggle('active',  tab === 'classes');
   document.getElementById('tab-students').classList.toggle('active', tab === 'students');
+  if (tab === 'students') refreshStudentCounts();
 }
+
+/* ── Live "Số môn ĐK" of the student tab ── */
+function refreshStudentCounts() {
+  fetch('/api/admin/student-enroll-counts').then(r => r.json()).then(d => {
+    if (!d.ok) return;
+    document.querySelectorAll('[id^="stu-enroll-"]').forEach(badge => {
+      const n = d.counts[badge.id.replace('stu-enroll-', '')] || 0;
+      if (parseInt(badge.textContent) === n) return;
+      badge.textContent = n;
+      badge.className = 'badge rounded-pill ' + (n === 0 ? 'bg-light text-muted border' : n >= 5 ? 'bg-success' : 'bg-warning text-dark');
+    });
+  }).catch(() => {});
+}
+setInterval(() => {
+  if (document.getElementById('pane-students').style.display !== 'none') refreshStudentCounts();
+}, 5000);
 
 /* ── Class list search ── */
 function filterClasses() {
@@ -985,24 +1071,71 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ── View students of a class (modal) ── */
+let _stuClassId = null;
 function viewStudents(classId) {
+  _stuClassId = classId;
   const body = document.getElementById('students-modal-body');
   body.innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Đang tải...</div>';
-  new bootstrap.Modal(document.getElementById('modalStudents')).show();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalStudents')).show();
+  const header = n => _PHASE === 3
+    ? `<div class="d-flex align-items-center gap-2 px-3 pt-3 pb-2">
+         <span class="text-muted" style="font-size:.82rem;">Tổng: <strong>${n}</strong> học sinh</span>
+         <div class="ms-auto d-flex gap-2">
+           <button class="btn btn-sm btn-success fw-semibold" style="border-radius:8px;font-size:.78rem;" onclick="openAddStudent()"><i class="bi bi-plus-lg me-1"></i>Thêm</button>
+           <button class="btn btn-sm btn-outline-primary fw-semibold" style="border-radius:8px;font-size:.78rem;" onclick="openUploadStudents()"><i class="bi bi-upload me-1"></i>Tải lên</button>
+         </div>
+       </div>`
+    : `<div class="px-3 pt-3 pb-2 text-muted" style="font-size:.82rem;">Tổng: <strong>${n}</strong> học sinh</div>`;
   fetch('/admin/enrollment/' + classId + '/students')
     .then(r => r.json()).then(data => {
       if (!data.students || !data.students.length) {
-        body.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-people" style="font-size:2rem;display:block;margin-bottom:8px;"></i>Chưa có học sinh đăng ký.</div>';
+        body.innerHTML = (_PHASE === 3 ? header(0) : '') + '<div class="text-center text-muted py-4"><i class="bi bi-people" style="font-size:2rem;display:block;margin-bottom:8px;"></i>Chưa có học sinh đăng ký.</div>';
         return;
       }
-      let html = `<div class="px-3 pt-3 pb-2 text-muted" style="font-size:.82rem;">Tổng: <strong>${data.students.length}</strong> học sinh</div>
+      let html = header(data.students.length) + `
         <div style="overflow:auto;max-height:420px;"><table class="sched-table">
-        <thead><tr><th style="width:38px;">STT</th><th>Họ tên</th><th>Mã đăng nhập</th><th>Khối</th><th>Lớp</th><th>Truy cập gần nhất</th></tr></thead><tbody>`;
+        <thead><tr><th style="width:38px;">STT</th><th>Họ tên</th><th>Mã đăng nhập</th><th>Khối</th><th>Lớp</th><th>Truy cập gần nhất</th><th style="width:44px;"></th></tr></thead><tbody>`;
       data.students.forEach((s, i) => {
-        html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold">${s.full_name}</td><td><code style="font-size:.75rem;">${s.cccd}</code></td><td>${s.grade??'—'}</td><td>${s.class_name??'—'}</td><td style="font-size:.75rem;color:#64748B;white-space:nowrap;">${s.last_seen_at ? s.last_seen_at.slice(0,19) : '—'}</td></tr>`;
+        html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold">${s.full_name}</td><td><code style="font-size:.75rem;">${s.cccd}</code></td><td>${s.grade??'—'}</td><td>${s.class_name??'—'}</td><td style="font-size:.75rem;color:#64748B;white-space:nowrap;">${s.last_seen_at ? s.last_seen_at.slice(0,19) : '—'}</td>
+          <td style="text-align:center;">
+            <button class="btn btn-sm p-0" style="color:#EF4444;background:none;border:none;opacity:.75;" title="Xoá học sinh khỏi lớp"
+                    onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.75"
+                    data-eid="${s.enrollment_id}" data-sid="${s.id}" data-name="${String(s.full_name).replace(/"/g,'&quot;')}"
+                    onclick="removeStudentFromClass(this)"><i class="bi bi-person-dash"></i></button>
+          </td></tr>`;
       });
       body.innerHTML = html + '</tbody></table></div>';
     }).catch(() => { body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải danh sách.</div>'; });
+}
+
+/* ── Remove a student from the class being viewed ── */
+function removeStudentFromClass(btn) {
+  const eid = btn.dataset.eid, sid = btn.dataset.sid, name = btn.dataset.name;
+  showConfirm(
+    'Xoá học sinh khỏi lớp?',
+    `Học sinh <strong>${name.replace(/[<>&]/g, '')}</strong> sẽ bị xoá khỏi lớp này. Hành động được ghi vào lịch sử.`,
+    async function() {
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/admin/enrollment/' + eid, { method: 'DELETE' });
+        const data = await res.json();
+        if (!data.ok) { showAlert(data.error || 'Không thể xoá.', 'error'); btn.disabled = false; return; }
+        const badge = document.getElementById('stu-enroll-' + sid);
+        if (badge) {
+          const cur = Math.max(0, parseInt(badge.textContent) - 1);
+          badge.textContent = cur;
+          badge.className = badge.className.replace(/bg-success|bg-warning|bg-light|text-muted|border|text-dark/g, '').trim();
+          if (cur === 0) badge.classList.add('bg-light', 'text-muted', 'border');
+          else if (cur >= 5) badge.classList.add('bg-success');
+          else badge.classList.add('bg-warning', 'text-dark');
+        }
+        refreshCounts(); refreshStudentCounts();
+        showAlert('Đã xoá học sinh khỏi lớp.', 'success');
+        viewStudents(_stuClassId);
+      } catch { showAlert('Lỗi kết nối.', 'error'); btn.disabled = false; }
+    },
+    { confirmText: 'Xoá', confirmClass: 'btn-danger' }
+  );
 }
 
 /* ── Student detail modal ── */
@@ -1131,10 +1264,7 @@ function toggleStudentReg() {
     btn.style.opacity = '';
     // Opening phase 2 closes phase 3
     if (open) {
-      btn3.innerHTML = '<i class="bi bi-plus-square"></i><span class="d-none d-sm-inline">Mở GĐ3 bổ sung</span>';
-      btn3.style.background = 'rgba(255,255,255,.13)';
-      btn3.style.borderColor = 'rgba(255,255,255,.35)';
-      btn3.style.color = 'rgba(255,255,255,.92)';
+      btn3.innerHTML = '<i class="bi bi-lock-fill"></i><span class="d-none d-sm-inline">Mở GĐ3</span>';
       btn3.style.opacity = '.45';
     } else {
       btn3.style.opacity = '';
@@ -1153,11 +1283,8 @@ function toggleSupplementReg() {
   .then(r => r.json()).then(data => {
     const open = data.open;
     btn.innerHTML = open
-      ? '<i class="bi bi-plus-square-fill"></i><span class="d-none d-sm-inline">GĐ3 đang mở</span>'
-      : '<i class="bi bi-plus-square"></i><span class="d-none d-sm-inline">Mở GĐ3 bổ sung</span>';
-    btn.style.background    = open ? '#F59E0B' : 'rgba(255,255,255,.13)';
-    btn.style.borderColor   = open ? '#D97706' : 'rgba(255,255,255,.35)';
-    btn.style.color         = 'rgba(255,255,255,.92)';
+      ? '<i class="bi bi-unlock-fill"></i><span class="d-none d-sm-inline">GĐ3 đang mở</span>'
+      : '<i class="bi bi-lock-fill"></i><span class="d-none d-sm-inline">Mở GĐ3</span>';
     btn.style.opacity       = '';
     // Opening phase 3 closes phase 2
     if (open) {
@@ -1560,6 +1687,100 @@ async function confirmMerge() {
   btn.disabled = false; btn.innerHTML = '<i class="bi bi-diagram-2 me-1"></i>Hợp lớp';
 }
 
+const _PHASE = {{ phase }};
+{% if phase == 3 %}
+/* ── GĐ3: thêm học sinh vào lớp ── */
+function _swapModal(fromId, toId, onShown) {
+  const from = document.getElementById(fromId), to = document.getElementById(toId);
+  from.addEventListener('hidden.bs.modal', function once() {
+    from.removeEventListener('hidden.bs.modal', once);
+    bootstrap.Modal.getOrCreateInstance(to).show();
+    if (onShown) onShown();
+  });
+  bootstrap.Modal.getInstance(from).hide();
+}
+['modalAddStudent', 'modalUploadStudents'].forEach(id => {
+  document.getElementById(id).addEventListener('hidden.bs.modal', () => { if (_stuClassId) viewStudents(_stuClassId); });
+});
+
+function openAddStudent() {
+  _swapModal('modalStudents', 'modalAddStudent', () => {
+    const q = document.getElementById('addStuQuery');
+    q.value = ''; document.getElementById('addStuResults').innerHTML = '';
+    setTimeout(() => q.focus(), 300);
+  });
+}
+let _addStuTimer = null;
+function addStuSearchDebounced() { clearTimeout(_addStuTimer); _addStuTimer = setTimeout(addStuSearch, 300); }
+const _esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function addStuSearch() {
+  const q = document.getElementById('addStuQuery').value.trim();
+  const box = document.getElementById('addStuResults');
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  try {
+    const d = await (await fetch('/admin/students/search?class_id=' + _stuClassId + '&q=' + encodeURIComponent(q))).json();
+    if (!d.ok) { box.innerHTML = `<div class="text-danger small">${_esc(d.error || 'Lỗi tìm kiếm')}</div>`; return; }
+    if (!d.students.length) { box.innerHTML = '<div class="text-center text-muted py-3" style="font-size:.85rem;">Không tìm thấy học sinh.</div>'; return; }
+    box.innerHTML = d.students.map(s => `
+      <div class="d-flex align-items-center gap-2 py-2" style="border-bottom:1px solid #F1F5F9;" id="addStuRow_${s.id}">
+        <div style="flex:1;min-width:0;">
+          <div class="fw-semibold" style="font-size:.85rem;">${_esc(s.full_name)}</div>
+          <div class="text-muted" style="font-size:.72rem;"><code>${_esc(s.cccd)}</code> · Lớp ${_esc(s.class_name || '—')}</div>
+        </div>
+        <div id="addStuAct_${s.id}" style="flex-shrink:0;">
+          ${s.already
+            ? '<em class="text-muted" style="font-size:.72rem;">Đã đăng ký</em>'
+            : `<button class="btn btn-sm btn-success fw-semibold" style="border-radius:8px;font-size:.74rem;" onclick="addStuDo(${s.id}, this)"><i class="bi bi-plus-lg me-1"></i>Thêm</button>`}
+        </div>
+      </div>`).join('') + (d.truncated ? '<div class="text-muted small pt-2">Chỉ hiển thị 30 kết quả đầu — hãy nhập cụ thể hơn.</div>' : '');
+  } catch { box.innerHTML = '<div class="text-danger small">Lỗi kết nối.</div>'; }
+}
+async function addStuDo(studentId, btn) {
+  btn.disabled = true;
+  try {
+    const d = await (await fetch('/admin/classes/' + _stuClassId + '/add-student', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({student_id: studentId})
+    })).json();
+    if (d.ok) { document.getElementById('addStuAct_' + studentId).innerHTML = '<em class="text-muted" style="font-size:.72rem;">Đã đăng ký</em>'; refreshCounts(); refreshStudentCounts(); }
+    else { btn.disabled = false; showAlert(d.error || 'Không thể thêm học sinh.', 'error'); }
+  } catch { btn.disabled = false; showAlert('Lỗi kết nối.', 'error'); }
+}
+
+function openUploadStudents() {
+  _swapModal('modalStudents', 'modalUploadStudents', () => {
+    document.getElementById('uploadStuForm').style.display = '';
+    document.getElementById('uploadStuResult').style.display = 'none';
+    document.getElementById('uploadStuFile').value = '';
+  });
+}
+async function submitUploadStudents() {
+  const file = document.getElementById('uploadStuFile').files[0];
+  if (!file) { showAlert('Vui lòng chọn file Excel.', 'error'); return; }
+  const btn = document.getElementById('uploadStuBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang xử lý...';
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const d = await (await fetch('/admin/classes/' + _stuClassId + '/add-students-upload', {method: 'POST', body: fd})).json();
+    if (!d.ok) { showAlert(d.error || 'Không thể xử lý file.', 'error'); return; }
+    const errRows = d.errors.map(e => `<tr><td>${e.row}</td><td>${_esc(e.full_name || '—')}</td><td>${_esc(e.class_name || '—')}</td><td class="text-danger">${_esc(e.reason)}</td></tr>`).join('');
+    document.getElementById('uploadStuForm').style.display = 'none';
+    const res = document.getElementById('uploadStuResult');
+    res.innerHTML = `
+      <div class="d-flex gap-2 mb-3">
+        <div class="flex-fill text-center p-3" style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;">
+          <div style="font-size:1.6rem;font-weight:800;color:#15803D;">${d.added}</div><div style="font-size:.78rem;color:#166534;">học sinh đã thêm</div></div>
+        <div class="flex-fill text-center p-3" style="background:${d.failed ? '#FEF2F2' : '#F8FAFC'};border:1.5px solid ${d.failed ? '#FCA5A5' : '#E2E8F0'};border-radius:12px;">
+          <div style="font-size:1.6rem;font-weight:800;color:${d.failed ? '#DC2626' : '#94A3B8'};">${d.failed}</div><div style="font-size:.78rem;color:#64748B;">học sinh bị lỗi</div></div>
+      </div>
+      ${d.failed ? `<div style="max-height:260px;overflow:auto;"><table class="sched-table"><thead><tr><th>Dòng</th><th>Họ và tên</th><th>Lớp</th><th>Lý do</th></tr></thead><tbody>${errRows}</tbody></table></div>` : ''}
+      <button class="btn btn-secondary w-100 mt-3" style="border-radius:10px;" data-bs-dismiss="modal">Đóng</button>`;
+    res.style.display = '';
+    refreshCounts(); refreshStudentCounts();
+  } catch { showAlert('Lỗi kết nối.', 'error'); }
+  finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-upload me-1"></i>Tải lên và thêm học sinh'; }
+}
+{% endif %}
+
 let _p2SaveTimeout = null;
 async function openPhase2ClassModal() {
   const modal = new bootstrap.Modal(document.getElementById('modalPhase2Classes'));
@@ -1593,14 +1814,14 @@ async function openPhase2ClassModal() {
           </div>
         </div>
         <div class="d-flex flex-wrap gap-2">
-          ${list.map(c => `
+          ${list.map(c => ({...c, _on: _PHASE === 3 ? c.phase3_enabled : c.phase2_enabled})).map(c => `
             <div class="d-flex align-items-center gap-2 p-2" id="p2row_${CSS.escape(c.class_name)}"
-                 style="background:#F8FAFC;border:1.5px solid ${c.phase2_enabled ? '#86EFAC' : '#E2E8F0'};border-radius:10px;min-width:100px;cursor:pointer;transition:border-color .15s;"
-                 onclick="p2Toggle('${c.class_name}', ${c.phase2_enabled})">
+                 style="background:#F8FAFC;border:1.5px solid ${c._on ? '#86EFAC' : '#E2E8F0'};border-radius:10px;min-width:100px;cursor:pointer;transition:border-color .15s;"
+                 onclick="p2Toggle('${c.class_name}', ${c._on})">
               <span class="fw-semibold" style="font-size:.8rem;color:#0c4a6e;flex:1;">${c.class_name}</span>
               <div class="form-check form-switch mb-0" style="padding:0;">
                 <input class="form-check-input" type="checkbox" id="p2cb_${c.class_name}"
-                       ${c.phase2_enabled ? 'checked' : ''}
+                       ${c._on ? 'checked' : ''}
                        onclick="event.stopPropagation();p2Toggle('${c.class_name}', !this.checked)"
                        style="cursor:pointer;width:2em;height:1.1em;">
               </div>
@@ -1627,7 +1848,7 @@ async function p2Toggle(className, currentEnabled) {
   try {
     await fetch('/admin/phase2-class-access', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({class_name: className, enabled: newEnabled}),
+      body: JSON.stringify({class_name: className, enabled: newEnabled, phase: _PHASE}),
     });
     // Show saved indicator
     const msg = document.getElementById('p2SaveMsg');

@@ -56,6 +56,17 @@
     height: 100%;
     contain: layout style paint;
   }
+  .nav-footer {
+    display: flex; flex-wrap: wrap; gap: .5rem;
+    margin-top: auto; padding-top: 1rem;
+    border-top: 1.5px solid #E2E8F0;
+  }
+  .nav-box > :has(+ .nav-footer) { margin-bottom: .75rem; }
+  .nav-footer .btn {
+    flex: 1 1 120px; min-height: 36px; padding: 0 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 8px; font-size: .76rem; font-weight: 600;
+  }
   .nav-box:hover {
     box-shadow: 0 8px 28px rgba(14,165,233,.18);
     transform: translateY(-3px);
@@ -446,7 +457,7 @@
 
   <!-- ── Nav boxes ── -->
   <div class="row g-3 mb-4">
-    <div class="col-md-6">
+    <div class="col-lg-4 col-md-6">
       <div class="nav-box d-flex flex-column" style="gap:0;">
         <div class="d-flex align-items-start gap-3 mb-3">
           <div class="nav-box-icon flex-shrink-0" style="background:#EFF6FF;">
@@ -537,15 +548,15 @@
             <span id="teacher-room-select-label">{% if teacher_room_select %}Bật{% else %}Tắt{% endif %}</span>
           </button>
         </div>
-        <div class="pt-2 mt-1">
-          <button onclick="openSubjGrpModal()" class="btn btn-sm w-100 fw-semibold"
-                  style="background:#F0FDF4;border:1.5px solid #6EE7B7;color:#065F46;border-radius:9px;font-size:.79rem;">
+        <div class="nav-footer">
+          <button onclick="openSubjGrpModal()" class="btn"
+                  style="background:#F0FDF4;border:1.5px solid #6EE7B7;color:#065F46;">
             <i class="bi bi-sliders me-1" style="color:#059669;"></i>Cài đặt môn học
           </button>
         </div>
       </div>
     </div>
-    <div class="col-md-6">
+    <div class="col-lg-4 col-md-6">
       <div class="nav-box d-flex flex-column" style="gap:0;">
         <a href="{{ url_for('admin_enrollment') }}" class="text-decoration-none color-inherit d-block flex-grow-1 mb-3">
           <div class="d-flex align-items-start gap-3">
@@ -570,24 +581,6 @@
                   onclick="toggleStudentIdx()">
             <span class="toggle-dot"></span>
             <span id="student-reg-label">{% if student_reg_open %}Đang mở{% else %}Đã đóng{% endif %}</span>
-          </button>
-        </div>
-        <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
-          <div>
-            <span style="font-size:.78rem; font-weight:600; color:#374151;">
-              <i class="bi bi-plus-square me-1" style="color:#F59E0B;"></i>Giai đoạn 3 (bổ sung)
-            </span>
-            <span id="supplement-desc" style="font-size:.71rem;color:#64748B;display:block;margin-top:1px;">
-              {% if supplement_reg_open %}HS đăng ký thêm, không huỷ lớp đã xếp phòng{% else %}Đăng ký bổ sung — lớp đã xếp phòng bị khoá{% endif %}
-            </span>
-          </div>
-          <button id="btn-toggle-supplement-idx"
-                  class="reg-toggle {% if supplement_reg_open %}open{% else %}closed{% endif %}"
-                  style="{% if supplement_reg_open %}background:#FEF3C7;border-color:#F59E0B;{% endif %}"
-                  data-open="{{ 'true' if supplement_reg_open else 'false' }}"
-                  onclick="toggleSupplementIdx()">
-            <span class="toggle-dot" style="{% if supplement_reg_open %}background:#F59E0B;{% endif %}"></span>
-            <span id="supplement-label">{% if supplement_reg_open %}Đang mở{% else %}Đã đóng{% endif %}</span>
           </button>
         </div>
         <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
@@ -658,15 +651,71 @@
             <span id="teacher-view-enroll-label">{% if teacher_view_enrollments %}Bật{% else %}Tắt{% endif %}</span>
           </button>
         </div>
-        <div class="d-flex gap-2 pt-3 mt-1 flex-wrap" style="border-top:1.5px solid #E2E8F0;">
-          <button class="btn btn-sm fw-semibold flex-fill"
-                  onclick="openIdxPhase2Modal()"
-                  style="background:#EFF6FF;color:#1D4ED8;border:1.5px solid #BFDBFE;border-radius:8px;font-size:.76rem;min-width:120px;">
+        <div class="nav-footer">
+          <button class="btn" onclick="openIdxPhase2Modal()"
+                  style="background:#EFF6FF;color:#1D4ED8;border:1.5px solid #BFDBFE;">
             <i class="bi bi-people-fill me-1"></i>Phân lớp GĐ2
           </button>
-          <button class="btn btn-sm fw-semibold flex-fill"
-                  onclick="openGd2VisModal()"
-                  style="background:#F0FDF4;color:#15803D;border:1.5px solid #BBF7D0;border-radius:8px;font-size:.76rem;min-width:120px;">
+          <button class="btn" onclick="openGd2VisModal()"
+                  style="background:#F0FDF4;color:#15803D;border:1.5px solid #BBF7D0;">
+            <i class="bi bi-eye-fill me-1"></i>Môn được mở đăng ký
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4 col-md-12">
+      <div class="nav-box d-flex flex-column" style="gap:0;">
+        <a href="{{ url_for('admin_adjustment') }}" class="text-decoration-none color-inherit d-block mb-3" style="min-height:108px;">
+          <div class="d-flex align-items-start gap-3">
+            <div class="nav-box-icon flex-shrink-0" style="background:#FFFBEB;">
+              <i class="bi bi-pencil-square" style="color:#F59E0B;"></i>
+            </div>
+            <div class="flex-grow-1">
+              <h5>Giai đoạn 3 — Hiệu chỉnh môn học (HS)</h5>
+              <p>Khoá cứng môn đã đăng ký, chỉ cho đăng ký/huỷ môn mới.</p>
+            </div>
+            <i class="bi bi-arrow-right-circle nav-box-arrow ms-1 mt-1 flex-shrink-0" style="color:#F59E0B;"></i>
+          </div>
+        </a>
+        <div class="d-flex align-items-center justify-content-between pt-2" style="border-top:1.5px solid #E2E8F0;">
+          <div>
+            <span class="text-muted" style="font-size:.78rem; font-weight:600;">Giai đoạn 3</span>
+            <span id="supplement-desc" style="font-size:.71rem;color:#64748B;display:block;margin-top:1px;">
+              {% if supplement_reg_open %}Môn đã đăng ký bị khoá — HS chỉ đăng ký/huỷ môn mới{% else %}HS chưa thể hiệu chỉnh môn học{% endif %}
+            </span>
+          </div>
+          <button id="btn-toggle-supplement-idx"
+                  class="reg-toggle {% if supplement_reg_open %}open{% else %}closed{% endif %}"
+                  data-open="{{ 'true' if supplement_reg_open else 'false' }}"
+                  onclick="toggleSupplementIdx()">
+            <span class="toggle-dot"></span>
+            <span id="supplement-label">{% if supplement_reg_open %}Đang mở{% else %}Đã đóng{% endif %}</span>
+          </button>
+        </div>
+        <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
+          <div>
+            <span style="font-size:.78rem; font-weight:600; color:#374151;">
+              <i class="bi bi-x-octagon me-1" style="color:#EF4444;"></i>Chỉ huỷ
+            </span>
+            <span id="cancel-only-desc" style="font-size:.71rem;color:#64748B;display:block;margin-top:1px;">
+              {% if cancel_only %}HS chỉ được huỷ môn, không đăng ký mới (huỷ rồi không đăng ký lại){% else %}Tắt: HS đăng ký/huỷ môn mới như bình thường{% endif %}
+            </span>
+          </div>
+          <button id="btn-toggle-cancel-only"
+                  class="reg-toggle {% if cancel_only %}open{% else %}closed{% endif %}"
+                  data-on="{{ 'true' if cancel_only else 'false' }}"
+                  onclick="toggleCancelOnly()">
+            <span class="toggle-dot"></span>
+            <span id="cancel-only-label">{% if cancel_only %}Bật{% else %}Tắt{% endif %}</span>
+          </button>
+        </div>
+        <div class="nav-footer">
+          <button class="btn" onclick="openIdxPhase2Modal(3)"
+                  style="background:#EFF6FF;color:#1D4ED8;border:1.5px solid #BFDBFE;">
+            <i class="bi bi-people-fill me-1"></i>Phân lớp GĐ3
+          </button>
+          <button class="btn" onclick="openGd2VisModal(3)"
+                  style="background:#F0FDF4;color:#15803D;border:1.5px solid #BBF7D0;">
             <i class="bi bi-eye-fill me-1"></i>Môn được mở đăng ký
           </button>
         </div>
@@ -1690,7 +1739,7 @@
     <div class="modal-content" style="border-radius:16px;border:none;">
       <div class="modal-header" style="border-bottom:1.5px solid #E2E8F0;padding:12px 16px;">
         <div class="fw-bold" style="font-size:.88rem;color:#1D4ED8;">
-          <i class="bi bi-people-fill me-2"></i>Phân lớp GĐ2 — Mở khoá theo lớp
+          <i class="bi bi-people-fill me-2"></i><span id="idxPhase2Title">Phân lớp GĐ2 — Mở khoá theo lớp</span>
         </div>
         <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
       </div>
@@ -1710,7 +1759,7 @@
     <div class="modal-content" style="border-radius:16px;border:none;">
       <div class="modal-header" style="border-bottom:1.5px solid #E2E8F0;padding:12px 16px;">
         <div class="fw-bold" style="font-size:.88rem;color:#15803D;">
-          <i class="bi bi-eye-fill me-2"></i>Môn được mở đăng ký — Hiển thị cho học sinh
+          <i class="bi bi-eye-fill me-2"></i><span id="gd2VisTitle">Môn được mở đăng ký — Hiển thị cho học sinh</span>
         </div>
         <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
       </div>
@@ -1883,10 +1932,8 @@ function toggleStudentIdx() {
       // Opening GĐ2 closes GĐ3
       if (open && btn3) {
         btn3.classList.remove('open'); btn3.classList.add('closed');
-        btn3.style.background = ''; btn3.style.borderColor = '';
-        btn3.querySelector('.toggle-dot').style.background = '';
         lbl3.textContent = 'Đã đóng';
-        if (desc3) desc3.textContent = 'Đăng ký bổ sung — lớp đã xếp phòng bị khoá';
+        if (desc3) desc3.textContent = 'HS chưa thể hiệu chỉnh môn học';
       }
     })
     .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
@@ -1907,11 +1954,8 @@ function toggleSupplementIdx() {
       btn.dataset.open = open ? 'true' : 'false';
       btn.classList.toggle('open', open);
       btn.classList.toggle('closed', !open);
-      btn.style.background    = open ? '#FEF3C7' : '';
-      btn.style.borderColor   = open ? '#F59E0B' : '';
-      btn.querySelector('.toggle-dot').style.background = open ? '#F59E0B' : '';
       label.textContent = open ? 'Đang mở' : 'Đã đóng';
-      if (desc) desc.textContent = open ? 'HS đăng ký thêm, không huỷ lớp đã xếp phòng' : 'Đăng ký bổ sung — lớp đã xếp phòng bị khoá';
+      if (desc) desc.textContent = open ? 'Môn đã đăng ký bị khoá — HS chỉ đăng ký/huỷ môn mới' : 'HS chưa thể hiệu chỉnh môn học';
       // Opening GĐ3 closes GĐ2
       if (open && btn2) {
         btn2.classList.remove('open'); btn2.classList.add('closed');
@@ -1959,6 +2003,25 @@ function toggleReq5() {
       btn.classList.toggle('closed', !on);
       label.textContent = on ? 'Bật' : 'Tắt';
       desc.textContent  = on ? 'Bắt buộc HS đăng ký đủ 5 môn' : 'HS đăng ký tự do, không giới hạn số môn';
+    })
+    .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
+    .finally(() => { btn.disabled = false; });
+}
+
+function toggleCancelOnly() {
+  const btn   = document.getElementById('btn-toggle-cancel-only');
+  const label = document.getElementById('cancel-only-label');
+  const desc  = document.getElementById('cancel-only-desc');
+  btn.disabled = true;
+  fetch('{{ url_for("admin_enrollment_toggle_cancel_only") }}', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      const on = data.on;
+      btn.dataset.on = on ? 'true' : 'false';
+      btn.classList.toggle('open',   on);
+      btn.classList.toggle('closed', !on);
+      label.textContent = on ? 'Bật' : 'Tắt';
+      desc.textContent  = on ? 'HS chỉ được huỷ môn, không đăng ký mới (huỷ rồi không đăng ký lại)' : 'Tắt: HS đăng ký/huỷ môn mới như bình thường';
     })
     .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
     .finally(() => { btn.disabled = false; });
@@ -3027,8 +3090,11 @@ async function deleteGVCN(className) {
   }, {confirmText:'Xóa', confirmClass:'btn-danger'});
 }
 
-// ── Phân lớp GĐ2 modal ──
-function openIdxPhase2Modal() {
+// ── Phân lớp GĐ2 / GĐ3 modal ──
+let _p2Phase = 2;
+function openIdxPhase2Modal(phase) {
+  _p2Phase = phase === 3 ? 3 : 2;
+  document.getElementById('idxPhase2Title').textContent = 'Phân lớp GĐ' + _p2Phase + ' — Mở khoá theo lớp';
   const body = document.getElementById('idxPhase2Body');
   body.innerHTML = '<div class="text-center text-muted py-4" style="font-size:.82rem;">Đang tải...</div>';
   new bootstrap.Modal(document.getElementById('idxModalPhase2')).show();
@@ -3042,7 +3108,7 @@ function _renderIdxPhase2(list) {
   const body = document.getElementById('idxPhase2Body');
   body.innerHTML = '';
   [10, 11, 12].forEach(g => {
-    const cls = list.filter(c => c.grade === g);
+    const cls = list.filter(c => c.grade === g).map(c => ({...c, _on: _p2Phase === 3 ? c.phase3_enabled : c.phase2_enabled}));
     if (!cls.length) return;
     const sec = document.createElement('div');
     sec.className = 'mb-3';
@@ -3061,12 +3127,12 @@ function _renderIdxPhase2(list) {
           <div class="d-flex align-items-center justify-content-between px-3 py-2"
                style="background:#F8FAFC;border-radius:8px;border:1px solid #E2E8F0;">
             <span style="font-size:.81rem;font-weight:600;color:#1E293B;">${c.class_name}</span>
-            <button onclick="_idxP2Toggle('${c.class_name}',${c.phase2_enabled ? 1 : 0})"
+            <button onclick="_idxP2Toggle('${c.class_name}',${c._on ? 1 : 0})"
                     id="idxP2Btn_${c.class_name.replace(/\s/g,'_')}"
-                    class="reg-toggle ${c.phase2_enabled ? 'open' : 'closed'}"
+                    class="reg-toggle ${c._on ? 'open' : 'closed'}"
                     style="flex-shrink:0;">
               <span class="toggle-dot"></span>
-              <span>${c.phase2_enabled ? 'Bật' : 'Tắt'}</span>
+              <span>${c._on ? 'Bật' : 'Tắt'}</span>
             </button>
           </div>`).join('')}
       </div>`;
@@ -3080,7 +3146,7 @@ function _idxP2Toggle(className, cur) {
   fetch('/admin/phase2-class-access', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({class_name: className, enabled: newVal})
+    body: JSON.stringify({class_name: className, enabled: newVal, phase: _p2Phase})
   }).then(r => r.json()).then(d => {
     if (!d.ok) return;
     const btn = document.getElementById(btnId);
@@ -3100,7 +3166,7 @@ function _idxP2SetAll(grade, enabled) {
     fetch('/admin/phase2-class-access', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({class_name: className, enabled: enabled})
+      body: JSON.stringify({class_name: className, enabled: enabled, phase: _p2Phase})
     }).then(r => r.json()).then(d => {
       if (!d.ok) return;
       btn.className = 'reg-toggle ' + (enabled ? 'open' : 'closed');
@@ -3112,8 +3178,11 @@ function _idxP2SetAll(grade, enabled) {
 
 // ── Môn được mở đăng ký modal ──
 let _scheduleSettings = {};
+let _gd2Phase = 2;
 
-function openGd2VisModal() {
+function openGd2VisModal(phase) {
+  _gd2Phase = phase === 3 ? 3 : 2;
+  document.getElementById('gd2VisTitle').textContent = 'Môn được mở đăng ký GĐ' + _gd2Phase + ' — Hiển thị cho học sinh';
   const body = document.getElementById('gd2VisBody');
   body.innerHTML = '<div class="text-center text-muted py-4" style="font-size:.82rem;">Đang tải...</div>';
   new bootstrap.Modal(document.getElementById('idxModalGd2Vis')).show();
@@ -3205,6 +3274,7 @@ function _renderGd2Vis(list) {
       gCls.forEach(c => {
         const ses = c.session_type === 'morning' ? 'Sáng' : 'Chiều';
         const timeLabel = (dayNames[c.day_of_week] || '?') + ' ' + ses + ' T' + c.start_session;
+        const pub = _gd2Phase === 3 ? c.phase3_published : c.is_published;
         const row = document.createElement('div');
         row.className = 'd-flex align-items-center gap-2 px-2 py-2 flex-wrap';
         row.style = 'background:#FFFFFF;border-radius:7px;border:1px solid #E2E8F0;';
@@ -3213,13 +3283,13 @@ function _renderGd2Vis(list) {
             ${c.teacher ? '<span class="fw-semibold">' + c.teacher + '</span> · ' : ''}${timeLabel}
             <span style="color:#94A3B8;font-size:.7rem;"> · ${c.enrolled}/${c.max_capacity} HS</span>
           </div>
-          <button onclick="_gd2VisToggle(${c.id},${c.is_published})"
+          <button onclick="_gd2VisToggle(${c.id},${pub})"
                   id="gd2VB_${c.id}"
-                  data-published="${c.is_published}"
-                  class="reg-toggle ${c.is_published ? 'open' : 'closed'}"
+                  data-published="${pub}"
+                  class="reg-toggle ${pub ? 'open' : 'closed'}"
                   style="flex-shrink:0;">
             <span class="toggle-dot"></span>
-            <span>${c.is_published ? 'Bật' : 'Tắt'}</span>
+            <span>${pub ? 'Bật' : 'Tắt'}</span>
           </button>`;
         listDiv.appendChild(row);
       });
@@ -3238,7 +3308,7 @@ function _gd2VisToggle(classId, cur) {
   fetch('/admin/classes/' + classId + '/publish', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({publish: newPub})
+    body: JSON.stringify({publish: newPub, phase: _gd2Phase})
   }).then(r => r.json()).then(d => {
     if (!d.ok) return;
     const btn = document.getElementById('gd2VB_' + classId);
@@ -3258,7 +3328,7 @@ function _gd2VisSetAll(safeKey, enabled) {
     fetch('/admin/classes/' + classId + '/publish', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({publish: enabled})
+      body: JSON.stringify({publish: enabled, phase: _gd2Phase})
     }).then(r => r.json()).then(d => {
       if (!d.ok) return;
       btn.className = 'reg-toggle ' + (enabled ? 'open' : 'closed');

@@ -348,25 +348,34 @@
   <div id="tab-enroll" style="display:none;">
 
   {# Registration status banner #}
-  {% if supplement_reg_open %}
+  {% if supplement_reg_open and phase2_allowed and cancel_only %}
   <div class="alert d-flex align-items-center gap-2 mb-4 reveal" role="alert"
-       style="background:#FFFBEB;border:1.5px solid #FDE68A;color:#92400E;">
-    <i class="bi bi-plus-square-fill fs-5 flex-shrink-0" style="color:#F59E0B;"></i>
+       style="background:#FEF2F2;border:1.5px solid #FECACA;color:#991B1B;">
+    <i class="bi bi-x-octagon-fill fs-5 flex-shrink-0" style="color:#EF4444;"></i>
     <div>
-      <span class="fw-bold">Giai đoạn 3 — Đăng ký bổ sung đang mở.</span>
-      <span style="font-size:.88rem;"> Bạn có thể đăng ký thêm lớp mới. Những lớp đã được xếp phòng sẽ <strong>không thể huỷ</strong>.</span>
+      <span class="fw-bold">Giai đoạn 3 — Chỉ huỷ môn học.</span>
+      <span style="font-size:.88rem;"> Bạn chỉ có thể <strong>huỷ</strong> các môn đã đăng ký. Không thể đăng ký mới, và môn đã huỷ sẽ <strong>không đăng ký lại được</strong>.</span>
     </div>
   </div>
-  {% elif student_reg_open and not phase2_allowed %}
+  {% elif supplement_reg_open and phase2_allowed %}
+  <div class="alert d-flex align-items-center gap-2 mb-4 reveal" role="alert"
+       style="background:#FFFBEB;border:1.5px solid #FDE68A;color:#92400E;">
+    <i class="bi bi-pencil-square fs-5 flex-shrink-0" style="color:#F59E0B;"></i>
+    <div>
+      <span class="fw-bold">Giai đoạn 3 — Hiệu chỉnh môn học đang mở.</span>
+      <span style="font-size:.88rem;"> Các môn đã đăng ký trước đó bị <strong>khoá, không thể huỷ</strong>. Bạn chỉ có thể đăng ký hoặc huỷ các môn mới.</span>
+    </div>
+  </div>
+  {% elif (student_reg_open or supplement_reg_open) and not phase2_allowed %}
   <div class="alert d-flex align-items-center gap-2 mb-4 reveal" role="alert"
        style="background:#EFF6FF;border:1.5px solid #BAE6FD;color:#0369A1;">
     <i class="bi bi-lock-fill fs-5 flex-shrink-0" style="color:#0EA5E9;"></i>
     <div>
       <span class="fw-bold">Lớp {{ student.class_name }} chưa được mở khoá đăng ký.</span>
-      <span style="font-size:.88rem;"> Vui lòng chờ nhà trường mở khoá để tham gia Giai đoạn 2.</span>
+      <span style="font-size:.88rem;"> Vui lòng chờ nhà trường mở khoá để tham gia Giai đoạn {{ 3 if supplement_reg_open else 2 }}.</span>
     </div>
   </div>
-  {% elif not student_reg_open %}
+  {% elif not student_reg_open and not supplement_reg_open %}
   <div class="alert alert-warning d-flex align-items-center gap-2 mb-4 reveal" role="alert">
     <i class="bi bi-lock-fill fs-5 flex-shrink-0"></i>
     <span class="fw-semibold">Đăng ký môn học hiện đang đóng</span>
@@ -404,7 +413,7 @@
               </div>
             </div>
             {% set is_locked = supplement_reg_open and not student_reg_open and cls.id in locked_class_ids %}
-            {% if ((student_reg_open and phase2_allowed) or supplement_reg_open) and not is_locked %}
+            {% if (student_reg_open or supplement_reg_open) and phase2_allowed and not is_locked %}
             <button class="btn btn-sm btn-outline-danger flex-shrink-0 py-1 px-2"
                     title="Huỷ đăng ký"
                     onclick="cancelEnroll({{ cls.id }})">
@@ -534,7 +543,7 @@
               </div>
 
               {# Action button #}
-              {% set any_reg_open = (student_reg_open and phase2_allowed) or supplement_reg_open %}
+              {% set any_reg_open = (student_reg_open or supplement_reg_open) and phase2_allowed %}
               {% set card_locked = supplement_reg_open and not student_reg_open and cls.id in locked_class_ids %}
               {% if enrolled %}
                 {% if card_locked %}
@@ -552,6 +561,10 @@
               {% elif is_full %}
               <button class="btn btn-sm btn-secondary action-btn-{{ cls.id }}" disabled>
                 <i class="bi bi-slash-circle me-1"></i>Đã đủ
+              </button>
+              {% elif cancel_only %}
+              <button class="btn btn-sm btn-secondary action-btn-{{ cls.id }}" disabled>
+                <i class="bi bi-ban me-1"></i>Chỉ huỷ
               </button>
               {% else %}
               <button class="btn btn-sm btn-primary action-btn-{{ cls.id }}"
@@ -744,7 +757,7 @@ async function refreshStudentSchedule() {
     col.className = 'col-12 col-sm-6 col-lg-4';
     col.id = 'enrolled-card-' + classId;
     var cfg = classConfig[classId] || {};
-    var locked = isLocked(classId) || (supplementOpen && !regOpen && cfg.hasRoom);
+    var locked = isLocked(classId);
     var cancelHtml;
     if (anyRegOpen && !locked) {
       cancelHtml = '<button class="btn btn-sm btn-outline-danger flex-shrink-0 py-1 px-2" title="Huỷ đăng ký" onclick="cancelEnroll(' + classId + ')"><i class="bi bi-x-lg"></i></button>';
@@ -788,7 +801,7 @@ async function refreshStudentSchedule() {
 
     if (btn) {
       if (enrolled) {
-        var locked = isLocked(classId) || (supplementOpen && !regOpen && cfg.hasRoom);
+        var locked = isLocked(classId);
         if (locked) {
           btn.className = 'btn btn-sm action-btn-' + classId;
           btn.style.cssText = 'background:#FEF3C7;color:#92400E;border:1.5px solid #FDE68A;font-size:.72rem;';
@@ -811,11 +824,19 @@ async function refreshStudentSchedule() {
           btn.disabled  = true;
           btn.onclick   = null;
         } else {
-          btn.className = 'btn btn-sm btn-primary action-btn-' + classId;
-          btn.style.cssText = '';
-          btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Đăng ký';
-          btn.disabled  = !anyRegOpen;
-          (function(cid){ btn.onclick = function(){ enrollClass(cid); }; }(classId));
+          if (cancelOnly) {
+            btn.className = 'btn btn-sm btn-secondary action-btn-' + classId;
+            btn.style.cssText = '';
+            btn.innerHTML = '<i class="bi bi-ban me-1"></i>Chỉ huỷ';
+            btn.disabled  = true;
+            btn.onclick   = null;
+          } else {
+            btn.className = 'btn btn-sm btn-primary action-btn-' + classId;
+            btn.style.cssText = '';
+            btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Đăng ký';
+            btn.disabled  = !anyRegOpen;
+            (function(cid){ btn.onclick = function(){ enrollClass(cid); }; }(classId));
+          }
         }
       }
     }
@@ -926,7 +947,8 @@ async function refreshStudentSchedule() {
   var regOpen     = {{ 'true' if student_reg_open else 'false' }};
   var supplementOpen = {{ 'true' if supplement_reg_open else 'false' }};
   var phase2Allowed = {{ phase2_allowed | tojson }};
-  var anyRegOpen  = (regOpen && phase2Allowed) || supplementOpen;
+  var anyRegOpen  = (regOpen || supplementOpen) && phase2Allowed;
+  var cancelOnly  = {{ 'true' if cancel_only else 'false' }};
   var lockedClassIds = new Set({{ locked_class_ids | list | tojson }});
 
   function isLocked(classId) {
@@ -1021,14 +1043,6 @@ async function refreshStudentSchedule() {
       /* Sync hasRoom from live location update */
       if (info && typeof info === 'object' && info.location !== undefined) {
         cfg.hasRoom = !!info.location;
-        /* If room was just assigned during phase 3, lock the cancel button */
-        if (cfg.enrolled && supplementOpen && !regOpen) {
-          if (cfg.hasRoom) {
-            lockedClassIds.add(id);
-          } else {
-            lockedClassIds.delete(id);
-          }
-        }
       }
 
       /* Action button state */
@@ -1040,6 +1054,12 @@ async function refreshStudentSchedule() {
           btn.style.cssText = '';
           btn.innerHTML = '<i class="bi bi-slash-circle me-1"></i>Đã đủ';
           btn.onclick = null;
+        } else if (cancelOnly) {
+          btn.disabled = true;
+          btn.className = 'btn btn-sm btn-secondary action-btn-' + id;
+          btn.style.cssText = '';
+          btn.innerHTML = '<i class="bi bi-ban me-1"></i>Chỉ huỷ';
+          btn.onclick = null;
         } else if (anyRegOpen) {
           btn.disabled = false;
           btn.className = 'btn btn-sm btn-primary action-btn-' + id;
@@ -1050,7 +1070,7 @@ async function refreshStudentSchedule() {
           }(id));
         }
       } else if (btn && cfg.enrolled) {
-        var locked = isLocked(id) || (supplementOpen && !regOpen && cfg.hasRoom);
+        var locked = isLocked(id);
         if (locked) {
           btn.className = 'btn btn-sm action-btn-' + id;
           btn.style.cssText = 'background:#FEF3C7;color:#92400E;border:1.5px solid #FDE68A;font-size:.72rem;';

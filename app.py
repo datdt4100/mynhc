@@ -7827,8 +7827,61 @@ def admin_class_add_student(class_id):
         return jsonify(ok=False, error="Không tìm thấy lớp.")
     if not student:
         return jsonify(ok=False, error="Không tìm thấy học sinh.")
-    ok, err, _ = _admin_enroll_student(cls, student)
-    return jsonify(ok=ok, error=err)
+    ok, err, overrode = _admin_enroll_student(cls, student, allow_conflict=bool(data.get("allow_conflict")))
+    return jsonify(ok=ok, error=err, conflicted=overrode)
+
+
+def _overlap_pairs(rows, current_class_id=None):
+    """Every pair of one student's classes that share a day/session and overlap in periods."""
+    def brief(r):
+        return {"class_id": r.class_id, "subject": r.subject or r.subject_group or "—",
+                "start_session": r.start_session, "end_session": r.start_session + r.duration - 1,
+                "current": r.class_id == current_class_id}
+    pairs = []
+    for i in range(len(rows)):
+        for j in range(i + 1, len(rows)):
+            x, y = rows[i], rows[j]
+            if (x.day_of_week == y.day_of_week and x.session_type == y.session_type
+                    and x.start_session <= y.start_session + y.duration - 1
+                    and y.start_session <= x.start_session + x.duration - 1):
+                pairs.append({"day_label": day_name(x.day_of_week),
+                              "session_label": "Sáng" if x.session_type == "morning" else "Chiều",
+                              "a": brief(x), "b": brief(y)})
+    return pairs
+
+
+@app.route("/admin/adjustment/time-conflicts")
+@admin_required
+def admin_all_time_conflicts():
+    """Overview for GĐ3: every student whose registered classes overlap in time."""
+    with engine.connect() as conn:
+        sched = conn.execute(
+            select(enrollments.c.student_id, classes.c.id.label("class_id"), classes.c.subject,
+                   classes.c.day_of_week, classes.c.session_type, classes.c.start_session,
+                   classes.c.duration, teachers.c.subject_group)
+            .join(classes, classes.c.id == enrollments.c.class_id)
+            .outerjoin(teachers, teachers.c.id == classes.c.teacher_id)
+        ).fetchall()
+        per_student = {}
+        for r in sched:
+            per_student.setdefault(r.student_id, []).append(r)
+        multi = [sid for sid, rows in per_student.items() if len(rows) > 1]
+        info = {}
+        for i in range(0, len(multi), 500):
+            for st in conn.execute(
+                select(students.c.id, students.c.full_name, students.c.class_name, students.c.grade)
+                .where(students.c.id.in_(multi[i:i + 500]))
+            ).fetchall():
+                info[st.id] = st
+    result = []
+    for sid in multi:
+        pairs = _overlap_pairs(per_student[sid])
+        if pairs and sid in info:
+            st = info[sid]
+            result.append({"student_id": sid, "full_name": _name_fmt(st.full_name),
+                           "class_name": st.class_name or "", "grade": st.grade, "pairs": pairs})
+    result.sort(key=lambda r: (r["grade"] or 0, r["class_name"], _fold(r["full_name"])))
+    return jsonify(ok=True, conflict_students=result)
 
 
 @app.route("/admin/classes/<int:class_id>/time-conflicts")

@@ -1181,8 +1181,9 @@ async function showStuConflict(studentId) {
     for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
       const a = items[i], c = items[j];
       if (a.day_of_week === c.day_of_week && a.session_type === c.session_type && a.start_session <= c.end_session && c.start_session <= a.end_session) {
-        (clash.get(a.class_id) || clash.set(a.class_id, []).get(a.class_id)).push(c.subject);
-        (clash.get(c.class_id) || clash.set(c.class_id, []).get(c.class_id)).push(a.subject);
+        const lbl = x => `${x.subject} (tiết ${x.start_session}${x.end_session > x.start_session ? '–' + x.end_session : ''})`;
+        (clash.get(a.class_id) || clash.set(a.class_id, []).get(a.class_id)).push(lbl(c));
+        (clash.get(c.class_id) || clash.set(c.class_id, []).get(c.class_id)).push(lbl(a));
       }
     }
     const rows = items.map(c => {
@@ -1199,7 +1200,7 @@ async function showStuConflict(studentId) {
         <td><span class="badge ${c.session_type === 'morning' ? 'bg-warning text-dark' : 'bg-primary'}" style="font-size:.68rem;">${_esc(c.session_label)}</span></td>
         <td style="${bad ? 'color:#B91C1C;font-weight:700;' : ''}">${c.start_session}${c.end_session > c.start_session ? '–' + c.end_session : ''}</td>
         <td style="color:#64748B;">${_esc(c.location)}</td>
-        <td style="text-align:center;">${bad ? `<button class="btn btn-sm fw-semibold" style="border:1.5px solid #EF4444;color:#DC2626;border-radius:8px;font-size:.72rem;"
+        <td style="text-align:center;">${bad ? `<button class="btn btn-sm fw-semibold" style="border:1.5px solid #EF4444;color:#DC2626;border-radius:8px;font-size:.72rem;white-space:nowrap;"
               data-eid="${c.enrollment_id}" data-cid="${c.class_id}" data-sid="${studentId}" data-subject="${_esc(c.subject)}"
               onclick="cancelConflictClass(this)"><i class="bi bi-x-circle me-1"></i>Huỷ lớp</button>` : ''}</td></tr>`;
     }).join('');
@@ -1215,7 +1216,7 @@ async function showStuConflict(studentId) {
         ${nBad ? `<span><strong>${nBad}</strong> lớp trùng khung giờ (được tô đỏ) trong tổng số <strong>${items.length}</strong> lớp đã đăng ký.</span>` : `<span>Không có lớp nào trùng giờ (${items.length} lớp đã đăng ký).</span>`}
       </div>
       <div style="overflow:auto;max-height:420px;"><table class="sched-table">
-        <thead><tr><th>Môn học</th><th>Giáo viên</th><th>Ngày</th><th>Buổi</th><th>Tiết</th><th>Phòng</th><th style="width:96px;"></th></tr></thead><tbody>${rows}</tbody></table></div>
+        <thead><tr><th>Môn học</th><th>Giáo viên</th><th>Ngày</th><th>Buổi</th><th>Tiết</th><th>Phòng</th><th style="width:110px;"></th></tr></thead><tbody>${rows}</tbody></table></div>
       ${nBad ? '<div class="px-3 pt-2 pb-3 text-muted" style="font-size:.74rem;"><i class="bi bi-info-circle me-1"></i>Huỷ một trong các lớp bị trùng để giải quyết. Việc huỷ được ghi vào lịch sử của học sinh.</div>' : ''}`;
   } catch {
     body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải lịch học của học sinh.</div>';

@@ -517,7 +517,8 @@ def init_db():
         except Exception:
             conn.rollback()
 
-        # Seed default settings
+        # Seed default settings (only the missing ones, so existing keys don't raise unique-violation log noise)
+        _existing_keys = {r[0] for r in conn.execute(select(settings_table.c.key)).fetchall()}
         for key, value in [("admin_password", "Admin@123"),
                            ("teacher_reg_open", "0"),
                            ("student_reg_open", "0"),
@@ -530,12 +531,14 @@ def init_db():
                            ("require_email_check", "0"),
                            ("teacher_view_enrollments", "0"),
                            ("teacher_room_select", "0")]:
+            if key in _existing_keys:
+                continue
             try:
                 conn.execute(
                     insert(settings_table).values(key=key, value=value)
                 )
                 conn.commit()
-            except Exception:
+            except Exception:      # another worker seeded it at the same moment
                 conn.rollback()
 
         # GĐ3 has its own constraints; start from the current GĐ2 values, then evolve independently

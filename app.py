@@ -19,6 +19,7 @@ from sqlalchemy import (
     create_engine, MetaData, Table, Column, Integer, Text,
     insert, select, update, delete, and_, or_, func, text
 )
+from sqlalchemy.exc import IntegrityError
 import openpyxl
 from openpyxl.utils import get_column_letter
 
@@ -459,6 +460,21 @@ def init_db():
             conn.commit()
         except Exception:
             conn.rollback()
+        # One enrollment per (student, class): remove accidental duplicates (keep the earliest), then enforce it
+        try:
+            removed = conn.execute(text(
+                "DELETE FROM enrollments WHERE id NOT IN "
+                "(SELECT MIN(id) FROM enrollments GROUP BY student_id, class_id)"
+            )).rowcount
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_enrollments_student_class ON enrollments (student_id, class_id)"
+            ))
+            conn.commit()
+            if removed:
+                print(f"[migration] removed {removed} duplicate enrollment row(s)", flush=True)
+        except Exception as _e:
+            conn.rollback()
+            print(f"[migration] enrollments unique index not applied: {_e}", flush=True)
         try:
             conn.execute(text(
                 "CREATE TABLE IF NOT EXISTS class_subject_slots "
@@ -962,7 +978,10 @@ def _time_conflict(student_id, new_class):
     new_start = int(new_class["start_session"])
     new_end = new_start + int(new_class["duration"]) - 1
 
+    new_id = new_class["id"] if "id" in new_class.keys() else None
     for c in enrolled:
+        if new_id is not None and c.id == new_id:
+            continue          # the same class is never a clash with itself (e.g. double submit)
         if int(c.day_of_week) != new_day:
             continue
         if c.session_type != new_session:
@@ -2557,6 +2576,7 @@ def student_enroll():
 
     # Check time conflict (outside lock — read-only, OK to be slightly stale)
     conflict = _time_conflict(student_id, {
+        "id": cls.id,
         "day_of_week": cls.day_of_week,
         "session_type": cls.session_type,
         "start_session": cls.start_session,
@@ -2592,38 +2612,42 @@ def student_enroll():
         )
 
     # Per-class lock: prevent race condition on capacity check + insert
-    with _get_class_lock(class_id):
-        with engine.begin() as conn:
-            # Re-check capacity inside lock to avoid over-enrollment
-            if cls.max_capacity is not None:
-                cnt = conn.execute(
-                    select(func.count()).where(enrollments.c.class_id == class_id)
-                ).scalar()
-                if cnt >= cls.max_capacity:
-                    return jsonify(ok=False, error="Lớp đã đầy.")
-            # Re-check already enrolled (guard against double-submit)
-            already = conn.execute(
-                select(enrollments.c.id).where(
-                    and_(enrollments.c.student_id == student_id,
-                         enrollments.c.class_id == class_id)
+    try:
+        with _get_class_lock(class_id):
+            with engine.begin() as conn:
+                # Re-check capacity inside lock to avoid over-enrollment
+                if cls.max_capacity is not None:
+                    cnt = conn.execute(
+                        select(func.count()).where(enrollments.c.class_id == class_id)
+                    ).scalar()
+                    if cnt >= cls.max_capacity:
+                        return jsonify(ok=False, error="Lớp đã đầy.")
+                # Re-check already enrolled (guard against double-submit)
+                already = conn.execute(
+                    select(enrollments.c.id).where(
+                        and_(enrollments.c.student_id == student_id,
+                             enrollments.c.class_id == class_id)
+                    )
+                ).fetchone()
+                if already:
+                    return jsonify(ok=False, error="Bạn đã đăng ký lớp này rồi.")
+                ts = now_vn()
+                conn.execute(
+                    insert(enrollments).values(
+                        student_id=student_id,
+                        class_id=class_id,
+                        enrolled_at=ts,
+                        phase3_added=1 if phase3 else 0,
+                    )
                 )
-            ).fetchone()
-            if already:
-                return jsonify(ok=False, error="Bạn đã đăng ký lớp này rồi.")
-            ts = now_vn()
-            conn.execute(
-                insert(enrollments).values(
-                    student_id=student_id,
-                    class_id=class_id,
-                    enrolled_at=ts,
-                    phase3_added=1 if phase3 else 0,
-                )
-            )
-            conn.execute(insert(student_enroll_log).values(
-                student_id=student_id, class_id=class_id, action='A', ts=ts
-            ))
-        with engine.connect() as conn:
-            covered = _student_covered_subjects(conn, student_id, student_grade)
+                conn.execute(insert(student_enroll_log).values(
+                    student_id=student_id, class_id=class_id, action='A', ts=ts
+                ))
+    except IntegrityError:
+        # Two requests raced (e.g. double click across workers); the DB unique index kept only one row
+        return jsonify(ok=False, error="Bạn đã đăng ký lớp này rồi.")
+    with engine.connect() as conn:
+        covered = _student_covered_subjects(conn, student_id, student_grade)
 
     return jsonify(ok=True, covered_subjects=covered)
 
@@ -7770,7 +7794,11 @@ def _admin_enroll_student(cls, student, allow_conflict=False):
                 if cnt >= cls.max_capacity:
                     return False, "Lớp đã đầy", False
             ts = now_vn()
-            conn.execute(insert(enrollments).values(student_id=student.id, class_id=cls.id, enrolled_at=ts))
+            try:
+                with conn.begin_nested():
+                    conn.execute(insert(enrollments).values(student_id=student.id, class_id=cls.id, enrolled_at=ts))
+            except IntegrityError:
+                return False, "Đã đăng ký lớp này", False
             conn.execute(insert(student_enroll_log).values(student_id=student.id, class_id=cls.id, action='A', ts=ts))
     _counts_cache_invalidate()
     return True, None, conflict is not None
@@ -7841,6 +7869,8 @@ def _overlap_pairs(rows, current_class_id=None):
     for i in range(len(rows)):
         for j in range(i + 1, len(rows)):
             x, y = rows[i], rows[j]
+            if x.class_id == y.class_id:      # same class twice is a duplicate record, not a time clash
+                continue
             if (x.day_of_week == y.day_of_week and x.session_type == y.session_type
                     and x.start_session <= y.start_session + y.duration - 1
                     and y.start_session <= x.start_session + x.duration - 1):
@@ -8191,6 +8221,7 @@ def admin_diagnose_student(cccd):
                 reasons.append(f"đã đầy ({cnt}/{c.max_capacity})")
             else:
                 conflict = _time_conflict(s.id, {
+                    "id": c.id,
                     "day_of_week": c.day_of_week,
                     "session_type": c.session_type,
                     "start_session": c.start_session,

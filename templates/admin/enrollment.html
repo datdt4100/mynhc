@@ -1226,7 +1226,7 @@ async function showStuConflict(studentId, ctx) {
     const clash = new Map();   // class_id -> subjects it overlaps with
     for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
       const a = items[i], c = items[j];
-      if (a.day_of_week === c.day_of_week && a.session_type === c.session_type && a.start_session <= c.end_session && c.start_session <= a.end_session) {
+      if (a.class_id !== c.class_id && a.day_of_week === c.day_of_week && a.session_type === c.session_type && a.start_session <= c.end_session && c.start_session <= a.end_session) {
         const lbl = x => `${x.subject} (tiết ${x.start_session}${x.end_session > x.start_session ? '–' + x.end_session : ''})`;
         (clash.get(a.class_id) || clash.set(a.class_id, []).get(a.class_id)).push(lbl(c));
         (clash.get(c.class_id) || clash.set(c.class_id, []).get(c.class_id)).push(lbl(a));

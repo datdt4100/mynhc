@@ -7748,32 +7748,32 @@ def _fold(s: str) -> str:
     return " ".join(s.split()).lower()
 
 
-def _admin_enroll_student(cls, student):
-    """Admin adds one student to a class. Returns (ok, error_message)."""
+def _admin_enroll_student(cls, student, allow_conflict=False):
+    """Admin adds one student to a class. Returns (ok, error_message, overrode_time_conflict)."""
     if student.grade != cls.grade:
-        return False, f"Học sinh thuộc khối {student.grade}, lớp này là khối {cls.grade}"
+        return False, f"Học sinh thuộc khối {student.grade}, lớp này là khối {cls.grade}", False
     with engine.connect() as conn:
         if conn.execute(select(enrollments.c.id).where(and_(
                 enrollments.c.student_id == student.id, enrollments.c.class_id == cls.id))).fetchone():
-            return False, "Đã đăng ký lớp này"
+            return False, "Đã đăng ký lớp này", False
     conflict = _time_conflict(student.id, cls._mapping)
-    if conflict is not None:
+    if conflict is not None and not allow_conflict:
         return False, (f"Trùng lịch với môn {conflict.subject or ''} "
-                       f"({day_name(conflict.day_of_week)} {session_label(conflict.session_type, conflict.start_session, conflict.duration)})")
+                       f"({day_name(conflict.day_of_week)} {session_label(conflict.session_type, conflict.start_session, conflict.duration)})"), False
     with _get_class_lock(cls.id):
         with engine.begin() as conn:
             if conn.execute(select(enrollments.c.id).where(and_(
                     enrollments.c.student_id == student.id, enrollments.c.class_id == cls.id))).fetchone():
-                return False, "Đã đăng ký lớp này"
+                return False, "Đã đăng ký lớp này", False
             if cls.max_capacity is not None:
                 cnt = conn.execute(select(func.count()).where(enrollments.c.class_id == cls.id)).scalar()
                 if cnt >= cls.max_capacity:
-                    return False, "Lớp đã đầy"
+                    return False, "Lớp đã đầy", False
             ts = now_vn()
             conn.execute(insert(enrollments).values(student_id=student.id, class_id=cls.id, enrolled_at=ts))
             conn.execute(insert(student_enroll_log).values(student_id=student.id, class_id=cls.id, action='A', ts=ts))
     _counts_cache_invalidate()
-    return True, None
+    return True, None, conflict is not None
 
 
 @app.route("/admin/students/search")
@@ -7827,8 +7827,63 @@ def admin_class_add_student(class_id):
         return jsonify(ok=False, error="Không tìm thấy lớp.")
     if not student:
         return jsonify(ok=False, error="Không tìm thấy học sinh.")
-    ok, err = _admin_enroll_student(cls, student)
+    ok, err, _ = _admin_enroll_student(cls, student)
     return jsonify(ok=ok, error=err)
+
+
+@app.route("/admin/classes/<int:class_id>/time-conflicts")
+@admin_required
+def admin_class_time_conflicts(class_id):
+    """Students of this class whose schedule has overlapping classes (any pair, not only this class)."""
+    with engine.connect() as conn:
+        cls = conn.execute(select(classes.c.id).where(classes.c.id == class_id)).fetchone()
+        if not cls:
+            return jsonify(ok=False, error="Không tìm thấy lớp."), 404
+        members = conn.execute(
+            select(students.c.id, students.c.full_name, students.c.class_name)
+            .join(enrollments, students.c.id == enrollments.c.student_id)
+            .where(enrollments.c.class_id == class_id)
+        ).fetchall()
+        sid_list = [m.id for m in members]
+        sched = []
+        for i in range(0, len(sid_list), 500):
+            sched += conn.execute(
+                select(enrollments.c.student_id, classes.c.id.label("class_id"), classes.c.subject,
+                       classes.c.day_of_week, classes.c.session_type, classes.c.start_session,
+                       classes.c.duration, teachers.c.subject_group)
+                .join(classes, classes.c.id == enrollments.c.class_id)
+                .outerjoin(teachers, teachers.c.id == classes.c.teacher_id)
+                .where(enrollments.c.student_id.in_(sid_list[i:i + 500]))
+            ).fetchall()
+    per_student = {}
+    for r in sched:
+        per_student.setdefault(r.student_id, []).append(r)
+
+    def brief(r):
+        return {"class_id": r.class_id, "subject": r.subject or r.subject_group or "—",
+                "start_session": r.start_session, "end_session": r.start_session + r.duration - 1,
+                "current": r.class_id == class_id}
+
+    member_map = {m.id: m for m in members}
+    result = []
+    for sid, rows in per_student.items():
+        pairs = []
+        for i in range(len(rows)):
+            for j in range(i + 1, len(rows)):
+                x, y = rows[i], rows[j]
+                if (x.day_of_week == y.day_of_week and x.session_type == y.session_type
+                        and x.start_session <= y.start_session + y.duration - 1
+                        and y.start_session <= x.start_session + x.duration - 1):
+                    pairs.append({"day_label": day_name(x.day_of_week),
+                                  "session_label": "Sáng" if x.session_type == "morning" else "Chiều",
+                                  "a": brief(x), "b": brief(y)})
+        if pairs:
+            m = member_map[sid]
+            result.append({"student_id": sid, "full_name": _name_fmt(m.full_name),
+                           "class_name": m.class_name or "", "pairs": pairs,
+                           "involves_current": any(p["a"]["current"] or p["b"]["current"] for p in pairs)})
+    result.sort(key=lambda r: (not r["involves_current"], r["class_name"], _fold(r["full_name"])))
+    return jsonify(ok=True, total=len(members), conflict_students=result)
 
 
 @app.route("/admin/enrollment/students-template")
@@ -7889,7 +7944,8 @@ def admin_class_add_students_upload(class_id):
         by_exact.setdefault((_norm_name(st.full_name), cn), []).append(st)
         by_fold.setdefault((_fold(st.full_name), cn), []).append(st)
 
-    added, errors = 0, []
+    allow_conflict = request.form.get("allow_conflict") == "1"
+    added, conflicted, errors = 0, 0, []
     for idx, row in enumerate(data_rows, start=start + 1):
         name, homeroom = cell(row, 1), cell(row, 2)
         if not name and not homeroom:
@@ -7904,12 +7960,13 @@ def admin_class_add_students_upload(class_id):
             fail("Không tìm thấy học sinh"); continue
         if len(matches) > 1:
             fail("Trùng tên trong lớp, không xác định được học sinh"); continue
-        ok, err = _admin_enroll_student(cls, matches[0])
+        ok, err, overrode = _admin_enroll_student(cls, matches[0], allow_conflict=allow_conflict)
         if ok:
             added += 1
+            conflicted += 1 if overrode else 0
         else:
             fail(err)
-    return jsonify(ok=True, added=added, failed=len(errors), errors=errors)
+    return jsonify(ok=True, added=added, conflicted=conflicted, failed=len(errors), errors=errors)
 
 
 # ---------------------------------------------------------------------------

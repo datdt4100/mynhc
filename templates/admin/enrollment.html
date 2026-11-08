@@ -523,6 +523,11 @@
             <i class="bi bi-download me-1"></i>Tải file mẫu
           </a>
           <input type="file" id="uploadStuFile" class="form-control mb-3" accept=".xlsx">
+          <label class="d-flex align-items-start gap-2 p-3 mb-3" for="uploadAllowConflict" style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:10px;cursor:pointer;">
+            <input type="checkbox" id="uploadAllowConflict" class="form-check-input mt-1 flex-shrink-0" style="width:1.1em;height:1.1em;">
+            <span><strong style="font-size:.85rem;color:#92400E;">Cho phép trùng giờ</strong>
+              <span class="d-block text-muted" style="font-size:.74rem;">Vẫn thêm học sinh vào lớp dù đã có lớp khác trùng khung giờ. Nếu không tick, học sinh trùng giờ sẽ bị báo lỗi.</span></span>
+          </label>
           <button id="uploadStuBtn" class="btn btn-primary fw-semibold w-100" style="border-radius:10px;" onclick="submitUploadStudents()">
             <i class="bi bi-upload me-1"></i>Tải lên và thêm học sinh
           </button>
@@ -1072,6 +1077,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* ── View students of a class (modal) ── */
 let _stuClassId = null;
+
+/* GĐ3: "Trạng thái đăng ký" — students whose other classes overlap this class's time slot */
+function stuStatusSection(conf) {
+  if (!conf || !conf.ok) return '';
+  const list = conf.conflict_students;
+  if (!list.length) {
+    return `<div class="mx-3 mb-3 d-flex align-items-center gap-3 p-3" style="background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:12px;">
+      <div style="width:40px;height:40px;border-radius:50%;background:#DCFCE7;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="bi bi-check-lg" style="color:#16A34A;font-size:1.3rem;"></i></div>
+      <div><div class="fw-bold" style="color:#166534;font-size:.9rem;">Trạng thái đăng ký: Tốt</div>
+      <div style="font-size:.78rem;color:#4D7C5F;">Không có học sinh nào trong lớp bị trùng giờ học.</div></div></div>`;
+  }
+  const rows = list.map(s => `
+    <div class="d-flex align-items-center gap-2 px-3 py-2" style="border-top:1px solid #FDE68A;background:#fff;">
+      <div style="flex:1;min-width:0;">
+        <div><span class="fw-semibold" style="font-size:.84rem;">${_esc(s.full_name)}</span>
+          <span class="badge ms-1" style="background:#EFF6FF;color:#0369A1;font-size:.68rem;">${_esc(s.class_name || '—')}</span></div>
+        <div class="d-flex flex-wrap gap-1 mt-1">${s.pairs.map(c => {
+          const lbl = x => `${_esc(x.subject)}${x.current ? ' (lớp này)' : ''} tiết ${x.start_session}${x.end_session > x.start_session ? '–' + x.end_session : ''}`;
+          return `<span style="background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;border-radius:6px;padding:1px 8px;font-size:.7rem;">
+            <i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.62rem;"></i>${_esc(c.day_label)} ${_esc(c.session_label)}: ${lbl(c.a)} ↔ ${lbl(c.b)}</span>`; }).join('')}</div>
+      </div>
+      <button class="btn btn-sm fw-semibold flex-shrink-0" style="border:1.5px solid #F59E0B;color:#B45309;border-radius:8px;font-size:.74rem;" onclick="showStuConflict(${s.student_id})">
+        <i class="bi bi-eye me-1"></i>Xem chi tiết</button>
+    </div>`).join('');
+  return `<div class="mx-3 mb-3" style="border:1.5px solid #FCD34D;border-radius:12px;overflow:hidden;">
+    <div class="d-flex align-items-center gap-3 p-3" style="background:#FFFBEB;">
+      <div style="width:40px;height:40px;border-radius:50%;background:#FEF3C7;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="bi bi-exclamation-triangle-fill" style="color:#D97706;font-size:1.15rem;"></i></div>
+      <div><div class="fw-bold" style="color:#92400E;font-size:.9rem;">Có ${list.length} học sinh trùng lớp học ở các khung giờ</div>
+      <div style="font-size:.78rem;color:#A16207;">Bấm “Xem chi tiết” để xem lịch học của từng học sinh và huỷ các lớp bị trùng giờ.</div></div>
+    </div>
+    <div style="max-height:210px;overflow:auto;">${rows}</div></div>`;
+}
+
 function viewStudents(classId) {
   _stuClassId = classId;
   const body = document.getElementById('students-modal-body');
@@ -1086,13 +1124,14 @@ function viewStudents(classId) {
          </div>
        </div>`
     : `<div class="px-3 pt-3 pb-2 text-muted" style="font-size:.82rem;">Tổng: <strong>${n}</strong> học sinh</div>`;
-  fetch('/admin/enrollment/' + classId + '/students')
-    .then(r => r.json()).then(data => {
+  const reqs = [fetch('/admin/enrollment/' + classId + '/students').then(r => r.json())];
+  if (_PHASE === 3) reqs.push(fetch('/admin/classes/' + classId + '/time-conflicts').then(r => r.json()).catch(() => null));
+  Promise.all(reqs).then(([data, conf]) => {
       if (!data.students || !data.students.length) {
         body.innerHTML = (_PHASE === 3 ? header(0) : '') + '<div class="text-center text-muted py-4"><i class="bi bi-people" style="font-size:2rem;display:block;margin-bottom:8px;"></i>Chưa có học sinh đăng ký.</div>';
         return;
       }
-      let html = header(data.students.length) + `
+      let html = header(data.students.length) + (_PHASE === 3 ? stuStatusSection(conf) : '') + `
         <div style="overflow:auto;max-height:420px;"><table class="sched-table">
         <thead><tr><th style="width:38px;">STT</th><th>Họ tên</th><th>Mã đăng nhập</th><th>Khối</th><th>Lớp</th><th>Truy cập gần nhất</th><th style="width:44px;"></th></tr></thead><tbody>`;
       data.students.forEach((s, i) => {
@@ -1106,6 +1145,81 @@ function viewStudents(classId) {
       });
       body.innerHTML = html + '</tbody></table></div>';
     }).catch(() => { body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải danh sách.</div>'; });
+}
+
+/* GĐ3: cancel one of a student's overlapping classes */
+function cancelConflictClass(btn) {
+  const eid = btn.dataset.eid, cid = Number(btn.dataset.cid), sid = Number(btn.dataset.sid), subject = btn.dataset.subject;
+  showConfirm(
+    `Huỷ lớp ${subject}?`,
+    'Học sinh sẽ bị xoá khỏi lớp này để giải quyết trùng giờ. Hành động được ghi vào lịch sử.',
+    async function() {
+      btn.disabled = true;
+      try {
+        const data = await (await fetch('/api/admin/enrollment/' + eid, { method: 'DELETE' })).json();
+        if (!data.ok) { showAlert(data.error || 'Không thể huỷ lớp.', 'error'); btn.disabled = false; return; }
+        refreshCounts(); refreshStudentCounts();
+        showAlert(`Đã huỷ lớp ${subject} của học sinh.`, 'success');
+        if (cid === _stuClassId) viewStudents(_stuClassId);   // student left the class being viewed
+        else showStuConflict(sid);                            // re-check the remaining schedule
+      } catch { showAlert('Lỗi kết nối.', 'error'); btn.disabled = false; }
+    },
+    { confirmText: 'Huỷ lớp', confirmClass: 'btn-danger' }
+  );
+}
+
+/* GĐ3: one student's full schedule with overlapping classes highlighted */
+async function showStuConflict(studentId) {
+  const body = document.getElementById('students-modal-body');
+  body.innerHTML = '<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Đang tải...</div>';
+  try {
+    const d = await (await fetch('/api/admin/student-schedule/' + studentId)).json();
+    if (!d.ok) throw new Error();
+    const items = d.schedule.slice().sort((a, b) =>
+      a.day_of_week - b.day_of_week || (a.session_type === b.session_type ? 0 : a.session_type === 'morning' ? -1 : 1) || a.start_session - b.start_session);
+    const clash = new Map();   // class_id -> subjects it overlaps with
+    for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+      const a = items[i], c = items[j];
+      if (a.day_of_week === c.day_of_week && a.session_type === c.session_type && a.start_session <= c.end_session && c.start_session <= a.end_session) {
+        (clash.get(a.class_id) || clash.set(a.class_id, []).get(a.class_id)).push(c.subject);
+        (clash.get(c.class_id) || clash.set(c.class_id, []).get(c.class_id)).push(a.subject);
+      }
+    }
+    const rows = items.map(c => {
+      const bad = clash.has(c.class_id), cur = c.class_id === _stuClassId;
+      return `<tr style="${bad ? 'background:#FEF2F2;' : ''}">
+        <td style="${bad ? 'border-left:4px solid #EF4444;' : 'border-left:4px solid transparent;'}">
+          <div class="fw-semibold">${_esc(c.subject)}</div>
+          <div class="d-flex flex-wrap gap-1 mt-1">
+            ${cur ? '<span class="badge" style="background:#DBEAFE;color:#1D4ED8;font-size:.64rem;">Lớp đang xem</span>' : ''}
+            ${bad ? `<span class="badge" style="background:#FEE2E2;color:#B91C1C;font-size:.64rem;"><i class="bi bi-exclamation-triangle-fill me-1"></i>Trùng giờ với ${_esc([...new Set(clash.get(c.class_id))].join(', '))}</span>` : ''}
+          </div></td>
+        <td>${_esc(c.teacher)}</td>
+        <td style="white-space:nowrap;">${_esc(c.day_label)}</td>
+        <td><span class="badge ${c.session_type === 'morning' ? 'bg-warning text-dark' : 'bg-primary'}" style="font-size:.68rem;">${_esc(c.session_label)}</span></td>
+        <td style="${bad ? 'color:#B91C1C;font-weight:700;' : ''}">${c.start_session}${c.end_session > c.start_session ? '–' + c.end_session : ''}</td>
+        <td style="color:#64748B;">${_esc(c.location)}</td>
+        <td style="text-align:center;">${bad ? `<button class="btn btn-sm fw-semibold" style="border:1.5px solid #EF4444;color:#DC2626;border-radius:8px;font-size:.72rem;"
+              data-eid="${c.enrollment_id}" data-cid="${c.class_id}" data-sid="${studentId}" data-subject="${_esc(c.subject)}"
+              onclick="cancelConflictClass(this)"><i class="bi bi-x-circle me-1"></i>Huỷ lớp</button>` : ''}</td></tr>`;
+    }).join('');
+    const nBad = clash.size;
+    body.innerHTML = `
+      <div class="px-3 pt-3 pb-2 d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary" style="border-radius:8px;font-size:.78rem;" onclick="viewStudents(_stuClassId)"><i class="bi bi-arrow-left me-1"></i>Quay lại danh sách</button>
+        <div class="ms-2" style="min-width:0;"><div class="fw-bold" style="font-size:.92rem;">${_esc(d.student.full_name)}</div>
+          <div class="text-muted" style="font-size:.74rem;">Lớp ${_esc(d.student.class_name || '—')} · <code>${_esc(d.student.cccd)}</code></div></div>
+      </div>
+      <div class="mx-3 mb-3 p-2 px-3 d-flex align-items-center gap-2" style="background:${nBad ? '#FEF2F2' : '#F0FDF4'};border:1.5px solid ${nBad ? '#FECACA' : '#BBF7D0'};border-radius:10px;font-size:.8rem;color:${nBad ? '#B91C1C' : '#166534'};">
+        <i class="bi bi-${nBad ? 'exclamation-triangle-fill' : 'check-circle-fill'}"></i>
+        ${nBad ? `<span><strong>${nBad}</strong> lớp trùng khung giờ (được tô đỏ) trong tổng số <strong>${items.length}</strong> lớp đã đăng ký.</span>` : `<span>Không có lớp nào trùng giờ (${items.length} lớp đã đăng ký).</span>`}
+      </div>
+      <div style="overflow:auto;max-height:420px;"><table class="sched-table">
+        <thead><tr><th>Môn học</th><th>Giáo viên</th><th>Ngày</th><th>Buổi</th><th>Tiết</th><th>Phòng</th><th style="width:96px;"></th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${nBad ? '<div class="px-3 pt-2 pb-3 text-muted" style="font-size:.74rem;"><i class="bi bi-info-circle me-1"></i>Huỷ một trong các lớp bị trùng để giải quyết. Việc huỷ được ghi vào lịch sử của học sinh.</div>' : ''}`;
+  } catch {
+    body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải lịch học của học sinh.</div>';
+  }
 }
 
 /* ── Remove a student from the class being viewed ── */
@@ -1751,6 +1865,7 @@ function openUploadStudents() {
     document.getElementById('uploadStuForm').style.display = '';
     document.getElementById('uploadStuResult').style.display = 'none';
     document.getElementById('uploadStuFile').value = '';
+    document.getElementById('uploadAllowConflict').checked = false;
   });
 }
 async function submitUploadStudents() {
@@ -1759,6 +1874,7 @@ async function submitUploadStudents() {
   const btn = document.getElementById('uploadStuBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang xử lý...';
   const fd = new FormData(); fd.append('file', file);
+  if (document.getElementById('uploadAllowConflict').checked) fd.append('allow_conflict', '1');
   try {
     const d = await (await fetch('/admin/classes/' + _stuClassId + '/add-students-upload', {method: 'POST', body: fd})).json();
     if (!d.ok) { showAlert(d.error || 'Không thể xử lý file.', 'error'); return; }
@@ -1768,7 +1884,7 @@ async function submitUploadStudents() {
     res.innerHTML = `
       <div class="d-flex gap-2 mb-3">
         <div class="flex-fill text-center p-3" style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;">
-          <div style="font-size:1.6rem;font-weight:800;color:#15803D;">${d.added}</div><div style="font-size:.78rem;color:#166534;">học sinh đã thêm</div></div>
+          <div style="font-size:1.6rem;font-weight:800;color:#15803D;">${d.added}</div><div style="font-size:.78rem;color:#166534;">học sinh đã thêm${d.conflicted ? `<div style="color:#B45309;">(trong đó ${d.conflicted} trùng giờ)</div>` : ''}</div></div>
         <div class="flex-fill text-center p-3" style="background:${d.failed ? '#FEF2F2' : '#F8FAFC'};border:1.5px solid ${d.failed ? '#FCA5A5' : '#E2E8F0'};border-radius:12px;">
           <div style="font-size:1.6rem;font-weight:800;color:${d.failed ? '#DC2626' : '#94A3B8'};">${d.failed}</div><div style="font-size:.78rem;color:#64748B;">học sinh bị lỗi</div></div>
       </div>

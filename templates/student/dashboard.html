@@ -160,6 +160,7 @@
     {% if not reg_locked %}
     <button id="btn-enroll" class="tab-btn" onclick="showTab('enroll')">
       <i class="bi bi-pencil-square"></i>Đăng ký môn học
+      {% if pending_confirms %}<span class="badge rounded-pill bg-danger ms-1" id="confirm-tab-badge" style="font-size:.68rem;">{{ pending_confirms | length }}</span>{% endif %}
     </button>
     {% endif %}
   </div>
@@ -382,6 +383,47 @@
   </div>
   {% endif %}
 
+
+  {# ── Classes registered for the student by the school: confirm or decline ── #}
+  {% if pending_confirms %}
+  <section class="mb-4 reveal" id="confirm-section">
+    <h2 class="fw-bold mb-2 d-flex align-items-center gap-2" style="font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);">
+      <i class="bi bi-person-check-fill fs-5" style="color:#F59E0B;"></i>
+      Danh sách lớp được đăng ký
+      <span class="badge rounded-pill ms-1" style="font-size:.78rem;background:#FEF3C7;color:#92400E;">{{ pending_confirms | length }}</span>
+    </h2>
+    <div class="d-flex align-items-start gap-2 p-3 mb-3" style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:12px;font-size:.84rem;color:#92400E;">
+      <i class="bi bi-info-circle-fill flex-shrink-0 mt-1" style="color:#F59E0B;"></i>
+      <span>Nhà trường đã đăng ký giúp bạn các lớp dưới đây. Vui lòng chọn <strong>Tham gia</strong> hoặc <strong>Không tham gia</strong> cho từng lớp.
+        {% if not supplement_reg_open %}<strong class="d-block mt-1">Hiện chưa trong thời gian xác nhận (Giai đoạn 3 đang đóng).</strong>{% endif %}</span>
+    </div>
+    <div class="d-flex flex-column gap-2" id="confirm-list">
+      {% for c in pending_confirms %}
+      <div class="card border-0" id="confirm-row-{{ c.class_id }}"
+           style="border-left:4px solid #F59E0B !important;border-radius:var(--r-sm);background:rgba(255,255,255,.95);box-shadow:0 2px 10px rgba(245,158,11,.14);">
+        <div class="card-body py-2 px-3 d-flex align-items-center gap-3 flex-wrap">
+          <div class="flex-grow-1" style="min-width:200px;">
+            <div class="fw-bold" style="font-size:.92rem;color:#92400E;">{{ c.subject or c.subject_group or 'Lớp học' }}</div>
+            <div class="text-muted" style="font-size:.78rem;">
+              {% if c.teacher_name %}{{ c.teacher_name | name_fmt }} &middot; {% endif %}{{ day_name(c.day_of_week) }} &middot; {{ session_label(c.session_type, c.start_session, c.duration) }}{% if c.location %} &middot; <i class="bi bi-geo-alt"></i> {{ c.location }}{% endif %}
+            </div>
+          </div>
+          <div class="d-flex gap-2 flex-shrink-0">
+            <button class="btn btn-sm btn-success fw-semibold" {% if not supplement_reg_open %}disabled{% endif %}
+                    onclick="answerConfirm({{ c.class_id }}, 'accept', '{{ (c.subject or c.subject_group or 'Lớp học') | e }}')">
+              <i class="bi bi-check-lg me-1"></i>Tham gia
+            </button>
+            <button class="btn btn-sm btn-outline-danger fw-semibold" {% if not supplement_reg_open %}disabled{% endif %}
+                    onclick="answerConfirm({{ c.class_id }}, 'decline', '{{ (c.subject or c.subject_group or 'Lớp học') | e }}')">
+              <i class="bi bi-x-lg me-1"></i>Không tham gia
+            </button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
 
   {# ── My enrolled classes ──────────────────────────────────── #}
   <section class="mb-4 reveal" id="enrolled-section"{% if not my_class_ids %} style="display:none"{% endif %}>
@@ -671,6 +713,28 @@
 {# ── Scripts ─────────────────────────────────────────────────── #}
 {% block scripts %}
 <script>
+/* ── Answer a registration made by the school ──────────────── */
+window.answerConfirm = function(classId, action, name) {
+  var accept = action === 'accept';
+  showConfirm(
+    accept ? 'Tham gia lớp ' + name + '?' : 'Không tham gia lớp ' + name + '?',
+    accept ? 'Bạn xác nhận sẽ học lớp này. Lớp sẽ được giữ trong danh sách môn đã đăng ký của bạn.'
+           : 'Lớp này sẽ bị huỷ khỏi danh sách của bạn và <strong>không thể hoàn tác</strong>.',
+    async function () {
+      try {
+        var res = await fetch('/student/confirm/' + classId, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: action })
+        });
+        var d = await res.json();
+        if (!d.ok) { showAlert(d.error || 'Không thể xác nhận.', 'error'); return; }
+        showAlert(accept ? 'Đã xác nhận tham gia lớp ' + name + '.' : 'Đã xác nhận không tham gia lớp ' + name + '.', 'success');
+        setTimeout(function () { location.reload(); }, 900);
+      } catch (e) { showAlert('Lỗi kết nối, vui lòng thử lại.', 'error'); }
+    },
+    { confirmText: accept ? 'Tham gia' : 'Không tham gia', confirmClass: accept ? 'btn-success' : 'btn-danger' }
+  );
+};
+
 /* ── Tab switching ─────────────────────────────────────────── */
 window.showTab = function(tab) {
   document.getElementById('tab-schedule').style.display = tab === 'schedule' ? '' : 'none';

@@ -165,6 +165,8 @@ enrollments = Table(
     Column("class_id", Integer, nullable=False),
     Column("enrolled_at", Text, default="CURRENT_TIMESTAMP"),
     Column("phase3_added", Integer, nullable=False, server_default="0"),  # 1 = added in GĐ3 (cancellable); 0 = locked in GĐ3
+    Column("confirm_status", Text, nullable=True),   # admin-added in GĐ3: 'pending' | 'accepted' (NULL = no confirmation needed)
+    Column("confirm_at", Text, nullable=True),
 )
 
 rooms = Table(
@@ -460,6 +462,12 @@ def init_db():
             conn.commit()
         except Exception:
             conn.rollback()
+        for _col in ("confirm_status TEXT", "confirm_at TEXT"):
+            try:
+                conn.execute(text(f"ALTER TABLE enrollments ADD COLUMN {_col}"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
         # One enrollment per (student, class): remove accidental duplicates (keep the earliest), then enforce it
         try:
             removed = conn.execute(text(
@@ -2194,9 +2202,21 @@ def student_dashboard():
         for c in published_classes
         if c.id in my_class_ids and (c.subject_group or c.subject)
     }
+    with engine.connect() as conn:
+        pending_confirms = conn.execute(
+            select(classes.c.id.label("class_id"), classes.c.subject, classes.c.day_of_week, classes.c.session_type,
+                   classes.c.start_session, classes.c.duration, classes.c.location,
+                   teachers.c.full_name.label("teacher_name"), teachers.c.subject_group,
+                   enrollments.c.enrolled_at)
+            .select_from(enrollments.join(classes, classes.c.id == enrollments.c.class_id)
+                         .outerjoin(teachers, teachers.c.id == classes.c.teacher_id))
+            .where(and_(enrollments.c.student_id == student_id, enrollments.c.confirm_status == "pending"))
+            .order_by(classes.c.day_of_week, classes.c.start_session)
+        ).fetchall()
     return render_template(
         "student/dashboard.html",
         student=student_row,
+        pending_confirms=pending_confirms,
         published_classes=published_classes,
         enrollment_counts=enrollment_counts,
         my_class_ids=my_class_ids,
@@ -2668,6 +2688,36 @@ def _student_covered_subjects(conn, student_id, student_grade):
         ))
     ).fetchall()
     return list({r.subject_group for r in rows if r.subject_group})
+
+
+@app.route("/student/confirm/<int:class_id>", methods=["POST"])
+@student_required
+def student_confirm_class(class_id):
+    """Student answers an admin-added registration: accept ("Tham gia") or decline ("Không tham gia")."""
+    action = (request.get_json(silent=True) or {}).get("action")
+    if action not in ("accept", "decline"):
+        return jsonify(ok=False, error="Yêu cầu không hợp lệ."), 400
+    if not _phase3_mode():
+        return jsonify(ok=False, error="Giai đoạn 3 hiện đang đóng, chưa thể xác nhận.")
+    student_id = session["user_id"]
+    with engine.begin() as conn:
+        row = conn.execute(
+            select(enrollments.c.id).where(and_(
+                enrollments.c.student_id == student_id, enrollments.c.class_id == class_id,
+                enrollments.c.confirm_status == "pending"))
+        ).fetchone()
+        if not row:
+            return jsonify(ok=False, error="Không có yêu cầu xác nhận cho lớp này (có thể đã được xử lý).")
+        ts = now_vn()
+        if action == "accept":
+            conn.execute(update(enrollments).where(enrollments.c.id == row.id)
+                         .values(confirm_status="accepted", confirm_at=ts))
+        else:
+            conn.execute(delete(enrollments).where(enrollments.c.id == row.id))
+        conn.execute(insert(student_enroll_log).values(
+            student_id=student_id, class_id=class_id, action="Y" if action == "accept" else "N", ts=ts))
+    _bump()
+    return jsonify(ok=True, action=action)
 
 
 @app.route("/student/enroll/<int:class_id>", methods=["DELETE"])
@@ -7743,12 +7793,95 @@ def api_admin_student_enroll_counts():
     return jsonify(ok=True, counts={str(r.student_id): r.cnt for r in rows})
 
 
+def _declined_cases(class_id=None):
+    """Admin-added registrations the student declined (enrollment removed). Latest event per student/class must be the decline."""
+    with engine.connect() as conn:
+        q = select(student_enroll_log.c.student_id, student_enroll_log.c.class_id,
+                   func.max(student_enroll_log.c.ts).label("ts")).where(student_enroll_log.c.action == "N")
+        if class_id is not None:
+            q = q.where(student_enroll_log.c.class_id == class_id)
+        declines = conn.execute(q.group_by(student_enroll_log.c.student_id, student_enroll_log.c.class_id)).fetchall()
+        if not declines:
+            return []
+        sids = sorted({d.student_id for d in declines})
+        latest, enrolled_now, info = {}, set(), {}
+        for i in range(0, len(sids), 500):
+            chunk = sids[i:i + 500]
+            for r in conn.execute(select(student_enroll_log.c.student_id, student_enroll_log.c.class_id,
+                                         func.max(student_enroll_log.c.ts).label("ts"))
+                                  .where(student_enroll_log.c.student_id.in_(chunk))
+                                  .group_by(student_enroll_log.c.student_id, student_enroll_log.c.class_id)).fetchall():
+                latest[(r.student_id, r.class_id)] = r.ts
+            for r in conn.execute(select(enrollments.c.student_id, enrollments.c.class_id)
+                                  .where(enrollments.c.student_id.in_(chunk))).fetchall():
+                enrolled_now.add((r.student_id, r.class_id))
+            for r in conn.execute(select(students.c.id, students.c.full_name, students.c.class_name)
+                                  .where(students.c.id.in_(chunk))).fetchall():
+                info[r.id] = r
+    out = []
+    for d in declines:
+        key = (d.student_id, d.class_id)
+        if key in enrolled_now or latest.get(key, d.ts) > d.ts or d.student_id not in info:
+            continue
+        st = info[d.student_id]
+        out.append({"student_id": d.student_id, "class_id": d.class_id, "full_name": _name_fmt(st.full_name),
+                    "home_class": st.class_name or "", "at": d.ts})
+    out.sort(key=lambda r: r["at"], reverse=True)
+    return out
+
+
+@app.route("/admin/adjustment/confirmations")
+@admin_required
+def admin_adjustment_confirmations():
+    """GĐ3 dashboard: admin-added registrations and the student's answer (accepted / pending / declined)."""
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(enrollments.c.student_id, enrollments.c.class_id, enrollments.c.confirm_status,
+                   enrollments.c.enrolled_at, enrollments.c.confirm_at,
+                   students.c.full_name, students.c.class_name.label("home_class"),
+                   classes.c.subject, classes.c.day_of_week, classes.c.session_type, classes.c.start_session,
+                   classes.c.duration, classes.c.location, teachers.c.full_name.label("teacher_name"),
+                   teachers.c.subject_group)
+            .select_from(enrollments.join(students, students.c.id == enrollments.c.student_id)
+                         .join(classes, classes.c.id == enrollments.c.class_id)
+                         .outerjoin(teachers, teachers.c.id == classes.c.teacher_id))
+            .where(enrollments.c.confirm_status.isnot(None))
+        ).fetchall()
+        declined = _declined_cases()
+        cls_info = {c.id: c for c in conn.execute(
+            select(classes.c.id, classes.c.subject, classes.c.day_of_week, classes.c.session_type,
+                   classes.c.start_session, classes.c.duration, classes.c.location,
+                   teachers.c.full_name.label("teacher_name"), teachers.c.subject_group)
+            .select_from(classes.outerjoin(teachers, teachers.c.id == classes.c.teacher_id))
+            .where(classes.c.id.in_([d["class_id"] for d in declined] or [0]))).fetchall()}
+
+    def slot(c):
+        return {"subject": c.subject or c.subject_group or "—", "teacher": _name_fmt(c.teacher_name) if c.teacher_name else "",
+                "day_label": day_name(c.day_of_week), "session_label": "Sáng" if c.session_type == "morning" else "Chiều",
+                "start_session": c.start_session, "end_session": c.start_session + c.duration - 1,
+                "location": c.location or ""}
+    items = [dict(student_id=r.student_id, class_id=r.class_id, full_name=_name_fmt(r.full_name), home_class=r.home_class or "",
+                  status=r.confirm_status, added_at=r.enrolled_at, decided_at=r.confirm_at, **slot(r)) for r in rows]
+    for d in declined:
+        c = cls_info.get(d["class_id"])
+        if c is not None:
+            items.append(dict(student_id=d["student_id"], class_id=d["class_id"], full_name=d["full_name"],
+                              home_class=d["home_class"], status="declined", added_at=None, decided_at=d["at"], **slot(c)))
+    order = {"pending": 0, "declined": 1, "accepted": 2}
+    items.sort(key=lambda x: (order.get(x["status"], 9), x["home_class"], _fold(x["full_name"])))
+    summary = {"total": len(items)}
+    for k in ("accepted", "pending", "declined"):
+        summary[k] = sum(1 for x in items if x["status"] == k)
+    return jsonify(ok=True, summary=summary, items=items)
+
+
 @app.route("/admin/enrollment/<int:class_id>/students")
 @admin_required
 def admin_enrollment_students(class_id):
     with engine.connect() as conn:
         enrolled = conn.execute(
-            select(students, enrollments.c.enrolled_at, enrollments.c.id.label("enrollment_id"))
+            select(students, enrollments.c.enrolled_at, enrollments.c.id.label("enrollment_id"),
+                   enrollments.c.confirm_status, enrollments.c.confirm_at)
             .join(enrollments, students.c.id == enrollments.c.student_id)
             .where(enrollments.c.class_id == class_id)
             .order_by(students.c.class_name, students.c.full_name)
@@ -7763,10 +7896,12 @@ def admin_enrollment_students(class_id):
             "grade": s.grade,
             "enrolled_at": s.enrolled_at,
             "enrollment_id": s.enrollment_id,
+            "confirm_status": s.confirm_status,
+            "confirm_at": s.confirm_at,
             "last_seen_at": s.last_seen_at if hasattr(s, "last_seen_at") else None,
         }
         for s in enrolled
-    ])
+    ], declined=_declined_cases(class_id))
 
 def _fold(s: str) -> str:
     """Accent- and case-insensitive form for searching Vietnamese names."""
@@ -7799,7 +7934,8 @@ def _admin_enroll_student(cls, student, allow_conflict=False):
             ts = now_vn()
             try:
                 with conn.begin_nested():
-                    conn.execute(insert(enrollments).values(student_id=student.id, class_id=cls.id, enrolled_at=ts))
+                    conn.execute(insert(enrollments).values(student_id=student.id, class_id=cls.id, enrolled_at=ts,
+                                                            confirm_status="pending"))
             except IntegrityError:
                 return False, "Đã đăng ký lớp này", False
             conn.execute(insert(student_enroll_log).values(student_id=student.id, class_id=cls.id, action='A', ts=ts))
@@ -8060,7 +8196,7 @@ def admin_class_add_students_upload(class_id):
 # ---------------------------------------------------------------------------
 
 _ACTION_LABEL = {'A': 'Phân công', 'U': 'Gỡ bỏ (đổi GV)', 'C': 'Tạo lớp', 'D': 'Xóa lớp'}
-_ENROLL_LABEL = {'A': 'Đăng ký', 'D': 'Hủy đăng ký'}
+_ENROLL_LABEL = {'A': 'Đăng ký', 'D': 'Hủy đăng ký', 'Y': 'Xác nhận tham gia', 'N': 'Từ chối tham gia'}
 
 def _decode_slot(slot: str) -> str:
     """Decode compact slot 'T3S1x2' → 'T3 Sáng T1–2' (ignores extended pipe fields)"""

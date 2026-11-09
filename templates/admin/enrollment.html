@@ -238,6 +238,43 @@
     </span>
   </div>
 
+  {% if phase == 3 %}
+  <!-- Dashboard: xác nhận của học sinh -->
+  <div class="mb-4" id="confirm-dash">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span class="fw-bold" style="font-size:.9rem;color:#0c4a6e;"><i class="bi bi-person-check me-1" style="color:#10B981;"></i>Xác nhận của học sinh (học sinh được quản trị viên thêm vào lớp)</span>
+    </div>
+    <div class="row g-3">
+      {% for key, label, icon, bg, fg, bd in [
+        ('all','Tổng số trường hợp','bi-people-fill','#EFF6FF','#1D4ED8','#BFDBFE'),
+        ('accepted','Xác nhận học','bi-check-circle-fill','#F0FDF4','#15803D','#BBF7D0'),
+        ('pending','Chưa xác nhận','bi-hourglass-split','#FFFBEB','#B45309','#FDE68A'),
+        ('declined','Xác nhận huỷ','bi-x-circle-fill','#FEF2F2','#B91C1C','#FECACA')] %}
+      <div class="col-6 col-lg-3">
+        <div class="cd-card" onclick="openConfirmTab('{{ key }}')" title="Bấm để xem danh sách"
+             style="background:{{ bg }};border:1.5px solid {{ bd }};border-radius:14px;padding:14px 16px;cursor:pointer;transition:box-shadow .15s;"
+             onmouseenter="this.style.boxShadow='0 4px 14px rgba(0,0,0,.08)'" onmouseleave="this.style.boxShadow='none'">
+          <div class="d-flex align-items-center gap-3">
+            <div style="width:42px;height:42px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <i class="bi {{ icon }}" style="color:{{ fg }};font-size:1.25rem;"></i></div>
+            <div style="min-width:0;">
+              <div id="cd-{{ key }}" style="font-size:1.7rem;font-weight:800;line-height:1;color:{{ fg }};">–</div>
+              <div style="font-size:.76rem;color:{{ fg }};font-weight:600;margin-top:3px;">{{ label }}</div>
+            </div>
+            {% if key != 'all' %}<div id="cd-{{ key }}-pct" class="ms-auto" style="font-size:.74rem;font-weight:700;color:{{ fg }};opacity:.8;"></div>{% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="mt-3" style="height:8px;background:#E2E8F0;border-radius:20px;overflow:hidden;display:flex;" title="Tỷ lệ xác nhận">
+      <div id="cd-bar-accepted" style="width:0;background:#22C55E;transition:width .4s;"></div>
+      <div id="cd-bar-declined" style="width:0;background:#EF4444;transition:width .4s;"></div>
+      <div id="cd-bar-pending" style="width:0;background:#F59E0B;transition:width .4s;"></div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Page tabs -->
   <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
     <div class="page-tabs" style="margin-bottom:0;">
@@ -248,6 +285,10 @@
         <i class="bi bi-people me-1"></i>Danh sách học sinh
       </button>
       {% if phase == 3 %}
+      <button class="page-tab-btn" id="tab-confirm" onclick="switchTab('confirm')">
+        <i class="bi bi-person-check me-1"></i>Xác nhận học sinh
+        <span id="tab-confirm-badge" class="badge rounded-pill ms-1" style="background:#E2E8F0;color:#475569;font-size:.68rem;">…</span>
+      </button>
       <button class="page-tab-btn" id="tab-conflicts" onclick="switchTab('conflicts')">
         <i class="bi bi-exclamation-triangle me-1"></i>Học sinh trùng giờ
         <span id="tab-conf-badge" class="badge rounded-pill ms-1" style="background:#E2E8F0;color:#475569;font-size:.68rem;">…</span>
@@ -370,6 +411,26 @@
 
   <!-- ═══════════════ TAB: Danh sách học sinh ═══════════════ -->
   {% if phase == 3 %}
+  <!-- ═══════════════ TAB: Xác nhận học sinh ═══════════════ -->
+  <div id="pane-confirm" style="display:none;">
+    <div class="section-card">
+      <div class="section-card-header">
+        <i class="bi bi-person-check"></i><span>Xác nhận của học sinh</span>
+        <span class="ms-auto d-flex align-items-center gap-2">
+          <button class="btn btn-sm btn-outline-secondary fw-semibold" style="border-radius:8px;font-size:.74rem;" onclick="loadConfirmDash(true)"><i class="bi bi-arrow-repeat me-1"></i>Làm mới</button>
+        </span>
+      </div>
+      <div style="padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1.5px solid #F1F5F9;">
+        <div id="confirm-filters" class="d-flex flex-wrap gap-2"></div>
+        <div class="search-box-sm ms-auto" style="max-width:280px;">
+          <i class="bi bi-search"></i>
+          <input type="search" id="confirmSearch" placeholder="Tìm học sinh, lớp, môn…" oninput="renderConfirmTable()">
+        </div>
+      </div>
+      <div class="table-responsive-admin" id="confirm-table-wrap"></div>
+    </div>
+  </div>
+
   <!-- ═══════════════ TAB: Học sinh trùng giờ ═══════════════ -->
   <div id="pane-conflicts" style="display:none;">
     <div class="section-card">
@@ -907,13 +968,14 @@
 <script>
 /* ── Page tabs ── */
 function switchTab(tab) {
-  ['classes', 'students', 'conflicts'].forEach(k => {
+  ['classes', 'students', 'conflicts', 'confirm'].forEach(k => {
     const pane = document.getElementById('pane-' + k), btn = document.getElementById('tab-' + k);
     if (pane) pane.style.display = tab === k ? '' : 'none';
     if (btn) btn.classList.toggle('active', tab === k);
   });
   if (tab === 'students') refreshStudentCounts();
   if (tab === 'conflicts' && typeof loadConflictTab === 'function') loadConflictTab();
+  if (tab === 'confirm' && typeof loadConfirmDash === 'function') loadConfirmDash();
 }
 
 /* ── Live "Số môn ĐK" of the student tab ── */
@@ -1172,9 +1234,10 @@ function viewStudents(classId) {
       }
       let html = header(data.students.length) + (_PHASE === 3 ? stuStatusSection(conf) : '') + `
         <div style="overflow:auto;max-height:420px;"><table class="sched-table">
-        <thead><tr><th style="width:38px;">STT</th><th>Họ tên</th><th>Mã đăng nhập</th><th>Khối</th><th>Lớp</th><th>Truy cập gần nhất</th><th style="width:44px;"></th></tr></thead><tbody>`;
+        <thead><tr><th style="width:38px;">STT</th><th>Họ tên</th><th>Mã đăng nhập</th><th>Khối</th><th>Lớp</th><th>Truy cập gần nhất</th>${_PHASE === 3 ? '<th>Xác nhận</th>' : ''}<th style="width:44px;"></th></tr></thead><tbody>`;
       data.students.forEach((s, i) => {
         html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold">${s.full_name}</td><td><code style="font-size:.75rem;">${s.cccd}</code></td><td>${s.grade??'—'}</td><td>${s.class_name??'—'}</td><td style="font-size:.75rem;color:#64748B;white-space:nowrap;">${s.last_seen_at ? s.last_seen_at.slice(0,19) : '—'}</td>
+          ${_PHASE === 3 ? `<td style="white-space:nowrap;">${s.confirm_status ? confBadge(s.confirm_status, s.confirm_at) : '<span class="text-muted" style="font-size:.72rem;">—</span>'}</td>` : ''}
           <td style="text-align:center;">
             <button class="btn btn-sm p-0" style="color:#EF4444;background:none;border:none;opacity:.75;" title="Xoá học sinh khỏi lớp"
                     onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.75"
@@ -1182,7 +1245,7 @@ function viewStudents(classId) {
                     onclick="removeStudentFromClass(this)"><i class="bi bi-person-dash"></i></button>
           </td></tr>`;
       });
-      body.innerHTML = html + '</tbody></table></div>';
+      body.innerHTML = html + '</tbody></table></div>' + (_PHASE === 3 ? confirmFooter(data) : '');
     }).catch(() => { body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải danh sách.</div>'; });
 }
 
@@ -1866,6 +1929,72 @@ function _swapModal(fromId, toId, onShown) {
   document.getElementById(id).addEventListener('hidden.bs.modal', () => { if (_stuClassId) viewStudents(_stuClassId); });
 });
 
+/* ── GĐ3: xác nhận của học sinh ── */
+const _CONF_META = {
+  pending:  {t: 'Chưa xác nhận', bg: '#FEF3C7', c: '#92400E', i: 'hourglass-split'},
+  accepted: {t: 'Xác nhận học',  bg: '#DCFCE7', c: '#166534', i: 'check-circle-fill'},
+  declined: {t: 'Xác nhận huỷ',  bg: '#FEE2E2', c: '#B91C1C', i: 'x-circle-fill'},
+};
+function confBadge(st, at) {
+  const m = _CONF_META[st]; if (!m) return '';
+  return `<span class="badge" style="background:${m.bg};color:${m.c};font-size:.7rem;font-weight:700;padding:4px 9px;" ${at ? `title="${_esc(String(at).slice(0, 16))}"` : ''}><i class="bi bi-${m.i} me-1"></i>${m.t}</span>`;
+}
+function confirmFooter(data) {
+  const st = data.students || [], dec = data.declined || [];
+  const n = k => st.filter(s => s.confirm_status === k).length;
+  const p = n('pending'), a = n('accepted');
+  if (!p && !a && !dec.length) return '';
+  const chip = (k, cnt) => `<span class="me-3" style="white-space:nowrap;">${confBadge(k)} <strong>${cnt}</strong></span>`;
+  return `<div class="mx-3 mb-3 mt-1 p-3" style="background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:12px;">
+      <div class="fw-bold mb-2" style="font-size:.82rem;color:#0c4a6e;"><i class="bi bi-person-check me-1"></i>Xác nhận của học sinh được thêm bởi quản trị viên</div>
+      <div class="d-flex flex-wrap" style="font-size:.8rem;">${chip('pending', p)}${chip('accepted', a)}${chip('declined', dec.length)}</div>
+      ${dec.length ? `<div class="mt-2 pt-2" style="border-top:1px dashed #CBD5E1;font-size:.78rem;color:#B91C1C;">
+        <strong>Đã từ chối tham gia lớp này:</strong> ${dec.map(d => `${_esc(d.full_name)} <span class="text-muted">(${_esc(d.home_class)}, ${_esc(String(d.at).slice(0, 16))})</span>`).join(' · ')}</div>` : ''}
+    </div>`;
+}
+let _confirmData = [], _confirmFilter = 'all';
+function openConfirmTab(filter) { _confirmFilter = filter || 'all'; switchTab('confirm'); }
+async function loadConfirmDash(manual) {
+  const wrap = document.getElementById('confirm-table-wrap');
+  if (manual && wrap) wrap.innerHTML = '<div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm me-2"></div>Đang tải...</div>';
+  try {
+    const d = await (await fetch('/admin/adjustment/confirmations')).json();
+    if (!d.ok) throw new Error();
+    _confirmData = d.items;
+    const s = d.summary, tot = s.total || 0;
+    ['all', 'accepted', 'pending', 'declined'].forEach(k => { document.getElementById('cd-' + k).textContent = k === 'all' ? tot : s[k]; });
+    ['accepted', 'pending', 'declined'].forEach(k => {
+      const pct = tot ? Math.round(s[k] * 100 / tot) : 0;
+      document.getElementById('cd-' + k + '-pct').textContent = tot ? pct + '%' : '';
+      document.getElementById('cd-bar-' + k).style.width = (tot ? s[k] * 100 / tot : 0) + '%';
+    });
+    const tb = document.getElementById('tab-confirm-badge');
+    tb.textContent = s.pending; tb.style.background = s.pending ? '#FEF3C7' : '#DCFCE7'; tb.style.color = s.pending ? '#92400E' : '#15803D';
+    tb.title = s.pending + ' chưa xác nhận';
+    renderConfirmTable();
+  } catch { if (wrap) wrap.innerHTML = '<div class="alert alert-danger m-3">Không thể tải dữ liệu xác nhận.</div>'; }
+}
+function renderConfirmTable() {
+  const wrap = document.getElementById('confirm-table-wrap');
+  const cnt = k => k === 'all' ? _confirmData.length : _confirmData.filter(x => x.status === k).length;
+  document.getElementById('confirm-filters').innerHTML = [['all', 'Tất cả'], ['pending', 'Chưa xác nhận'], ['accepted', 'Xác nhận học'], ['declined', 'Xác nhận huỷ']].map(([k, l]) =>
+    `<button class="btn btn-sm fw-semibold" style="border-radius:20px;font-size:.74rem;padding:3px 12px;border:1.5px solid ${_confirmFilter === k ? '#10B981' : '#E2E8F0'};background:${_confirmFilter === k ? '#10B981' : '#fff'};color:${_confirmFilter === k ? '#fff' : '#475569'};" onclick="_confirmFilter='${k}';renderConfirmTable()">${l} (${cnt(k)})</button>`).join('');
+  const tokens = _foldJs(document.getElementById('confirmSearch').value.trim()).split(/\s+/).filter(Boolean);
+  const list = _confirmData.filter(x => (_confirmFilter === 'all' || x.status === _confirmFilter) &&
+    tokens.every(tk => _foldJs(x.full_name + ' ' + x.home_class + ' ' + x.subject).includes(tk)));
+  if (!list.length) { wrap.innerHTML = `<div class="text-center text-muted py-5" style="font-size:.85rem;"><i class="bi bi-inbox" style="font-size:1.6rem;display:block;margin-bottom:6px;"></i>${_confirmData.length ? 'Không có trường hợp phù hợp' : 'Chưa có học sinh nào được quản trị viên thêm vào lớp'}</div>`; return; }
+  wrap.innerHTML = `<table class="table admin-table mb-0"><thead><tr><th style="width:44px;">#</th><th>Học sinh</th><th style="width:90px;">Lớp</th><th>Lớp học được thêm</th><th style="width:150px;">Trạng thái</th><th style="width:140px;">Thời gian</th></tr></thead><tbody>` +
+    list.map((x, i) => `<tr>
+      <td class="text-muted" style="font-size:.72rem;">${i + 1}</td>
+      <td class="fw-semibold" style="font-size:.85rem;">${_esc(x.full_name)}</td>
+      <td><span class="badge rounded-pill" style="background:#EFF6FF;color:#0369A1;font-size:.7rem;">${_esc(x.home_class || '—')}</span></td>
+      <td style="font-size:.8rem;"><strong>${_esc(x.subject)}</strong> <span class="text-muted">· ${_esc(x.day_label)} ${_esc(x.session_label)}, tiết ${x.start_session}${x.end_session > x.start_session ? '–' + x.end_session : ''}${x.location ? ' · ' + _esc(x.location) : ''}</span></td>
+      <td>${confBadge(x.status)}</td>
+      <td style="font-size:.74rem;color:#64748B;white-space:nowrap;">${_esc(String(x.decided_at || x.added_at || '').slice(0, 16)) || '—'}</td></tr>`).join('') + '</tbody></table>';
+}
+setInterval(() => { if (!document.hidden) loadConfirmDash(); }, 15000);
+setTimeout(loadConfirmDash, 0);
+
 /* ── Tab "Học sinh trùng giờ" ── */
 let _confData = [];
 async function loadConflictTab(manual) {
@@ -1917,7 +2046,7 @@ function renderConflictTable() {
 }
 document.getElementById('modalStudents').addEventListener('hidden.bs.modal', () => {
   if (_confCtx === 'tab') { _stuClassId = null; _confCtx = 'class'; }
-  loadConflictTab();
+  loadConflictTab(); loadConfirmDash();
 });
 setTimeout(loadConflictTab, 0);
 

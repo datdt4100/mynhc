@@ -1009,6 +1009,39 @@ def _norm_subj(s):
     return s.strip() if s else s
 
 
+def _is_pe_subject(subject) -> bool:
+    """Thể dục: classes may share one teacher and one venue in the same time slot."""
+    return "the duc" in _fold(subject or "")
+
+
+def _slot_overlap(day, session, start, end):
+    return and_(classes.c.day_of_week == day, classes.c.session_type == session,
+                classes.c.start_session <= end,
+                (classes.c.start_session + classes.c.duration - 1) >= start)
+
+
+def _teacher_slot_busy(conn, teacher_id, day, session, start, end, subject, exclude_class_id=None) -> bool:
+    """Teacher already has an overlapping class. Two Thể dục classes may overlap each other."""
+    cond = and_(classes.c.teacher_id == teacher_id, _slot_overlap(day, session, start, end))
+    if exclude_class_id:
+        cond = and_(cond, classes.c.id != exclude_class_id)
+    rows = conn.execute(select(classes.c.subject).where(cond)).fetchall()
+    if _is_pe_subject(subject):
+        rows = [r for r in rows if not _is_pe_subject(r.subject)]
+    return bool(rows)
+
+
+def _room_slot_booked(conn, location, day, session, start, end, subject, exclude_class_id=None) -> bool:
+    """Venue already used by an overlapping class. Thể dục classes may share a venue with each other."""
+    cond = and_(classes.c.location == location, _slot_overlap(day, session, start, end))
+    if exclude_class_id:
+        cond = and_(cond, classes.c.id != exclude_class_id)
+    rows = conn.execute(select(classes.c.subject).where(cond)).fetchall()
+    if _is_pe_subject(subject):
+        rows = [r for r in rows if not _is_pe_subject(r.subject)]
+    return bool(rows)
+
+
 def _get_subj_grp_setting(conn, name):
     row = conn.execute(
         select(subject_group_settings).where(subject_group_settings.c.name == name)
@@ -1793,22 +1826,15 @@ def teacher_register_class():
     with _class_locks_meta:
         with engine.begin() as conn:
             # Check teacher schedule conflict (same teacher, overlapping slot)
-            teacher_conflict = conn.execute(
-                select(classes.c.id).where(and_(
-                    classes.c.teacher_id == teacher_id,
-                    classes.c.day_of_week == day_of_week,
-                    classes.c.session_type == session_type,
-                    classes.c.start_session <= end_session,
-                    (classes.c.start_session + classes.c.duration - 1) >= start_session,
-                ))
-            ).first()
+            teacher_conflict = _teacher_slot_busy(conn, teacher_id, day_of_week, session_type,
+                                                  start_session, end_session, subject)
             if teacher_conflict:
                 return jsonify(ok=False,
                     error="Bạn đã có lớp trong khung giờ này. Vui lòng chọn khung giờ khác.")
 
             # Verify at least 1 room is free for this grade + slot
             all_rooms_rows = conn.execute(select(rooms)).fetchall()
-            if all_rooms_rows:
+            if all_rooms_rows and not _is_pe_subject(subject):   # Thể dục can share venues
                 booked_locs = {r.location for r in conn.execute(
                     select(classes.c.location).where(and_(
                         classes.c.day_of_week == day_of_week,
@@ -3325,11 +3351,13 @@ def api_slot_impact_grid():
     with engine.connect() as conn:
         teacher_classes = conn.execute(
             select(classes.c.day_of_week, classes.c.session_type,
-                   classes.c.start_session, classes.c.duration)
+                   classes.c.start_session, classes.c.duration, classes.c.subject)
             .where(classes.c.teacher_id == teacher_id)
         ).fetchall()
     teacher_occupied = set()
     for c in teacher_classes:
+        if _is_pe_subject(subject) and _is_pe_subject(c.subject):
+            continue        # Thể dục classes may overlap each other
         end = c.start_session + c.duration - 1
         for t in range(c.start_session, end + 1):
             teacher_occupied.add((c.day_of_week, c.session_type, t))
@@ -3402,7 +3430,10 @@ def api_available_rooms():
     except (KeyError, ValueError):
         return jsonify([]), 400
     end = ss + dur - 1
+    subject = request.args.get("subject")
     with engine.connect() as conn:
+        if subject is None and exclude_class_id:
+            subject = conn.execute(select(classes.c.subject).where(classes.c.id == exclude_class_id)).scalar()
         room_rows_all = conn.execute(select(rooms)).fetchall()
         all_rooms = sorted([r.name for r in room_rows_all], key=_room_sort_key)
         # rooms that enforce conflict check (1 class per slot)
@@ -3417,8 +3448,10 @@ def api_available_rooms():
         )
         if exclude_class_id:
             booked_filter = and_(booked_filter, classes.c.id != exclude_class_id)
-        booked = conn.execute(select(classes.c.location).where(booked_filter)).fetchall()
-        booked_set = {r.location for r in booked if r.location}
+        booked = conn.execute(select(classes.c.location, classes.c.subject).where(booked_filter)).fetchall()
+        pe_new = _is_pe_subject(subject)
+        booked_set = {r.location for r in booked
+                      if r.location and not (pe_new and _is_pe_subject(r.subject))}
         # rooms marked busy externally (any tiết in the requested range)
         ext_busy = conn.execute(
             select(room_external_busy.c.room_name).where(
@@ -4992,16 +5025,8 @@ def admin_register_class():
         if not teacher:
             return jsonify(ok=False, error="Giáo viên không tồn tại.")
         if location:
-            conflict = conn.execute(
-                select(classes.c.id).where(and_(
-                    classes.c.day_of_week == day_of_week,
-                    classes.c.session_type == session_type,
-                    classes.c.location == location,
-                    classes.c.start_session <= end_session,
-                    (classes.c.start_session + classes.c.duration - 1) >= start_session,
-                ))
-            ).first()
-            if conflict:
+            if _room_slot_booked(conn, location, day_of_week, session_type, start_session, end_session,
+                                 teacher.subject_group):
                 return jsonify(ok=False, error=f"Phòng {location} đã bị đặt trong khung giờ này.")
         result = conn.execute(
             insert(classes).values(
@@ -5227,17 +5252,8 @@ def admin_class_update(class_id):
         if updates.get("location"):
             location = updates["location"]
             end_session = row.start_session + row.duration - 1
-            conflict = conn.execute(
-                select(classes.c.id).where(and_(
-                    classes.c.id != class_id,
-                    classes.c.day_of_week  == row.day_of_week,
-                    classes.c.session_type == row.session_type,
-                    classes.c.location     == location,
-                    classes.c.start_session <= end_session,
-                    (classes.c.start_session + classes.c.duration - 1) >= row.start_session,
-                ))
-            ).fetchone()
-            if conflict:
+            if _room_slot_booked(conn, location, row.day_of_week, row.session_type, row.start_session,
+                                 end_session, row.subject, exclude_class_id=class_id):
                 return jsonify(ok=False, error=f"Phòng {location} đã được xếp cho lớp khác trong khung giờ này.")
             ext_conflict = conn.execute(
                 select(room_external_busy.c.id).where(and_(
@@ -5328,14 +5344,14 @@ def api_class_available_teachers(class_id):
             return jsonify(ok=False, error="Không tìm thấy lớp"), 404
         end_session = cls.start_session + cls.duration - 1
         busy_ids = {r.teacher_id for r in conn.execute(
-            select(classes.c.teacher_id).where(and_(
+            select(classes.c.teacher_id, classes.c.subject).where(and_(
                 classes.c.id != class_id,
                 classes.c.day_of_week == cls.day_of_week,
                 classes.c.session_type == cls.session_type,
                 classes.c.start_session <= end_session,
                 (classes.c.start_session + classes.c.duration - 1) >= cls.start_session,
             ))
-        ).fetchall()}
+        ).fetchall() if not (_is_pe_subject(cls.subject) and _is_pe_subject(r.subject))}
         all_teachers = conn.execute(
             select(teachers)
             .where(teachers.c.cccd != _UNASSIGNED_CCCD)
@@ -5378,17 +5394,8 @@ def admin_class_reassign_teacher(class_id):
                 return jsonify(ok=False, error="Không tìm thấy giáo viên.")
             # Check teacher time conflict
             end_session = cls.start_session + cls.duration - 1
-            conflict = conn.execute(
-                select(classes.c.id).where(and_(
-                    classes.c.id != class_id,
-                    classes.c.teacher_id == new_teacher_id,
-                    classes.c.day_of_week == cls.day_of_week,
-                    classes.c.session_type == cls.session_type,
-                    classes.c.start_session <= end_session,
-                    (classes.c.start_session + classes.c.duration - 1) >= cls.start_session,
-                ))
-            ).fetchone()
-            if conflict:
+            if _teacher_slot_busy(conn, new_teacher_id, cls.day_of_week, cls.session_type, cls.start_session,
+                                  end_session, cls.subject, exclude_class_id=class_id):
                 return jsonify(ok=False, error=f"{_name_fmt(t.full_name)} đã có lớp khác trong khung giờ này.")
             new_name = t.full_name
         old_t = conn.execute(select(teachers).where(teachers.c.id == cls.teacher_id)).fetchone() if cls.teacher_id else None
@@ -5419,31 +5426,15 @@ def admin_class_assign_teacher(class_id):
         # Check teacher time conflict
         if teacher_row.cccd != _UNASSIGNED_CCCD:
             end_session = cls.start_session + cls.duration - 1
-            t_conflict = conn.execute(
-                select(classes.c.id).where(and_(
-                    classes.c.id != class_id,
-                    classes.c.teacher_id == teacher_id,
-                    classes.c.day_of_week == cls.day_of_week,
-                    classes.c.session_type == cls.session_type,
-                    classes.c.start_session <= end_session,
-                    (classes.c.start_session + classes.c.duration - 1) >= cls.start_session,
-                ))
-            ).fetchone()
+            t_conflict = _teacher_slot_busy(conn, teacher_id, cls.day_of_week, cls.session_type,
+                                            cls.start_session, end_session,
+                                            teacher_row.subject_group or cls.subject, exclude_class_id=class_id)
             if t_conflict:
                 return jsonify(ok=False, error=f"{_name_fmt(teacher_row.full_name)} đã có lớp khác trong khung giờ này.")
         if location:
             end_session = cls.start_session + cls.duration - 1
-            conflict = conn.execute(
-                select(classes.c.id).where(and_(
-                    classes.c.id != class_id,
-                    classes.c.day_of_week   == cls.day_of_week,
-                    classes.c.session_type  == cls.session_type,
-                    classes.c.location      == location,
-                    classes.c.start_session <= end_session,
-                    (classes.c.start_session + classes.c.duration - 1) >= cls.start_session,
-                ))
-            ).fetchone()
-            if conflict:
+            if _room_slot_booked(conn, location, cls.day_of_week, cls.session_type, cls.start_session,
+                                 end_session, teacher_row.subject_group or cls.subject, exclude_class_id=class_id):
                 return jsonify(ok=False, error=f"Phòng {location} đã bị đặt trong khung giờ này.")
         conn.execute(
             update(classes).where(classes.c.id == class_id).values(
@@ -5840,17 +5831,8 @@ def admin_class_assign_room(class_id):
         if not cls:
             return jsonify(ok=False, error="Không tìm thấy lớp.")
         end_session = cls.start_session + cls.duration - 1
-        conflict = conn.execute(
-            select(classes.c.id).where(and_(
-                classes.c.id != class_id,
-                classes.c.day_of_week   == cls.day_of_week,
-                classes.c.session_type  == cls.session_type,
-                classes.c.location      == location,
-                classes.c.start_session <= end_session,
-                (classes.c.start_session + classes.c.duration - 1) >= cls.start_session,
-            ))
-        ).fetchone()
-        if conflict:
+        if _room_slot_booked(conn, location, cls.day_of_week, cls.session_type, cls.start_session,
+                             end_session, cls.subject, exclude_class_id=class_id):
             return jsonify(ok=False, error=f"Phòng {location} đã bị đặt trong khung giờ này.")
         conn.execute(
             update(classes).where(classes.c.id == class_id).values(location=location)
@@ -5880,17 +5862,8 @@ def teacher_class_assign_room(class_id):
             return jsonify(ok=False, error="Không tìm thấy lớp.")
         if location:
             end_session = cls.start_session + cls.duration - 1
-            conflict = conn.execute(
-                select(classes.c.id).where(and_(
-                    classes.c.id != class_id,
-                    classes.c.day_of_week  == cls.day_of_week,
-                    classes.c.session_type == cls.session_type,
-                    classes.c.location     == location,
-                    classes.c.start_session <= end_session,
-                    (classes.c.start_session + classes.c.duration - 1) >= cls.start_session,
-                ))
-            ).fetchone()
-            if conflict:
+            if _room_slot_booked(conn, location, cls.day_of_week, cls.session_type, cls.start_session,
+                                 end_session, cls.subject, exclude_class_id=class_id):
                 return jsonify(ok=False, error=f"Phòng {location} đã được xếp cho lớp khác trong khung giờ này.")
             ext_conflict = conn.execute(
                 select(room_external_busy.c.id).where(and_(
@@ -6118,28 +6091,34 @@ def admin_add_class_manual():
                         error=f"Chuyên đề '{chuyen_de_input}' đã tồn tại ở môn này cùng khung giờ.")
             # No time-overlap check for school-assigned placeholder
         else:
-            # Normal teacher: strict duplicate + time-overlap check
-            dup = conn.execute(
-                select(classes.c.id).where(and_(
-                    classes.c.teacher_id    == teacher_row.id,
-                    classes.c.grade         == grade,
-                    classes.c.day_of_week   == day_of_week,
-                    classes.c.session_type  == session_type,
-                    classes.c.start_session == start_session,
-                ))
-            ).fetchone()
+            # Normal teacher: strict duplicate + time-overlap check (Thể dục: overlap allowed, told apart by Chuyên đề)
+            _pe_new = _is_pe_subject(subject_input or teacher_row.subject_group)
+            dup_cond = and_(
+                classes.c.teacher_id    == teacher_row.id,
+                classes.c.grade         == grade,
+                classes.c.day_of_week   == day_of_week,
+                classes.c.session_type  == session_type,
+                classes.c.start_session == start_session,
+            )
+            if _pe_new:
+                dup_cond = and_(dup_cond, func.coalesce(classes.c.chuyen_de, "") == (chuyen_de_input or ""))
+            dup = conn.execute(select(classes.c.id).where(dup_cond)).fetchone()
             if dup:
                 return jsonify(ok=False, error="Lớp này đã tồn tại (trùng giáo viên / khối / thời gian).")
-            conflict = conn.execute(
+            conflict = None
+            _ov = conn.execute(
                 select(classes.c.grade.label("g"), classes.c.start_session.label("s"),
-                       classes.c.duration.label("d")).where(and_(
+                       classes.c.duration.label("d"), classes.c.subject.label("subj")).where(and_(
                     classes.c.teacher_id   == teacher_row.id,
                     classes.c.day_of_week  == day_of_week,
                     classes.c.session_type == session_type,
                     classes.c.start_session < start_session + duration,
                     (classes.c.start_session + classes.c.duration) > start_session,
                 ))
-            ).fetchone()
+            ).fetchall()
+            if _pe_new:
+                _ov = [r for r in _ov if not _is_pe_subject(r.subj)]
+            conflict = _ov[0] if _ov else None
             if conflict:
                 return jsonify(ok=False,
                     error=f"Giáo viên đã có lớp K{conflict.g} tiết {conflict.s}–{conflict.s+conflict.d-1}"
@@ -6354,27 +6333,29 @@ def admin_import_classes_excel():
                             errors_list.append(f"Dòng {i}: Đã có lớp cùng môn cùng khung giờ. Cần nhập Chuyên đề để phân biệt.")
                             continue
                 else:
-                    dup = conn.execute(
-                        select(classes.c.id).where(and_(
-                            classes.c.teacher_id    == teacher_row.id,
-                            classes.c.grade         == grade,
-                            classes.c.subject       == subject,
-                            classes.c.day_of_week   == thu,
-                            classes.c.session_type  == buoi,
-                            classes.c.start_session == tiet,
-                        ))
-                    ).fetchone()
+                    _dup_cond = and_(
+                        classes.c.teacher_id    == teacher_row.id,
+                        classes.c.grade         == grade,
+                        classes.c.subject       == subject,
+                        classes.c.day_of_week   == thu,
+                        classes.c.session_type  == buoi,
+                        classes.c.start_session == tiet,
+                    )
+                    if _is_pe_subject(subject):       # Thể dục: same slot allowed when Chuyên đề differs
+                        _dup_cond = and_(_dup_cond, func.coalesce(classes.c.chuyen_de, "") == (chuyen_de_val or ""))
+                    dup = conn.execute(select(classes.c.id).where(_dup_cond)).fetchone()
                     if dup:
                         skipped += 1
                         continue
 
                 # Check teacher time conflict (skip for placeholder — admin assigns real teacher later)
                 if teacher_row.cccd != _UNASSIGNED_CCCD:
-                    conflict = conn.execute(
+                    _ov = conn.execute(
                         select(
                             classes.c.grade.label("g"),
                             classes.c.start_session.label("s"),
                             classes.c.duration.label("d"),
+                            classes.c.subject.label("subj"),
                         ).where(and_(
                             classes.c.teacher_id   == teacher_row.id,
                             classes.c.day_of_week  == thu,
@@ -6382,7 +6363,10 @@ def admin_import_classes_excel():
                             classes.c.start_session < tiet + so_tiet,
                             (classes.c.start_session + classes.c.duration) > tiet,
                         ))
-                    ).fetchone()
+                    ).fetchall()
+                    if _is_pe_subject(subject):       # Thể dục classes may overlap each other
+                        _ov = [r for r in _ov if not _is_pe_subject(r.subj)]
+                    conflict = _ov[0] if _ov else None
                     if conflict:
                         errors_list.append(
                             f"Dòng {i}: GV '{teacher_row.full_name}' đã có lớp K{conflict.g}"

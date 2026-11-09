@@ -372,7 +372,6 @@
             <th style="white-space:nowrap;min-width:130px;">Địa điểm</th>
             <th style="white-space:nowrap;width:70px;">Sĩ số</th>
             <th style="white-space:nowrap;text-align:center;">HS đăng ký</th>
-            <th style="white-space:nowrap;">Tổ hợp</th>
             <th style="white-space:nowrap;">Thời gian tạo</th>
             <th style="width:88px;">Thao tác</th>
           </tr>
@@ -380,10 +379,16 @@
         <tbody>
           {% for cls in unassigned_classes %}
           {% set ec = enrollment_counts.get(cls.id, 0) %}
-          {% set combos = conflict_info.get(cls.id, 100) %}
           <tr id="ua-row-{{ cls.id }}">
             <td class="text-muted" style="font-size:.75rem;">{{ loop.index }}</td>
-            <td><span class="badge rounded-pill" style="background:#EFF6FF;color:#0369A1;font-size:.72rem;">{{ cls.subject or '—' }}</span></td>
+            <td>
+              <span class="badge rounded-pill" style="background:#EFF6FF;color:#0369A1;font-size:.72rem;">{{ cls.subject or '—' }}</span>
+              {% if cls.chuyen_de %}
+              <div style="font-size:.72rem;color:#7C3AED;margin-top:3px;white-space:nowrap;" title="Chuyên đề">
+                <i class="bi bi-bookmark-star-fill me-1" style="font-size:.66rem;"></i>Chuyên đề: <strong>{{ cls.chuyen_de }}</strong>
+              </div>
+              {% endif %}
+            </td>
             <td><span class="badge bg-light text-dark border" style="font-size:.72rem;">K{{ cls.grade }}</span></td>
             <td style="font-size:.78rem;white-space:nowrap;">{{ day_name(cls.day_of_week) }}</td>
             <td style="font-size:.78rem;white-space:nowrap;">{{ session_label(cls.session_type, cls.start_session, cls.duration) }}</td>
@@ -420,15 +425,6 @@
                     {% if cls.max_capacity and ec * 5 >= cls.max_capacity * 3 and ec < cls.max_capacity %}title="Lớp đông, khó tiếp thu"{% endif %}>
                 {{ ec }}{% if cls.max_capacity %}/{{ cls.max_capacity }}{% endif %}
               </span>
-            </td>
-            <td>
-              {% if combos == 0 %}
-                <span class="conflict-badge conflict-red" title="Không còn cách nào để HS chọn đủ tất cả môn">🔴 0 combo</span>
-              {% elif combos <= 3 %}
-                <span class="conflict-badge conflict-yellow" title="Chỉ còn {{ combos }} cách ghép lịch hợp lệ">🟡 {{ combos }} combo</span>
-              {% else %}
-                <span class="conflict-badge conflict-green" title="{{ combos if combos < 100 else '≥100' }} cách ghép lịch hợp lệ">🟢 OK</span>
-              {% endif %}
             </td>
             <td style="font-size:.73rem;color:#64748B;white-space:nowrap;">{{ cls.created_at[:19] if cls.created_at else '—' }}</td>
             <td>
@@ -642,7 +638,7 @@ async function _atLoadRoomOptions(sel) {
   sel.dataset.loaded = '1';
   sel.innerHTML = '<option value="">Đang tải…</option>';
   try {
-    const res = await fetch(`/api/available-rooms?day_of_week=${_atDayOfWeek}&session_type=${_atSessionType}&start_session=${_atStartSession}&duration=${_atDuration}&grade=${_atGrade}`);
+    const res = await fetch(`/api/available-rooms?day_of_week=${_atDayOfWeek}&session_type=${_atSessionType}&start_session=${_atStartSession}&duration=${_atDuration}&grade=${_atGrade}&exclude_class_id=${_atClassId}`);
     const data = await res.json();
     const rooms = Array.isArray(data) ? data : (data.rooms || []);
     sel.innerHTML = '<option value="">— Chọn phòng —</option>';
@@ -737,7 +733,7 @@ async function _atLoadSplitRoomOptions(sel) {
   sel.dataset.loaded = '1';
   sel.innerHTML = '<option value="">Đang tải…</option>';
   try {
-    const res = await fetch(`/api/available-rooms?day_of_week=${_atDayOfWeek}&session_type=${_atSessionType}&start_session=${_atStartSession}&duration=${_atDuration}&grade=${_atGrade}`);
+    const res = await fetch(`/api/available-rooms?day_of_week=${_atDayOfWeek}&session_type=${_atSessionType}&start_session=${_atStartSession}&duration=${_atDuration}&grade=${_atGrade}&exclude_class_id=${_atClassId}`);
     const data = await res.json();
     const rooms = Array.isArray(data) ? data : (data.rooms || []);
     sel.innerHTML = '<option value="">— Chọn phòng —</option>';
@@ -808,10 +804,10 @@ function _atPostSuccess() {
 async function loadUARooms(sel) {
   if (sel.dataset.loaded) return;
   sel.dataset.loaded = '1';
-  const {day, session, start, duration, grade} = sel.dataset;
+  const {day, session, start, duration, grade, classId} = sel.dataset;
   const cur = sel.value;
   try {
-    const res = await fetch(`/api/available-rooms?day_of_week=${day}&session_type=${session}&start_session=${start}&duration=${duration}&grade=${grade}`);
+    const res = await fetch(`/api/available-rooms?day_of_week=${day}&session_type=${session}&start_session=${start}&duration=${duration}&grade=${grade}${classId ? '&exclude_class_id=' + classId : ''}`);
     const data = await res.json();
     const rooms = Array.isArray(data) ? data : (data.rooms || []);
     // Remove all options except first placeholder

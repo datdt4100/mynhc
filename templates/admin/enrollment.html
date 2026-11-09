@@ -242,7 +242,7 @@
   <!-- Dashboard: xác nhận của học sinh -->
   <div class="mb-4" id="confirm-dash">
     <div class="d-flex align-items-center gap-2 mb-2">
-      <span class="fw-bold" style="font-size:.9rem;color:#0c4a6e;"><i class="bi bi-person-check me-1" style="color:#10B981;"></i>Xác nhận của học sinh (học sinh được quản trị viên thêm vào lớp)</span>
+      <span class="fw-bold" style="font-size:.9rem;color:#0c4a6e;"><i class="bi bi-person-check me-1" style="color:#10B981;"></i>Xác nhận của học sinh (được quản trị viên thêm hoặc GVCN đề xuất)</span>
     </div>
     <div class="row g-3">
       {% for key, label, icon, bg, fg, bd in [
@@ -561,7 +561,7 @@
      MODAL: Xem học sinh của lớp
 ══════════════════════════════════════════ -->
 <div class="modal fade" id="modalStudents" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+  <div class="modal-dialog modal-dialog-centered {% if phase == 3 %}modal-xl{% else %}modal-lg{% endif %} modal-dialog-scrollable">
     <div class="modal-content" style="border-radius:16px; overflow:hidden;">
       <div class="modal-header" style="background:linear-gradient(135deg,#065f46,#10B981); border:none;">
         <h5 class="modal-title fw-bold text-white"><i class="bi bi-people-fill me-2"></i><span id="studentsModalTitle">Học sinh đăng ký lớp</span></h5>
@@ -1234,10 +1234,11 @@ function viewStudents(classId) {
       }
       let html = header(data.students.length) + (_PHASE === 3 ? stuStatusSection(conf) : '') + `
         <div style="overflow:auto;max-height:420px;"><table class="sched-table">
-        <thead><tr><th style="width:38px;">STT</th><th>Họ tên</th><th>Mã đăng nhập</th><th>Khối</th><th>Lớp</th><th>Truy cập gần nhất</th>${_PHASE === 3 ? '<th>Xác nhận</th>' : ''}<th style="width:44px;"></th></tr></thead><tbody>`;
+        <thead><tr><th style="width:38px;">STT</th><th>Họ tên</th><th>Mã đăng nhập</th><th>Khối</th><th>Lớp</th><th>Truy cập gần nhất</th>${_PHASE === 3 ? '<th>Xác nhận</th><th>Ghi chú</th>' : ''}<th style="width:44px;"></th></tr></thead><tbody>`;
       data.students.forEach((s, i) => {
-        html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold">${s.full_name}</td><td><code style="font-size:.75rem;">${s.cccd}</code></td><td>${s.grade??'—'}</td><td>${s.class_name??'—'}</td><td style="font-size:.75rem;color:#64748B;white-space:nowrap;">${s.last_seen_at ? s.last_seen_at.slice(0,19) : '—'}</td>
-          ${_PHASE === 3 ? `<td style="white-space:nowrap;">${s.confirm_status ? confBadge(s.confirm_status, s.confirm_at) : '<span class="text-muted" style="font-size:.72rem;">—</span>'}</td>` : ''}
+        html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold" style="white-space:nowrap;">${s.full_name}</td><td><code style="font-size:.75rem;">${s.cccd}</code></td><td>${s.grade??'—'}</td><td>${s.class_name??'—'}</td><td style="font-size:.75rem;color:#64748B;white-space:nowrap;">${s.last_seen_at ? s.last_seen_at.slice(0,19) : '—'}</td>
+          ${_PHASE === 3 ? `<td style="white-space:nowrap;">${s.confirm_status ? confBadge(s.confirm_status, s.confirm_at) : '<span class="text-muted" style="font-size:.72rem;">—</span>'}</td>
+          <td style="white-space:nowrap;">${s.note ? noteBadge(s.note, s.proposer_name) : ''}</td>` : ''}
           <td style="text-align:center;">
             <button class="btn btn-sm p-0" style="color:#EF4444;background:none;border:none;opacity:.75;" title="Xoá học sinh khỏi lớp"
                     onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.75"
@@ -1939,6 +1940,9 @@ function confBadge(st, at) {
   const m = _CONF_META[st]; if (!m) return '';
   return `<span class="badge" style="background:${m.bg};color:${m.c};font-size:.7rem;font-weight:700;padding:4px 9px;" ${at ? `title="${_esc(String(at).slice(0, 16))}"` : ''}><i class="bi bi-${m.i} me-1"></i>${m.t}</span>`;
 }
+function noteBadge(note, name) {
+  return `<span class="badge" style="background:#EDE9FE;color:#6D28D9;font-size:.7rem;font-weight:700;padding:4px 9px;" ${name ? `title="${_esc(name)}"` : ''}><i class="bi bi-person-hearts me-1"></i>${_esc(note)}</span>`;
+}
 function confirmFooter(data) {
   const st = data.students || [], dec = data.declined || [];
   const n = k => st.filter(s => s.confirm_status === k).length;
@@ -1946,10 +1950,10 @@ function confirmFooter(data) {
   if (!p && !a && !dec.length) return '';
   const chip = (k, cnt) => `<span class="me-3" style="white-space:nowrap;">${confBadge(k)} <strong>${cnt}</strong></span>`;
   return `<div class="mx-3 mb-3 mt-1 p-3" style="background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:12px;">
-      <div class="fw-bold mb-2" style="font-size:.82rem;color:#0c4a6e;"><i class="bi bi-person-check me-1"></i>Xác nhận của học sinh được thêm bởi quản trị viên</div>
+      <div class="fw-bold mb-2" style="font-size:.82rem;color:#0c4a6e;"><i class="bi bi-person-check me-1"></i>Xác nhận của học sinh (quản trị viên thêm / GVCN đề xuất)</div>
       <div class="d-flex flex-wrap" style="font-size:.8rem;">${chip('pending', p)}${chip('accepted', a)}${chip('declined', dec.length)}</div>
       ${dec.length ? `<div class="mt-2 pt-2" style="border-top:1px dashed #CBD5E1;font-size:.78rem;color:#B91C1C;">
-        <strong>Đã từ chối tham gia lớp này:</strong> ${dec.map(d => `${_esc(d.full_name)} <span class="text-muted">(${_esc(d.home_class)}, ${_esc(String(d.at).slice(0, 16))})</span>`).join(' · ')}</div>` : ''}
+        <strong>Đã từ chối tham gia lớp này:</strong> ${dec.map(d => `${_esc(d.full_name)} <span class="text-muted">(${_esc(d.home_class)}, ${_esc(String(d.at).slice(0, 16))}${d.source === 'gvcn' ? ' · đề xuất bởi GVCN' : ''})</span>`).join(' · ')}</div>` : ''}
     </div>`;
 }
 let _confirmData = [], _confirmFilter = 'all';
@@ -1983,13 +1987,14 @@ function renderConfirmTable() {
   const list = _confirmData.filter(x => (_confirmFilter === 'all' || x.status === _confirmFilter) &&
     tokens.every(tk => _foldJs(x.full_name + ' ' + x.home_class + ' ' + x.subject).includes(tk)));
   if (!list.length) { wrap.innerHTML = `<div class="text-center text-muted py-5" style="font-size:.85rem;"><i class="bi bi-inbox" style="font-size:1.6rem;display:block;margin-bottom:6px;"></i>${_confirmData.length ? 'Không có trường hợp phù hợp' : 'Chưa có học sinh nào được quản trị viên thêm vào lớp'}</div>`; return; }
-  wrap.innerHTML = `<table class="table admin-table mb-0"><thead><tr><th style="width:44px;">#</th><th>Học sinh</th><th style="width:90px;">Lớp</th><th>Lớp học được thêm</th><th style="width:150px;">Trạng thái</th><th style="width:140px;">Thời gian</th></tr></thead><tbody>` +
+  wrap.innerHTML = `<table class="table admin-table mb-0"><thead><tr><th style="width:44px;">#</th><th>Học sinh</th><th style="width:90px;">Lớp</th><th>Lớp học được thêm</th><th style="width:150px;">Trạng thái</th><th>Ghi chú</th><th style="width:140px;">Thời gian</th></tr></thead><tbody>` +
     list.map((x, i) => `<tr>
       <td class="text-muted" style="font-size:.72rem;">${i + 1}</td>
       <td class="fw-semibold" style="font-size:.85rem;">${_esc(x.full_name)}</td>
       <td><span class="badge rounded-pill" style="background:#EFF6FF;color:#0369A1;font-size:.7rem;">${_esc(x.home_class || '—')}</span></td>
       <td style="font-size:.8rem;"><strong>${_esc(x.subject)}</strong> <span class="text-muted">· ${_esc(x.day_label)} ${_esc(x.session_label)}, tiết ${x.start_session}${x.end_session > x.start_session ? '–' + x.end_session : ''}${x.location ? ' · ' + _esc(x.location) : ''}</span></td>
       <td>${confBadge(x.status)}</td>
+      <td style="white-space:nowrap;">${x.note ? noteBadge(x.note, x.proposer_name) : ''}</td>
       <td style="font-size:.74rem;color:#64748B;white-space:nowrap;">${_esc(String(x.decided_at || x.added_at || '').slice(0, 16)) || '—'}</td></tr>`).join('') + '</tbody></table>';
 }
 setInterval(() => { if (!document.hidden) loadConfirmDash(); }, 15000);

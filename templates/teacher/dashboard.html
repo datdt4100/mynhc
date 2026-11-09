@@ -365,6 +365,10 @@
           <i class="bi bi-people-fill me-1"></i>Quản Lý Học Sinh
           <span id="hmStudentCount" class="badge ms-1" style="background:rgba(255,255,255,.25); color:inherit; font-size:.7rem; border-radius:10px; padding:2px 7px;">{{ homeroom_students | length }}</span>
         </button>
+        <button class="main-tab-btn" id="main-tab-open" onclick="switchMainTab('open')">
+          <i class="bi bi-door-open-fill me-1"></i>Lớp học đang mở
+          <span id="openClassCount" class="badge ms-1" style="background:rgba(255,255,255,.25); color:inherit; font-size:.7rem; border-radius:10px; padding:2px 7px;">…</span>
+        </button>
       </div>
       <span style="font-size:.8rem; color:#065f46; font-weight:600; background:#ECFDF5; border:1.5px solid #A7F3D0; border-radius:20px; padding:4px 12px;">
         <i class="bi bi-person-hearts me-1"></i>GVCN – {{ homeroom_class.class_name }}
@@ -714,8 +718,73 @@
     </div>
     {% endif %}
 
+    {% if homeroom_class %}
+    <!-- ═══ PANE: Lớp học đang mở (GVCN) ═══ -->
+    <div id="pane-open" style="display:none;">
+      <div class="section-card mb-4">
+        <div class="section-card-header">
+          <i class="bi bi-door-open-fill"></i>
+          <span>Lớp học đang mở &ndash; Khối <span id="openGrade">{{ homeroom_class.class_name[:2] }}</span></span>
+          <span id="openCountBadge" class="badge ms-1" style="background:#DCFCE7; color:#15803D; font-size:.72rem; font-weight:700;">0</span>
+          <span class="ms-auto text-muted d-none d-md-inline" style="font-size:.75rem; font-weight:400;">
+            <i class="bi bi-arrow-repeat me-1"></i>Cập nhật theo thời gian thực
+          </span>
+        </div>
+        <div id="openPhaseNote" style="padding:10px 16px;font-size:.8rem;display:none;"></div>
+        <div style="overflow-x:auto;">
+          <table class="table hm-table mb-0" id="openClassTable">
+            <thead><tr>
+              <th>Môn học</th><th>Giáo viên</th><th>Thời gian</th><th>Phòng</th>
+              <th class="text-center">Sĩ số</th><th class="text-center">HS lớp {{ homeroom_class.class_name }}</th><th class="text-center" style="width:110px;"></th>
+            </tr></thead>
+            <tbody id="openClassTbody"><tr><td colspan="7" class="text-center text-muted py-5"><div class="spinner-border spinner-border-sm me-2"></div>Đang tải...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
   </div>
 </div>
+
+{% if homeroom_class %}
+<!-- GVCN: students of my class attending an open class -->
+<div class="modal fade" id="gvcnClassStudentsModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:640px;">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#065f46,#10B981); border:none; padding:14px 20px;">
+        <div>
+          <h5 class="modal-title fw-bold text-white mb-0" id="gcsTitle">Học sinh lớp {{ homeroom_class.class_name }}</h5>
+          <div id="gcsInfo" style="font-size:.76rem;color:rgba(255,255,255,.85);margin-top:2px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0" id="gcsBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- GVCN: propose students for an open class -->
+<div class="modal fade" id="gvcnProposeModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:640px;">
+    <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#1D4ED8,#3B82F6); border:none; padding:14px 20px;">
+        <div>
+          <h5 class="modal-title fw-bold text-white mb-0" id="gpTitle">Đề xuất học sinh</h5>
+          <div id="gpInfo" style="font-size:.76rem;color:rgba(255,255,255,.85);margin-top:2px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="gpNote" style="padding:10px 16px;font-size:.78rem;color:#64748B;border-bottom:1px solid #F1F5F9;">
+          Bấm <i class="bi bi-person-plus-fill"></i> để đề xuất học sinh tham gia lớp. Học sinh sẽ nhận được yêu cầu và phải xác nhận <strong>Tham gia</strong> hoặc <strong>Không tham gia</strong>. Học sinh bị trùng lịch học không thể được đề xuất.
+        </div>
+        <div id="gpBody"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <!-- Room schedule modal -->
 <div class="modal fade" id="roomSchedModal" tabindex="-1">
@@ -1722,13 +1791,115 @@ async function saveEnrollRoom() {
 const _GVCN_COLS = {{ gvcn_col_settings | tojson }};
 /* ══ GVCN: Tab switch ══ */
 function switchMainTab(tab) {
-  const showSched = tab === 'sched';
-  document.getElementById('pane-sched').style.display = showSched ? '' : 'none';
-  document.getElementById('pane-hm').style.display    = showSched ? 'none' : '';
-  document.getElementById('main-tab-sched').classList.toggle('active', showSched);
-  document.getElementById('main-tab-hm').classList.toggle('active', !showSched);
-  if (!showSched) refreshHmStudents();
+  ['sched', 'hm', 'open'].forEach(k => {
+    document.getElementById('pane-' + k).style.display = tab === k ? '' : 'none';
+    document.getElementById('main-tab-' + k).classList.toggle('active', tab === k);
+  });
+  if (tab === 'hm') refreshHmStudents();
+  if (tab === 'open') loadOpenClasses();
 }
+
+/* ══ GVCN: Lớp học đang mở + đề xuất học sinh ══ */
+const _gEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const _G_STATUS = {
+  pending:    {t: 'Chưa xác nhận',          bg: '#FEF3C7', c: '#92400E', i: 'hourglass-split'},
+  accepted:   {t: 'Xác nhận tham gia',      bg: '#DCFCE7', c: '#166534', i: 'check-circle-fill'},
+  declined:   {t: 'Xác nhận không tham gia', bg: '#FEE2E2', c: '#B91C1C', i: 'x-circle-fill'},
+  registered: {t: 'Đã đăng ký',             bg: '#E0F2FE', c: '#075985', i: 'check2'},
+};
+const _gBadge = st => { const m = _G_STATUS[st]; return m ? `<span class="badge" style="background:${m.bg};color:${m.c};font-size:.7rem;font-weight:700;padding:4px 9px;"><i class="bi bi-${m.i} me-1"></i>${m.t}</span>` : ''; };
+const _gSlot = c => `${_gEsc(c.day_label)} ${_gEsc(c.session_label)}, tiết ${c.start_session}${c.end_session > c.start_session ? '–' + c.end_session : ''}`;
+let _openClasses = [], _openPhase3 = false;
+async function loadOpenClasses() {
+  try {
+    const d = await (await fetch('/api/teacher/gvcn/open-classes')).json();
+    if (!d.ok) return;
+    _openClasses = d.classes; _openPhase3 = d.phase3_open;
+    document.getElementById('openGrade').textContent = d.grade;
+    document.getElementById('openClassCount').textContent = d.classes.length;
+    document.getElementById('openCountBadge').textContent = d.classes.length;
+    const note = document.getElementById('openPhaseNote');
+    note.style.display = '';
+    note.innerHTML = d.phase3_open
+      ? '<span style="color:#92400E;"><i class="bi bi-pencil-square me-1"></i>Giai đoạn 3 (Hiệu chỉnh môn học) đang mở — bạn có thể đề xuất học sinh lớp mình tham gia các lớp bên dưới.</span>'
+      : '<span class="text-muted"><i class="bi bi-info-circle me-1"></i>Chỉ đề xuất được khi Giai đoạn 3 (Hiệu chỉnh môn học) đang mở.</span>';
+    renderOpenClasses();
+  } catch (e) {}
+}
+function renderOpenClasses() {
+  const tb = document.getElementById('openClassTbody');
+  if (!_openClasses.length) { tb.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5">Hiện chưa có lớp học nào đang mở cho khối của bạn.</td></tr>'; return; }
+  tb.innerHTML = _openClasses.map(c => {
+    const full = c.max_capacity && c.enrolled >= c.max_capacity;
+    return `<tr style="cursor:pointer;" onclick="openGvcnClassStudents(${c.id})" title="Xem học sinh lớp mình đã đăng ký lớp này">
+      <td><span class="fw-semibold" style="font-size:.85rem;">${_gEsc(c.subject)}</span>${c.chuyen_de ? `<div style="font-size:.72rem;color:#7C3AED;"><i class="bi bi-bookmark-star-fill me-1"></i>Chuyên đề: <strong>${_gEsc(c.chuyen_de)}</strong></div>` : ''}</td>
+      <td style="font-size:.82rem;">${_gEsc(c.teacher) || '—'}</td>
+      <td style="font-size:.82rem;white-space:nowrap;">${_gSlot(c)}</td>
+      <td style="font-size:.8rem;color:#64748B;">${_gEsc(c.location) || '—'}</td>
+      <td class="text-center"><span class="badge rounded-pill ${full ? 'bg-danger' : 'bg-light text-dark border'}" style="font-size:.72rem;">${c.enrolled}${c.max_capacity ? '/' + c.max_capacity : ''}</span></td>
+      <td class="text-center">${c.my_count ? `<span class="badge rounded-pill bg-success" style="font-size:.72rem;">${c.my_count}</span>${c.my_pending ? `<span class="badge rounded-pill ms-1" style="background:#FEF3C7;color:#92400E;font-size:.66rem;" title="Chưa xác nhận">${c.my_pending} chờ</span>` : ''}` : '<span class="text-muted">—</span>'}</td>
+      <td class="text-center"><button class="btn btn-sm fw-semibold" style="border:1.5px solid #2563EB;color:#1D4ED8;border-radius:8px;font-size:.74rem;" onclick="event.stopPropagation();openProposeModal(${c.id})"><i class="bi bi-send me-1"></i>Đề xuất</button></td></tr>`;
+  }).join('');
+}
+async function openGvcnClassStudents(classId) {
+  const body = document.getElementById('gcsBody');
+  body.innerHTML = '<div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm me-2"></div>Đang tải...</div>';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('gvcnClassStudentsModal')).show();
+  try {
+    const d = await (await fetch('/api/teacher/gvcn/class/' + classId + '/students')).json();
+    if (!d.ok) { body.innerHTML = `<div class="alert alert-danger m-3">${_gEsc(d.error)}</div>`; return; }
+    const c = d.class_info;
+    document.getElementById('gcsTitle').textContent = c.subject + (c.chuyen_de ? ' – ' + c.chuyen_de : '');
+    document.getElementById('gcsInfo').textContent = _gSlot(c) + (c.location ? ' · ' + c.location : '') + ' · ' + (c.teacher || '');
+    if (!d.students.length) { body.innerHTML = '<div class="text-center text-muted py-5" style="font-size:.85rem;">Chưa có học sinh nào của lớp bạn đăng ký lớp này.</div>'; return; }
+    const srcLbl = {me: 'Bạn đề xuất', gvcn: 'GVCN khác đề xuất', admin: 'Quản trị viên thêm', self: 'Tự đăng ký'};
+    body.innerHTML = `<div class="px-3 pt-3 pb-2 text-muted" style="font-size:.8rem;">Tổng: <strong>${d.students.length}</strong> học sinh</div>
+      <table class="table hm-table mb-0"><thead><tr><th style="width:44px;">STT</th><th>Họ và tên</th><th>Nguồn</th><th>Trạng thái</th></tr></thead><tbody>` +
+      d.students.map((s, i) => `<tr><td class="text-muted" style="font-size:.72rem;">${i + 1}</td><td class="fw-semibold" style="font-size:.85rem;">${_gEsc(s.full_name)}</td>
+        <td style="font-size:.74rem;color:#64748B;">${srcLbl[s.source] || ''}</td><td>${_gBadge(s.status)}</td></tr>`).join('') + '</tbody></table>';
+  } catch (e) { body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải danh sách.</div>'; }
+}
+let _proposeClassId = null;
+async function openProposeModal(classId) {
+  _proposeClassId = classId;
+  const body = document.getElementById('gpBody');
+  body.innerHTML = '<div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm me-2"></div>Đang tải...</div>';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('gvcnProposeModal')).show();
+  try {
+    const d = await (await fetch('/api/teacher/gvcn/class/' + classId + '/candidates')).json();
+    if (!d.ok) { body.innerHTML = `<div class="alert alert-danger m-3">${_gEsc(d.error)}</div>`; return; }
+    const c = d.class_info;
+    document.getElementById('gpTitle').textContent = 'Đề xuất: ' + c.subject + (c.chuyen_de ? ' – ' + c.chuyen_de : '');
+    document.getElementById('gpInfo').textContent = _gSlot(c) + (c.location ? ' · ' + c.location : '');
+    if (!d.students.length) { body.innerHTML = '<div class="text-center text-muted py-5">Lớp chưa có học sinh.</div>'; return; }
+    body.innerHTML = '<table class="table hm-table mb-0"><thead><tr><th style="width:44px;">STT</th><th>Họ và tên</th><th style="min-width:200px;">Tình trạng</th><th class="text-center" style="width:64px;"></th></tr></thead><tbody>' +
+      d.students.map((s, i) => {
+        let status = '', canAdd = false;
+        if (['pending', 'accepted', 'registered'].includes(s.state)) status = _gBadge(s.state);
+        else if (s.state === 'conflict') status = `<span style="font-size:.74rem;color:#B91C1C;"><i class="bi bi-exclamation-triangle-fill me-1"></i>Trùng lịch: ${_gEsc(s.detail)}</span>`;
+        else if (s.state === 'full') status = '<span style="font-size:.74rem;color:#B91C1C;">Lớp đã đầy</span>';
+        else { canAdd = d.can_propose; status = (s.declined_before ? _gBadge('declined') + ' ' : '') + (d.can_propose ? '' : '<span class="text-muted" style="font-size:.74rem;">Giai đoạn 3 đang đóng</span>'); }
+        return `<tr id="gp-row-${s.student_id}"><td class="text-muted" style="font-size:.72rem;">${i + 1}</td><td class="fw-semibold" style="font-size:.85rem;white-space:nowrap;">${_gEsc(s.full_name)}</td>
+          <td id="gp-status-${s.student_id}">${status}</td>
+          <td class="text-center" id="gp-act-${s.student_id}">${canAdd ? `<button class="btn btn-sm p-0" title="Đề xuất học sinh này" style="width:32px;height:32px;border-radius:8px;border:1.5px solid #2563EB;color:#2563EB;background:#fff;" onclick="proposeStudent(${s.student_id}, this)"><i class="bi bi-person-plus-fill"></i></button>` : ''}</td></tr>`;
+      }).join('') + '</tbody></table>';
+  } catch (e) { body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải danh sách.</div>'; }
+}
+async function proposeStudent(studentId, btn) {
+  btn.disabled = true;
+  try {
+    const d = await (await fetch('/api/teacher/gvcn/class/' + _proposeClassId + '/propose', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({student_id: studentId})
+    })).json();
+    if (d.ok) {
+      document.getElementById('gp-act-' + studentId).innerHTML = '';
+      document.getElementById('gp-status-' + studentId).innerHTML = _gBadge('pending');
+      loadOpenClasses();
+    } else { btn.disabled = false; showAlert(d.error || 'Không thể đề xuất.', 'error'); }
+  } catch (e) { btn.disabled = false; showAlert('Lỗi kết nối.', 'error'); }
+}
+setInterval(function () { if (document.getElementById('pane-open').style.display !== 'none') loadOpenClasses(); }, 12000);
+setTimeout(loadOpenClasses, 0);
 
 /* ══ GVCN: Polling refresh mỗi 12s ══ */
 setInterval(function() {

@@ -167,6 +167,7 @@ enrollments = Table(
     Column("phase3_added", Integer, nullable=False, server_default="0"),  # 1 = added in GĐ3 (cancellable); 0 = locked in GĐ3
     Column("confirm_status", Text, nullable=True),   # admin-added in GĐ3: 'pending' | 'accepted' (NULL = no confirmation needed)
     Column("confirm_at", Text, nullable=True),
+    Column("proposed_by_teacher_id", Integer, nullable=True),   # set when a homeroom teacher (GVCN) proposed the class
 )
 
 rooms = Table(
@@ -278,8 +279,9 @@ student_enroll_log = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("student_id", Integer, nullable=False),
     Column("class_id", Integer, nullable=True),
-    Column("action", Text, nullable=False),        # A | D
+    Column("action", Text, nullable=False),        # A | D | Y (accepted) | N (declined)
     Column("ts", Text, nullable=False),
+    Column("note", Text, nullable=True),           # N rows: 'admin' or 'gvcn:<teacher_id>' = who proposed the declined class
 )
 
 password_reset_tokens = Table("password_reset_tokens", metadata,
@@ -462,9 +464,10 @@ def init_db():
             conn.commit()
         except Exception:
             conn.rollback()
-        for _col in ("confirm_status TEXT", "confirm_at TEXT"):
+        for _tbl, _col in (("enrollments", "confirm_status TEXT"), ("enrollments", "confirm_at TEXT"),
+                           ("enrollments", "proposed_by_teacher_id INTEGER"), ("student_enroll_log", "note TEXT")):
             try:
-                conn.execute(text(f"ALTER TABLE enrollments ADD COLUMN {_col}"))
+                conn.execute(text(f"ALTER TABLE {_tbl} ADD COLUMN {_col}"))
                 conn.commit()
             except Exception:
                 conn.rollback()
@@ -2081,6 +2084,9 @@ def op_class_students_export(class_id):
 # Student routes
 # ---------------------------------------------------------------------------
 
+_gv = teachers.alias("gv")   # a class's proposer (GVCN), distinct from the class's own teacher
+
+
 def _phase3_mode() -> bool:
     """GĐ3 (Hiệu chỉnh môn học) is the active phase."""
     return (get_setting("supplement_reg_open", "0") == "1"
@@ -2233,9 +2239,11 @@ def student_dashboard():
             select(classes.c.id.label("class_id"), classes.c.subject, classes.c.day_of_week, classes.c.session_type,
                    classes.c.start_session, classes.c.duration, classes.c.location,
                    teachers.c.full_name.label("teacher_name"), teachers.c.subject_group,
-                   enrollments.c.enrolled_at)
+                   enrollments.c.enrolled_at, enrollments.c.proposed_by_teacher_id,
+                   _gv.c.full_name.label("proposer_name"))
             .select_from(enrollments.join(classes, classes.c.id == enrollments.c.class_id)
-                         .outerjoin(teachers, teachers.c.id == classes.c.teacher_id))
+                         .outerjoin(teachers, teachers.c.id == classes.c.teacher_id)
+                         .outerjoin(_gv, _gv.c.id == enrollments.c.proposed_by_teacher_id))
             .where(and_(enrollments.c.student_id == student_id, enrollments.c.confirm_status == "pending"))
             .order_by(classes.c.day_of_week, classes.c.start_session)
         ).fetchall()
@@ -2728,7 +2736,7 @@ def student_confirm_class(class_id):
     student_id = session["user_id"]
     with engine.begin() as conn:
         row = conn.execute(
-            select(enrollments.c.id).where(and_(
+            select(enrollments.c.id, enrollments.c.proposed_by_teacher_id).where(and_(
                 enrollments.c.student_id == student_id, enrollments.c.class_id == class_id,
                 enrollments.c.confirm_status == "pending"))
         ).fetchone()
@@ -2741,7 +2749,8 @@ def student_confirm_class(class_id):
         else:
             conn.execute(delete(enrollments).where(enrollments.c.id == row.id))
         conn.execute(insert(student_enroll_log).values(
-            student_id=student_id, class_id=class_id, action="Y" if action == "accept" else "N", ts=ts))
+            student_id=student_id, class_id=class_id, action="Y" if action == "accept" else "N", ts=ts,
+            note=f"gvcn:{row.proposed_by_teacher_id}" if row.proposed_by_teacher_id else "admin"))
     _bump()
     return jsonify(ok=True, action=action)
 
@@ -4462,6 +4471,185 @@ def api_teacher_homeroom_reset_password(student_id):
             )
         )
     return jsonify(ok=True, new_password=temp_pw, name=_name_fmt(student.full_name))
+
+
+def _gvcn_context(conn):
+    """(teacher_row, homeroom_row, grade) for the logged-in teacher if they are a GVCN with the student tab enabled."""
+    t = conn.execute(select(teachers).where(teachers.c.id == session["user_id"])).fetchone()
+    if not t:
+        return None, None, None
+    h = conn.execute(select(homeroom_classes).where(and_(
+        homeroom_classes.c.gvcn_name == t.full_name, homeroom_classes.c.show_student_tab == 1))).fetchone()
+    if not h:
+        return t, None, None
+    return t, h, _grade_from_classname(h.class_name)
+
+
+def _gvcn_open_class_clause(grade):
+    """Classes of the GVCN's grade that students can currently register for."""
+    col = classes.c.phase3_published if _phase3_mode() else classes.c.is_published
+    return and_(classes.c.grade == grade, col == 1)
+
+
+def _slot_dict(c):
+    return {"subject": c.subject or getattr(c, "subject_group", None) or "—",
+            "chuyen_de": getattr(c, "chuyen_de", None) or "",
+            "teacher": _name_fmt(c.teacher_name) if getattr(c, "teacher_name", None) else "",
+            "day_label": day_name(c.day_of_week),
+            "session_label": "Sáng" if c.session_type == "morning" else "Chiều",
+            "start_session": c.start_session, "end_session": c.start_session + c.duration - 1,
+            "location": c.location or ""}
+
+
+@app.route("/api/teacher/gvcn/open-classes")
+@teacher_required
+def api_gvcn_open_classes():
+    """Classes of the homeroom's grade that are currently open, with how many of my students attend each."""
+    with engine.connect() as conn:
+        t, h, grade = _gvcn_context(conn)
+        if not h:
+            return jsonify(ok=False, error="Không phải GVCN."), 403
+        rows = conn.execute(
+            select(classes.c.id, classes.c.subject, classes.c.chuyen_de, classes.c.day_of_week,
+                   classes.c.session_type, classes.c.start_session, classes.c.duration, classes.c.location,
+                   classes.c.max_capacity, teachers.c.full_name.label("teacher_name"), teachers.c.subject_group)
+            .select_from(classes.outerjoin(teachers, teachers.c.id == classes.c.teacher_id))
+            .where(_gvcn_open_class_clause(grade))
+            .order_by(classes.c.day_of_week, classes.c.session_type.desc(), classes.c.start_session)
+        ).fetchall()
+        ids = [r.id for r in rows] or [0]
+        totals = {r.class_id: r.n for r in conn.execute(
+            select(enrollments.c.class_id, func.count().label("n")).where(enrollments.c.class_id.in_(ids))
+            .group_by(enrollments.c.class_id)).fetchall()}
+        mine = {}
+        for r in conn.execute(
+            select(enrollments.c.class_id, enrollments.c.confirm_status, func.count().label("n"))
+            .join(students, students.c.id == enrollments.c.student_id)
+            .where(and_(students.c.class_name == h.class_name, enrollments.c.class_id.in_(ids)))
+            .group_by(enrollments.c.class_id, enrollments.c.confirm_status)).fetchall():
+            d = mine.setdefault(r.class_id, {"total": 0, "pending": 0})
+            d["total"] += r.n
+            if r.confirm_status == "pending":
+                d["pending"] += r.n
+    out = []
+    for r in rows:
+        m = mine.get(r.id, {"total": 0, "pending": 0})
+        out.append({"id": r.id, **_slot_dict(r), "enrolled": totals.get(r.id, 0), "max_capacity": r.max_capacity,
+                    "my_count": m["total"], "my_pending": m["pending"]})
+    return jsonify(ok=True, grade=grade, home_class=h.class_name, phase3_open=_phase3_mode(), classes=out)
+
+
+def _gvcn_class_or_error(conn, class_id):
+    t, h, grade = _gvcn_context(conn)
+    if not h:
+        return None, None, (jsonify(ok=False, error="Không phải GVCN."), 403)
+    cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+    if not cls or cls.grade != grade:
+        return None, None, (jsonify(ok=False, error="Không tìm thấy lớp trong khối của bạn."), 404)
+    return t, (h, cls), None
+
+
+@app.route("/api/teacher/gvcn/class/<int:class_id>/students")
+@teacher_required
+def api_gvcn_class_students(class_id):
+    """My homeroom students attending this class, with their confirmation status."""
+    with engine.connect() as conn:
+        t, ctx, err = _gvcn_class_or_error(conn, class_id)
+        if err:
+            return err
+        h, cls = ctx
+        rows = conn.execute(
+            select(students.c.id, students.c.full_name, enrollments.c.confirm_status, enrollments.c.enrolled_at,
+                   enrollments.c.confirm_at, enrollments.c.proposed_by_teacher_id)
+            .join(enrollments, students.c.id == enrollments.c.student_id)
+            .where(and_(enrollments.c.class_id == class_id, students.c.class_name == h.class_name))
+        ).fetchall()
+    declined = [d for d in _declined_cases(class_id) if d["home_class"] == h.class_name]
+    out = [{"student_id": r.id, "full_name": _name_fmt(r.full_name),
+            "status": r.confirm_status or "registered",
+            "source": "me" if r.proposed_by_teacher_id == t.id else ("gvcn" if r.proposed_by_teacher_id else
+                                                                      ("admin" if r.confirm_status else "self")),
+            "at": r.confirm_at or r.enrolled_at} for r in rows]
+    out += [{"student_id": d["student_id"], "full_name": d["full_name"], "status": "declined",
+             "source": "me" if d["proposer_id"] == t.id else d["source"], "at": d["at"]} for d in declined]
+    order = {"pending": 0, "accepted": 1, "declined": 2, "registered": 3}
+    out.sort(key=lambda x: (order.get(x["status"], 9), _fold(x["full_name"])))
+    return jsonify(ok=True, class_info={"id": cls.id, **_slot_dict(cls)}, students=out)
+
+
+@app.route("/api/teacher/gvcn/class/<int:class_id>/candidates")
+@teacher_required
+def api_gvcn_class_candidates(class_id):
+    """Every homeroom student with whether they can be proposed for this class (time clash, already in, full)."""
+    with engine.connect() as conn:
+        t, ctx, err = _gvcn_class_or_error(conn, class_id)
+        if err:
+            return err
+        h, cls = ctx
+        studs = conn.execute(select(students.c.id, students.c.full_name)
+                             .where(students.c.class_name == h.class_name)).fetchall()
+        sids = [x.id for x in studs] or [0]
+        sched = conn.execute(
+            select(enrollments.c.student_id, enrollments.c.class_id, enrollments.c.confirm_status,
+                   classes.c.subject, classes.c.day_of_week, classes.c.session_type, classes.c.start_session,
+                   classes.c.duration, teachers.c.subject_group)
+            .select_from(enrollments.join(classes, classes.c.id == enrollments.c.class_id)
+                         .outerjoin(teachers, teachers.c.id == classes.c.teacher_id))
+            .where(enrollments.c.student_id.in_(sids))).fetchall()
+        enrolled_n = conn.execute(select(func.count()).where(enrollments.c.class_id == class_id)).scalar() or 0
+    full = cls.max_capacity is not None and enrolled_n >= cls.max_capacity
+    declined = {d["student_id"] for d in _declined_cases(class_id)}
+    by_student = {}
+    for r in sched:
+        by_student.setdefault(r.student_id, []).append(r)
+    new_start, new_end = cls.start_session, cls.start_session + cls.duration - 1
+    out = []
+    for st in studs:
+        state, detail = "ok", None
+        for r in by_student.get(st.id, []):
+            if r.class_id == class_id:
+                state = r.confirm_status or "registered"
+                break
+            if (r.day_of_week == cls.day_of_week and r.session_type == cls.session_type
+                    and r.start_session <= new_end and new_start <= r.start_session + r.duration - 1):
+                state = "conflict"
+                detail = f"{r.subject or r.subject_group or 'Lớp khác'} · {day_name(r.day_of_week)} " \
+                         f"{'Sáng' if r.session_type == 'morning' else 'Chiều'}, tiết {r.start_session}" \
+                         f"{'–' + str(r.start_session + r.duration - 1) if r.duration > 1 else ''}"
+        if state == "ok" and full:
+            state = "full"
+        out.append({"student_id": st.id, "full_name": _name_fmt(st.full_name), "state": state, "detail": detail,
+                    "declined_before": st.id in declined})
+    out.sort(key=lambda x: _fold(x["full_name"]))
+    return jsonify(ok=True, class_info={"id": cls.id, **_slot_dict(cls)}, students=out,
+                   can_propose=_phase3_mode())
+
+
+@app.route("/api/teacher/gvcn/class/<int:class_id>/propose", methods=["POST"])
+@teacher_required
+def api_gvcn_propose(class_id):
+    """GVCN proposes one of their students for an open class; the student must then confirm."""
+    try:
+        student_id = int((request.get_json(silent=True) or {}).get("student_id"))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, error="Thiếu học sinh."), 400
+    if not _phase3_mode():
+        return jsonify(ok=False, error="Chỉ đề xuất được khi Giai đoạn 3 (Hiệu chỉnh môn học) đang mở.")
+    with engine.connect() as conn:
+        t, ctx, err = _gvcn_class_or_error(conn, class_id)
+        if err:
+            return err
+        h, cls = ctx
+        if not conn.execute(select(classes.c.id).where(and_(classes.c.id == class_id,
+                                                           _gvcn_open_class_clause(cls.grade)))).fetchone():
+            return jsonify(ok=False, error="Lớp này hiện không mở đăng ký.")
+        st = conn.execute(select(students).where(students.c.id == student_id)).fetchone()
+        if not st or st.class_name != h.class_name:
+            return jsonify(ok=False, error="Học sinh không thuộc lớp chủ nhiệm của bạn."), 403
+    ok, error, _ = _admin_enroll_student(cls, st, allow_conflict=False, proposed_by=t.id)
+    if ok:
+        _bump()
+    return jsonify(ok=ok, error=error)
 
 
 @app.route("/api/teacher/homeroom-students/export")
@@ -7781,12 +7969,16 @@ def _declined_cases(class_id=None):
     """Admin-added registrations the student declined (enrollment removed). Latest event per student/class must be the decline."""
     with engine.connect() as conn:
         q = select(student_enroll_log.c.student_id, student_enroll_log.c.class_id,
-                   func.max(student_enroll_log.c.ts).label("ts")).where(student_enroll_log.c.action == "N")
+                   student_enroll_log.c.ts, student_enroll_log.c.note).where(student_enroll_log.c.action == "N")
         if class_id is not None:
             q = q.where(student_enroll_log.c.class_id == class_id)
-        declines = conn.execute(q.group_by(student_enroll_log.c.student_id, student_enroll_log.c.class_id)).fetchall()
+        latest_n = {}
+        for r in conn.execute(q.order_by(student_enroll_log.c.ts, student_enroll_log.c.id)).fetchall():
+            latest_n[(r.student_id, r.class_id)] = r          # keep the newest decline per student/class
+        declines = list(latest_n.values())
         if not declines:
             return []
+        gv_names = {t.id: t.full_name for t in conn.execute(select(teachers.c.id, teachers.c.full_name)).fetchall()}
         sids = sorted({d.student_id for d in declines})
         latest, enrolled_now, info = {}, set(), {}
         for i in range(0, len(sids), 500):
@@ -7808,8 +8000,13 @@ def _declined_cases(class_id=None):
         if key in enrolled_now or latest.get(key, d.ts) > d.ts or d.student_id not in info:
             continue
         st = info[d.student_id]
+        note = d.note or "admin"
+        gv_id = int(note.split(":", 1)[1]) if note.startswith("gvcn:") and note.split(":", 1)[1].isdigit() else None
         out.append({"student_id": d.student_id, "class_id": d.class_id, "full_name": _name_fmt(st.full_name),
-                    "home_class": st.class_name or "", "at": d.ts})
+                    "home_class": st.class_name or "", "at": d.ts,
+                    "source": "gvcn" if note.startswith("gvcn:") else "admin",
+                    "proposer_id": gv_id,
+                    "proposer_name": _name_fmt(gv_names[gv_id]) if gv_id in gv_names else ""})
     out.sort(key=lambda r: r["at"], reverse=True)
     return out
 
@@ -7821,14 +8018,16 @@ def admin_adjustment_confirmations():
     with engine.connect() as conn:
         rows = conn.execute(
             select(enrollments.c.student_id, enrollments.c.class_id, enrollments.c.confirm_status,
-                   enrollments.c.enrolled_at, enrollments.c.confirm_at,
+                   enrollments.c.enrolled_at, enrollments.c.confirm_at, enrollments.c.proposed_by_teacher_id,
+                   _gv.c.full_name.label("proposer_name"),
                    students.c.full_name, students.c.class_name.label("home_class"),
                    classes.c.subject, classes.c.day_of_week, classes.c.session_type, classes.c.start_session,
                    classes.c.duration, classes.c.location, teachers.c.full_name.label("teacher_name"),
                    teachers.c.subject_group)
             .select_from(enrollments.join(students, students.c.id == enrollments.c.student_id)
                          .join(classes, classes.c.id == enrollments.c.class_id)
-                         .outerjoin(teachers, teachers.c.id == classes.c.teacher_id))
+                         .outerjoin(teachers, teachers.c.id == classes.c.teacher_id)
+                         .outerjoin(_gv, _gv.c.id == enrollments.c.proposed_by_teacher_id))
             .where(enrollments.c.confirm_status.isnot(None))
         ).fetchall()
         declined = _declined_cases()
@@ -7845,12 +8044,17 @@ def admin_adjustment_confirmations():
                 "start_session": c.start_session, "end_session": c.start_session + c.duration - 1,
                 "location": c.location or ""}
     items = [dict(student_id=r.student_id, class_id=r.class_id, full_name=_name_fmt(r.full_name), home_class=r.home_class or "",
-                  status=r.confirm_status, added_at=r.enrolled_at, decided_at=r.confirm_at, **slot(r)) for r in rows]
+                  status=r.confirm_status, added_at=r.enrolled_at, decided_at=r.confirm_at,
+                  source="gvcn" if r.proposed_by_teacher_id else "admin",
+                  note="Đề xuất bởi GVCN" if r.proposed_by_teacher_id else "",
+                  proposer_name=_name_fmt(r.proposer_name) if r.proposer_name else "", **slot(r)) for r in rows]
     for d in declined:
         c = cls_info.get(d["class_id"])
         if c is not None:
             items.append(dict(student_id=d["student_id"], class_id=d["class_id"], full_name=d["full_name"],
-                              home_class=d["home_class"], status="declined", added_at=None, decided_at=d["at"], **slot(c)))
+                              home_class=d["home_class"], status="declined", added_at=None, decided_at=d["at"],
+                              source=d["source"], note="Đề xuất bởi GVCN" if d["source"] == "gvcn" else "",
+                              proposer_name=d["proposer_name"], **slot(c)))
     order = {"pending": 0, "declined": 1, "accepted": 2}
     items.sort(key=lambda x: (order.get(x["status"], 9), x["home_class"], _fold(x["full_name"])))
     summary = {"total": len(items)}
@@ -7865,8 +8069,10 @@ def admin_enrollment_students(class_id):
     with engine.connect() as conn:
         enrolled = conn.execute(
             select(students, enrollments.c.enrolled_at, enrollments.c.id.label("enrollment_id"),
-                   enrollments.c.confirm_status, enrollments.c.confirm_at)
-            .join(enrollments, students.c.id == enrollments.c.student_id)
+                   enrollments.c.confirm_status, enrollments.c.confirm_at,
+                   enrollments.c.proposed_by_teacher_id, _gv.c.full_name.label("proposer_name"))
+            .select_from(students.join(enrollments, students.c.id == enrollments.c.student_id)
+                         .outerjoin(_gv, _gv.c.id == enrollments.c.proposed_by_teacher_id))
             .where(enrollments.c.class_id == class_id)
             .order_by(students.c.class_name, students.c.full_name)
         ).fetchall()
@@ -7882,6 +8088,8 @@ def admin_enrollment_students(class_id):
             "enrollment_id": s.enrollment_id,
             "confirm_status": s.confirm_status,
             "confirm_at": s.confirm_at,
+            "note": "Đề xuất bởi GVCN" if s.proposed_by_teacher_id else "",
+            "proposer_name": _name_fmt(s.proposer_name) if s.proposer_name else "",
             "last_seen_at": s.last_seen_at if hasattr(s, "last_seen_at") else None,
         }
         for s in enrolled
@@ -7894,8 +8102,9 @@ def _fold(s: str) -> str:
     return " ".join(s.split()).lower()
 
 
-def _admin_enroll_student(cls, student, allow_conflict=False):
-    """Admin adds one student to a class. Returns (ok, error_message, overrode_time_conflict)."""
+def _admin_enroll_student(cls, student, allow_conflict=False, proposed_by=None):
+    """Admin (or a GVCN proposing, proposed_by=teacher id) adds one student to a class as a pending
+    registration. Returns (ok, error_message, overrode_time_conflict)."""
     if student.grade != cls.grade:
         return False, f"Học sinh thuộc khối {student.grade}, lớp này là khối {cls.grade}", False
     with engine.connect() as conn:
@@ -7919,10 +8128,12 @@ def _admin_enroll_student(cls, student, allow_conflict=False):
             try:
                 with conn.begin_nested():
                     conn.execute(insert(enrollments).values(student_id=student.id, class_id=cls.id, enrolled_at=ts,
-                                                            confirm_status="pending"))
+                                                            confirm_status="pending",
+                                                            proposed_by_teacher_id=proposed_by))
             except IntegrityError:
                 return False, "Đã đăng ký lớp này", False
-            conn.execute(insert(student_enroll_log).values(student_id=student.id, class_id=cls.id, action='A', ts=ts))
+            conn.execute(insert(student_enroll_log).values(student_id=student.id, class_id=cls.id, action='A', ts=ts,
+                                                           note=f"gvcn:{proposed_by}" if proposed_by else "admin"))
     _counts_cache_invalidate()
     return True, None, conflict is not None
 

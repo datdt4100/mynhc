@@ -2,125 +2,74 @@
 {% block title %}Tài khoản giáo viên – mynhc{% endblock %}
 {% block hero %}{% endblock %}
 
-{% block head %}
-<style>
-  body { background: #F5F3FF; }
-  .op-header {
-    background: linear-gradient(135deg, #5B21B6, #7C3AED);
-    padding: 12px 16px;
-    display: flex; align-items: center; gap: 10px;
-  }
-  .search-bar {
-    position: sticky; top: 0; z-index: 10;
-    background: #F5F3FF; padding: 10px 0 8px;
-    border-bottom: 1.5px solid #E9D5FF; margin-bottom: 12px;
-  }
-  .teacher-row { border-bottom: 1px solid #F1F5F9; }
-  .teacher-row:last-child { border-bottom: none; }
-  .status-active   { background:#DCFCE7;color:#15803D;border:1px solid #86EFAC; }
-  .status-inactive { background:#F1F5F9;color:#94A3B8;border:1px solid #E2E8F0; }
-</style>
-{% endblock %}
+{% block head %}{% include "admin/_op_list_css.html" %}{% endblock %}
 
 {% block content %}
-<div class="container pb-5" style="max-width:820px;">
+<div class="container rg-container pb-5">
+  {% set op_active = 'teachers' %}{% set op_title = 'Tài khoản giáo viên' %}{% set op_icon = 'bi-person-video3' %}{% set op_count = teacher_list | length %}
+  {% include "admin/_op_nav.html" %}
 
-  <!-- Operator header bar -->
-  <div class="op-header mb-0 pt-3" style="background:none;padding:10px 0 6px;border-bottom:1.5px solid #E9D5FF;">
-    <div class="flex-grow-1" style="min-width:0;font-size:.8rem;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-      <i class="bi bi-person-badge me-1" style="color:#7C3AED;"></i>
-      <span class="fw-semibold" style="color:#3B0764;">Quản trị lớp học</span>
-      <span class="mx-1">·</span>{{ session['full_name'] | name_fmt }}
+  {% set groups = teacher_list | map(attribute='subject_group') | select | unique | sort | list %}
+  <div class="section-card">
+    <div class="section-toolbar">
+      <div class="search-box">
+        <i class="bi bi-search"></i>
+        <input type="search" id="searchBox" placeholder="Tìm họ tên, tổ bộ môn, email…" oninput="applyFilter()" autocomplete="off" spellcheck="false" data-gramm="false">
+      </div>
+      <span id="shownCount" class="ms-auto" style="font-size:.76rem;color:#94A3B8;font-weight:600;"></span>
     </div>
-    <form method="post" action="{{ url_for('logout') }}" style="display:inline;flex-shrink:0;">
-      <button type="submit" class="btn btn-sm btn-outline-danger"
-              style="border-radius:8px;height:30px;padding:0 10px;font-size:.76rem;">
-        <i class="bi bi-box-arrow-right me-1"></i>Đăng xuất
-      </button>
-    </form>
-  </div>
 
-  <!-- Nav tabs -->
-  <div class="d-flex gap-2 mt-2 mb-3" style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;">
-    <a href="{{ url_for('op_room_detail') }}"
-       class="btn btn-sm fw-semibold"
-       style="border-radius:8px;font-size:.78rem;padding:4px 12px;white-space:nowrap;
-              background:#EDE9FE;color:#5B21B6;border:1.5px solid #C4B5FD;">
-      <i class="bi bi-grid-3x3-gap me-1"></i>Lịch phòng
-    </a>
-    <a href="{{ url_for('op_teachers') }}"
-       class="btn btn-sm fw-semibold"
-       style="border-radius:8px;font-size:.78rem;padding:4px 12px;white-space:nowrap;
-              background:#7C3AED;color:#fff;border:none;">
-      <i class="bi bi-person-video3 me-1"></i>Tài khoản giáo viên
-    </a>
-    {% if session.get('op_perm_manage_students') %}
-    <a href="{{ url_for('op_students') }}"
-       class="btn btn-sm fw-semibold"
-       style="border-radius:8px;font-size:.78rem;padding:4px 12px;white-space:nowrap;
-              background:#EDE9FE;color:#5B21B6;border:1.5px solid #C4B5FD;">
-      <i class="bi bi-people me-1"></i>Tài khoản học sinh
-    </a>
-    {% endif %}
-  </div>
-
-  <div class="d-flex align-items-center gap-2 mb-3">
-    <h1 style="font-size:1rem;font-weight:800;color:#3B0764;margin:0;">
-      <i class="bi bi-person-video3 me-2" style="color:#7C3AED;"></i>Tài khoản giáo viên
-    </h1>
-    <span style="font-size:.75rem;color:#94A3B8;font-weight:600;">({{ teacher_list | length }} giáo viên)</span>
-  </div>
-
-  <!-- Search bar -->
-  <div class="search-bar">
-    <input type="text" id="searchBox" class="form-control form-control-sm"
-           placeholder="Tìm kiếm họ tên, tổ bộ môn, email…"
-           oninput="filterTable()"
-           style="border-radius:10px;border:1.5px solid #C4B5FD;font-size:.84rem;">
-  </div>
-
-  <!-- Table -->
-  <div style="background:#fff;border-radius:14px;border:1.5px solid #E2E8F0;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.04);">
-    <table class="table table-sm mb-0" id="teacherTable" style="font-size:.82rem;">
-      <thead>
-        <tr style="background:linear-gradient(90deg,#F8FAFC,#F5F3FF);">
-          <th class="ps-3 py-2" style="color:#3B0764;font-weight:700;border:none;">Họ và tên</th>
-          <th class="py-2" style="color:#3B0764;font-weight:700;border:none;">Tổ bộ môn</th>
-          <th class="py-2" style="color:#3B0764;font-weight:700;border:none;">Email</th>
-          <th class="py-2 text-center" style="color:#3B0764;font-weight:700;border:none;">Trạng thái</th>
-          <th class="py-2 text-center" style="color:#3B0764;font-weight:700;border:none;width:110px;">Thao tác</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for t in teacher_list %}
-        <tr class="teacher-row" data-search="{{ t.full_name | lower }} {{ (t.subject_group or '') | lower }} {{ (t.email or '') | lower }}">
-          <td class="ps-3 py-2 fw-semibold" style="color:#0c4a6e;">{{ t.full_name }}</td>
-          <td class="py-2" style="color:#475569;">{{ t.subject_group }}</td>
-          <td class="py-2" style="color:#475569;font-size:.78rem;">{{ t.email or '—' }}</td>
-          <td class="py-2 text-center">
-            {% if t.is_first_login %}
-            <span class="badge status-inactive" style="font-size:.68rem;border-radius:8px;padding:2px 8px;font-weight:700;">Chưa kích hoạt</span>
-            {% else %}
-            <span class="badge status-active" style="font-size:.68rem;border-radius:8px;padding:2px 8px;font-weight:700;">Đã kích hoạt</span>
-            {% endif %}
-          </td>
-          <td class="py-2 text-center">
-            {% if not t.is_first_login %}
-            <button onclick="resetPassword({{ t.id }}, '{{ t.full_name | e }}')"
-                    class="btn btn-sm"
-                    style="font-size:.72rem;padding:2px 10px;border-radius:6px;background:#EFF6FF;color:#0369A1;border:1px solid #BAE6FD;">
-              <i class="bi bi-key me-1"></i>Cấp MK
-            </button>
-            {% else %}
-            <span style="font-size:.72rem;color:#CBD5E1;">—</span>
-            {% endif %}
-          </td>
-        </tr>
+    <div class="list-body">
+      <div class="side-nav" id="sideNav">
+        <button class="side-btn active" data-group="" onclick="setGroup('', this)">Tất cả</button>
+        {% for grp in groups %}
+        <button class="side-btn" data-group="{{ grp }}" onclick="setGroup('{{ grp | e }}', this)">{{ grp }}</button>
         {% endfor %}
-      </tbody>
-    </table>
-    <div id="emptyMsg" class="d-none p-4 text-center text-muted" style="font-size:.85rem;">
-      <i class="bi bi-search" style="font-size:1.2rem;display:block;margin-bottom:4px;"></i>Không tìm thấy giáo viên nào.
+      </div>
+      <div class="tbl-wrap" id="tblWrap">
+        <table class="table table-hover admin-table" id="listTable">
+          <thead>
+            <tr>
+              <th style="width:48px;">STT</th>
+              <th>Họ tên</th>
+              <th>Tổ bộ môn</th>
+              <th>Email</th>
+              <th>Trạng thái</th>
+              <th style="width:90px;">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% set ns = namespace(prev=none, idx=0) %}
+            {% for t in teacher_list | sort(attribute='full_name') | sort(attribute='subject_group') %}
+            {% if t.subject_group != ns.prev %}
+            {% set ns.prev = t.subject_group %}
+            <tr class="sep-row" data-sep="{{ t.subject_group or '' }}">
+              <td colspan="6"><i class="bi bi-collection me-1" style="color:#0EA5E9;"></i><strong>{% if t.subject_group %}Tổ {{ t.subject_group }}{% else %}Chưa có tổ{% endif %}</strong>
+                <span class="sep-count" style="margin-left:4px;font-weight:400;color:#94A3B8;font-size:.72rem;"></span></td>
+            </tr>
+            {% endif %}
+            {% set ns.idx = ns.idx + 1 %}
+            <tr class="item-row" data-search="{{ t.full_name | lower }} {{ (t.subject_group or '') | lower }} {{ (t.email or '') | lower }}" data-group="{{ t.subject_group or '' }}">
+              <td class="text-muted" style="font-size:.72rem;">{{ ns.idx }}</td>
+              <td class="fw-semibold">{{ t.full_name | name_fmt }}</td>
+              <td><span class="badge rounded-pill" style="background:#EFF6FF;color:#0369A1;font-size:.7rem;">{{ t.subject_group or '—' }}</span></td>
+              <td style="font-size:.77rem;">{% if t.email %}<a href="mailto:{{ t.email }}" class="text-primary text-decoration-none">{{ t.email }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if t.is_first_login %}<span class="badge bg-secondary" style="font-size:.7rem;">Chưa kích hoạt</span>{% else %}<span class="badge bg-success" style="font-size:.7rem;">Đã kích hoạt</span>{% endif %}</td>
+              <td>
+                {% if not t.is_first_login %}
+                <button type="button" class="adm-icon-btn btn-outline-info" title="Cấp lại mật khẩu"
+                        onclick="resetPassword({{ t.id }}, '{{ t.full_name | name_fmt | e }}')"><i class="bi bi-key"></i></button>
+                {% else %}<span style="font-size:.72rem;color:#CBD5E1;">—</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+            {% if not teacher_list %}
+            <tr><td colspan="6" class="text-center text-muted py-5"><i class="bi bi-person-video3" style="font-size:2rem;display:block;margin-bottom:8px;"></i>Chưa có giáo viên nào</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+        <div class="search-empty" id="emptyMsg"><i class="bi bi-search" style="font-size:1.4rem;display:block;margin-bottom:6px;"></i>Không tìm thấy giáo viên phù hợp</div>
+      </div>
     </div>
   </div>
 </div>
@@ -130,9 +79,7 @@
   <div class="modal-dialog modal-dialog-centered" style="max-width:360px;">
     <div class="modal-content" style="border-radius:14px;overflow:hidden;">
       <div class="modal-header" style="background:linear-gradient(135deg,#075985,#0EA5E9);border:none;padding:12px 16px;">
-        <h5 class="modal-title text-white fw-bold" style="font-size:.9rem;">
-          <i class="bi bi-key me-2"></i>Mật khẩu mới
-        </h5>
+        <h5 class="modal-title text-white fw-bold" style="font-size:.9rem;"><i class="bi bi-key me-2"></i>Mật khẩu mới</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body p-4 text-center">
@@ -150,17 +97,30 @@
 
 {% block scripts %}
 <script>
-function filterTable() {
-  const q = document.getElementById('searchBox').value.toLowerCase().trim();
-  let visCount = 0;
-  document.querySelectorAll('#teacherTable tbody tr.teacher-row').forEach(row => {
-    const match = !q || row.dataset.search.includes(q);
-    row.style.display = match ? '' : 'none';
-    if (match) visCount++;
-  });
-  document.getElementById('emptyMsg').classList.toggle('d-none', visCount > 0);
+let _group = '';
+function setGroup(g, btn) {
+  _group = g;
+  document.querySelectorAll('#sideNav .side-btn').forEach(b => b.classList.toggle('active', b === btn));
+  applyFilter();
+  document.getElementById('tblWrap').scrollTop = 0;
 }
-
+function applyFilter() {
+  const q = document.getElementById('searchBox').value.toLowerCase().trim();
+  const counts = {};
+  let shown = 0;
+  document.querySelectorAll('#listTable tr.item-row').forEach(r => {
+    const ok = (!_group || r.dataset.group === _group) && (!q || r.dataset.search.includes(q));
+    r.style.display = ok ? '' : 'none';
+    if (ok) { shown++; counts[r.dataset.group] = (counts[r.dataset.group] || 0) + 1; }
+  });
+  document.querySelectorAll('#listTable tr.sep-row').forEach(r => {
+    const n = counts[r.dataset.sep] || 0;
+    r.style.display = n ? '' : 'none';
+    r.querySelector('.sep-count').textContent = n ? '(' + n + ')' : '';
+  });
+  document.getElementById('emptyMsg').style.display = shown ? 'none' : 'block';
+  document.getElementById('shownCount').textContent = shown + ' giáo viên';
+}
 async function resetPassword(id, name) {
   const res  = await fetch(`/op/teachers/${id}/reset-password`, { method: 'POST' });
   const data = await res.json();
@@ -169,5 +129,6 @@ async function resetPassword(id, name) {
   document.getElementById('pwValue').textContent = data.new_password;
   new bootstrap.Modal(document.getElementById('pwModal')).show();
 }
+applyFilter();
 </script>
 {% endblock %}

@@ -103,7 +103,10 @@
                 {% if op.perm_manage_students %}
                 <span class="perm-chip perm-chip-on"><i class="bi bi-people"></i>QL HS</span>
                 {% endif %}
-                {% if not op.perm_room_assign and not op.perm_room_swap and not op.perm_student_view and not op.perm_student_export and not op.perm_manage_teachers and not op.perm_manage_students %}
+                {% if op.perm_delete_students %}
+                <span class="perm-chip perm-chip-on"><i class="bi bi-person-dash"></i>Xoá HS khỏi lớp</span>
+                {% endif %}
+                {% if not op.perm_room_assign and not op.perm_room_swap and not op.perm_student_view and not op.perm_student_export and not op.perm_manage_teachers and not op.perm_manage_students and not op.perm_delete_students %}
                 <span class="perm-chip perm-chip-off"><i class="bi bi-eye"></i>Chỉ xem</span>
                 {% endif %}
               </div>
@@ -112,7 +115,7 @@
               <button onclick="openEditPerms(this)"
                       data-op-id="{{ op.id }}"
                       data-op-name="{{ op.full_name | e }}"
-                      data-op-perms='{{ {'perm_room_assign': op.perm_room_assign, 'perm_room_swap': op.perm_room_swap, 'perm_student_view': op.perm_student_view, 'perm_student_export': op.perm_student_export, 'perm_manage_teachers': op.perm_manage_teachers, 'perm_manage_students': op.perm_manage_students} | tojson }}'
+                      data-op-perms='{{ {'perm_room_assign': op.perm_room_assign, 'perm_room_swap': op.perm_room_swap, 'perm_student_view': op.perm_student_view, 'perm_student_export': op.perm_student_export, 'perm_manage_teachers': op.perm_manage_teachers, 'perm_manage_students': op.perm_manage_students, 'perm_delete_students': op.perm_delete_students} | tojson }}'
                       class="btn btn-sm" style="font-size:.72rem;padding:2px 8px;border-radius:6px;background:#F5F3FF;color:#7C3AED;border:1px solid #DDD6FE;">
                 <i class="bi bi-shield-check me-1"></i>Quyền
               </button>
@@ -193,6 +196,13 @@
                 <label for="c_perm_student_view">
                   <div class="perm-check-label">Xem danh sách học sinh</div>
                   <div class="perm-check-desc">Được xem danh sách học sinh đã đăng ký vào lớp khi click vào phòng có lớp.</div>
+                </label>
+              </div>
+              <div class="perm-check-row">
+                <input type="checkbox" name="perm_delete_students" id="c_perm_delete_students" value="1">
+                <label for="c_perm_delete_students">
+                  <div class="perm-check-label">Xoá học sinh khỏi lớp</div>
+                  <div class="perm-check-desc">Trong trang danh sách học sinh của lớp, có cột thao tác để xoá học sinh khỏi lớp học. Cần kèm quyền xem hoặc tải danh sách học sinh.</div>
                 </label>
               </div>
               <div class="perm-check-row">
@@ -305,6 +315,13 @@
         </div>
         <span class="perm-section-label mt-3">Quản lý tài khoản</span>
         <div class="perm-check-row">
+          <input type="checkbox" id="ep_delete_students">
+          <label for="ep_delete_students">
+            <div class="perm-check-label">Xoá học sinh khỏi lớp</div>
+            <div class="perm-check-desc">Có cột thao tác xoá học sinh trong trang danh sách học sinh của lớp. Cần kèm quyền xem hoặc tải danh sách.</div>
+          </label>
+        </div>
+        <div class="perm-check-row">
           <input type="checkbox" id="ep_manage_teachers">
           <label for="ep_manage_teachers">
             <div class="perm-check-label">Quản trị tài khoản giáo viên</div>
@@ -386,6 +403,7 @@ function openEditPerms(btn) {
   document.getElementById('ep_student_export').checked   = !!perms.perm_student_export;
   document.getElementById('ep_manage_teachers').checked  = !!perms.perm_manage_teachers;
   document.getElementById('ep_manage_students').checked  = !!perms.perm_manage_students;
+  document.getElementById('ep_delete_students').checked  = !!perms.perm_delete_students;
   document.getElementById('permSaveError').classList.add('d-none');
   new bootstrap.Modal(document.getElementById('modalEditPerms')).show();
 }
@@ -399,6 +417,7 @@ async function savePerms() {
     perm_student_export: document.getElementById('ep_student_export').checked,
     perm_manage_teachers:document.getElementById('ep_manage_teachers').checked,
     perm_manage_students:document.getElementById('ep_manage_students').checked,
+    perm_delete_students:document.getElementById('ep_delete_students').checked,
   };
   try {
     const res = await fetch(`/admin/operators/${_epOpId}/permissions`, {
@@ -417,8 +436,9 @@ async function savePerms() {
         if (payload.perm_student_export) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-download"></i>Tải DS HS</span> ';
         else if (payload.perm_student_view) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-people-fill"></i>Xem DS HS</span> ';
         if (payload.perm_manage_teachers) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-person-video3"></i>QL GV</span> ';
-        if (payload.perm_manage_students) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-people"></i>QL HS</span>';
-        if (!payload.perm_room_assign && !payload.perm_room_swap && !payload.perm_student_view && !payload.perm_student_export && !payload.perm_manage_teachers && !payload.perm_manage_students)
+        if (payload.perm_manage_students) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-people"></i>QL HS</span> ';
+        if (payload.perm_delete_students) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-person-dash"></i>Xoá HS khỏi lớp</span>';
+        if (!payload.perm_room_assign && !payload.perm_room_swap && !payload.perm_student_view && !payload.perm_student_export && !payload.perm_manage_teachers && !payload.perm_manage_students && !payload.perm_delete_students)
           html = '<span class="perm-chip perm-chip-off"><i class="bi bi-eye"></i>Chỉ xem</span>';
         chipsEl.innerHTML = html;
       }

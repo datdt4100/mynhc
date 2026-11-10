@@ -1,0 +1,31 @@
+{# Shared operator chrome: header bar + tab bar + title row.
+   Identical markup on every operator page so nothing shifts when switching tabs.
+   Vars: op_active ('room'|'teachers'|'students'), op_title, op_icon, op_count (optional), op_right (optional HTML) #}
+{% set _pt = session.get('op_perm_manage_teachers') %}
+{% set _ps = session.get('op_perm_manage_students') %}
+{% macro _tab(href, key, icon, label) -%}
+<a href="{{ href }}" class="op-tab {% if op_active == key %}active{% endif %}"><i class="bi {{ icon }} me-1"></i>{{ label }}</a>
+{%- endmacro %}
+<div class="op-bar">
+  <div class="op-bar-name">
+    <i class="bi bi-person-badge me-1" style="color:#7C3AED;"></i>
+    <span class="fw-semibold" style="color:#3B0764;">Quản trị lớp học</span>
+    <span class="mx-1">·</span>{{ session['full_name'] | name_fmt }}
+  </div>
+  <form method="post" action="{{ url_for('logout') }}" class="m-0" style="flex-shrink:0;">
+    <button type="submit" class="btn btn-sm btn-outline-danger op-logout" title="Đăng xuất">
+      <i class="bi bi-box-arrow-right me-1"></i>Đăng xuất
+    </button>
+  </form>
+</div>
+<div class="op-tabs">
+  {{ _tab(url_for('op_room_detail'), 'room', 'bi-grid-3x3-gap', 'Lịch phòng') }}
+  {% if _pt %}{{ _tab(url_for('op_teachers'), 'teachers', 'bi-person-video3', 'Tài khoản giáo viên') }}{% endif %}
+  {% if _ps %}{{ _tab(url_for('op_students'), 'students', 'bi-people', 'Tài khoản học sinh') }}{% endif %}
+</div>
+<div class="op-title-row">
+  {% if op_back is defined and op_back %}<a href="{{ op_back }}" class="op-back" title="Quay lại"><i class="bi bi-arrow-left"></i></a>{% endif %}
+  <h1 class="op-title text-truncate"><i class="bi {{ op_icon }} me-2" style="color:#7C3AED;"></i>{{ op_title }}</h1>
+  {% if op_count is defined and op_count is not none %}<span class="op-count">{{ op_count }}</span>{% endif %}
+  <div class="ms-auto d-flex align-items-center gap-2">{{ op_right | default('') | safe }}</div>
+</div>

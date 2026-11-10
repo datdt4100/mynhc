@@ -139,6 +139,8 @@ async function _loadClasses() {
   }
 }
 
+function _escCd(v) { return String(v).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+
 function _filtered() {
   return _allClasses.filter(c => {
     if (_filterGrade !== null && c.grade !== _filterGrade) return false;
@@ -184,6 +186,7 @@ function _renderClasses() {
                onclick="_openClassDetail(${c.id})">
             <div class="d-flex align-items-start justify-content-between mb-2">
               <div style="font-size:.78rem;font-weight:700;color:#1E293B;flex:1;min-width:0;">
+                ${c.chuyen_de ? `<div><span style="background:#EDE9FE;color:#6D28D9;border-radius:5px;padding:1px 7px;font-size:.7rem;font-weight:700;">Chuyên đề: ${_escCd(c.chuyen_de)}</span></div>` : ''}
                 ${c.teacher ? `<span>${c.teacher}</span>` : '<span class="text-muted">(Chưa có GV)</span>'}
               </div>
               <span class="badge ms-1 flex-shrink-0" style="font-size:.65rem;background:${c.is_active ? '#DCFCE7' : '#F1F5F9'};color:${c.is_active ? '#15803D' : '#64748B'};">
@@ -222,6 +225,7 @@ async function _openClassDetail(classId) {
   document.getElementById('classDetailInfo').innerHTML = `
     <div class="row g-2">
       <div class="col-6"><span class="text-muted">Giáo viên:</span> <strong>${c.teacher || '—'}</strong></div>
+      ${c.chuyen_de ? `<div class="col-12"><span class="text-muted">Chuyên đề:</span> <strong>${_escCd(c.chuyen_de)}</strong></div>` : ''}
       <div class="col-6"><span class="text-muted">Lịch:</span> <strong>${slot}</strong></div>
       <div class="col-6"><span class="text-muted">Phòng:</span> <strong>${c.location || '(chưa xếp)'}</strong></div>
       <div class="col-6"><span class="text-muted">Sĩ số:</span> <strong>${c.enrolled}/${c.max_capacity || '∞'} HS</strong></div>

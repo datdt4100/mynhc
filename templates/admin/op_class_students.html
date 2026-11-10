@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Danh sách học sinh của lớp – mynhc{% endblock %}
+{% block hero %}{% endblock %}
+
+{% block head %}{% include "admin/_op_list_css.html" %}{% endblock %}
+
+{% block content %}
+{% set _days = {2:'Thứ Hai',3:'Thứ Ba',4:'Thứ Tư',5:'Thứ Năm',6:'Thứ Sáu',7:'Thứ Bảy'} %}
+<div class="container rg-container pb-5">
+  {% set op_active = 'room' %}{% set op_icon = 'bi-people-fill' %}
+  {% set op_title = 'Danh sách học sinh' %}{% set op_count = student_list | length %}
+  {% set op_back = url_for('op_room_detail') %}
+  {% set op_right %}{% if can_export %}<a href="{{ url_for('op_class_students_export', class_id=class_id) }}" class="btn btn-sm flex-shrink-0" style="border-radius:8px;background:#F0FDF4;color:#166534;border:1.5px solid #86EFAC;font-size:.8rem;font-weight:700;height:34px;white-space:nowrap;display:inline-flex;align-items:center;"><i class="bi bi-file-earmark-excel"></i><span class="d-none d-sm-inline ms-1">Xuất Excel</span></a>{% endif %}{% endset %}
+  {% include "admin/_op_nav.html" %}
+
+  <div class="section-card">
+    <div class="section-toolbar" style="gap:6px 14px;">
+      <span class="badge rounded-pill" style="background:#EFF6FF;color:#1D4ED8;font-size:.74rem;">Khối {{ cls.grade }}</span>
+      <strong style="color:#0c4a6e;font-size:.9rem;">{{ cls.subject or '—' }}{% if cls.chuyen_de %} · <span style="color:#6D28D9;">Chuyên đề: {{ cls.chuyen_de }}</span>{% endif %}</strong>
+      <span style="font-size:.78rem;color:#64748B;"><i class="bi bi-person me-1"></i>{{ teacher_name or '—' }}</span>
+      <span style="font-size:.78rem;color:#64748B;"><i class="bi bi-clock me-1"></i>{{ _days.get(cls.day_of_week, '?') }} {{ 'Sáng' if cls.session_type == 'morning' else 'Chiều' }} · T{{ cls.start_session }}{% if cls.duration > 1 %}–{{ cls.start_session + cls.duration - 1 }}{% endif %}</span>
+      {% if cls.location %}<span style="font-size:.78rem;color:#64748B;"><i class="bi bi-geo-alt me-1"></i>{{ cls.location }}</span>{% endif %}
+      <span style="font-size:.78rem;color:#64748B;"><i class="bi bi-people me-1"></i><span id="enrolledCount">{{ student_list | length }}</span>/{{ cls.max_capacity or '∞' }} HS</span>
+    </div>
+    <div class="section-toolbar" style="border-top:0;">
+      <div class="search-box">
+        <i class="bi bi-search"></i>
+        <input type="search" id="searchBox" placeholder="Tìm họ tên, lớp…" oninput="applyFilter()" autocomplete="off" spellcheck="false" data-gramm="false">
+      </div>
+      <span id="shownCount" class="ms-auto" style="font-size:.76rem;color:#94A3B8;font-weight:600;"></span>
+    </div>
+
+    <div class="list-body">
+      <div class="tbl-wrap" id="tblWrap">
+        <table class="table table-hover admin-table" id="listTable" style="min-width:{{ 520 if can_delete else 460 }}px;">
+          <thead>
+            <tr>
+              <th style="width:48px;">STT</th>
+              <th>Họ tên</th>
+              <th style="width:90px;">Lớp</th>
+              <th style="width:90px;">Giới tính</th>
+              {% if can_delete %}<th style="width:90px;text-align:center;">Thao tác</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in student_list %}
+            <tr class="item-row" id="stu-row-{{ s.id }}" data-search="{{ s.full_name | lower }} {{ (s.class_name or '') | lower }}">
+              <td class="text-muted row-idx" style="font-size:.72rem;"></td>
+              <td class="fw-semibold">{{ s.full_name | name_fmt }}</td>
+              <td><span class="badge rounded-pill" style="background:#EFF6FF;color:#0369A1;font-size:.7rem;">{{ s.class_name or '—' }}</span></td>
+              <td style="font-size:.78rem;">{% if s.gender == 'Nữ' %}<span style="color:#BE185D;">Nữ</span>{% elif s.gender %}<span style="color:#1E40AF;">Nam</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              {% if can_delete %}
+              <td class="text-center">
+                <button type="button" class="adm-icon-btn btn-outline-danger" title="Xoá học sinh khỏi lớp"
+                        onclick="removeStudent({{ s.id }}, '{{ s.full_name | name_fmt | e }}')"><i class="bi bi-trash"></i></button>
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <div class="search-empty" id="emptyMsg" style="{% if not student_list %}display:block;{% endif %}">
+          <i class="bi bi-inbox" style="font-size:1.4rem;display:block;margin-bottom:6px;"></i>
+          <span id="emptyText">{% if student_list %}Không tìm thấy học sinh phù hợp{% else %}Chưa có học sinh đăng ký lớp này{% endif %}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .adm-icon-btn.btn-outline-danger { color:#DC2626; border-color:#DC2626; }
+  .adm-icon-btn.btn-outline-danger:hover { background:#DC2626; color:#fff; }
+</style>
+<script>
+const _CLASS_ID = {{ class_id }};
+function applyFilter() {
+  const q = document.getElementById('searchBox').value.toLowerCase().trim();
+  let shown = 0, i = 0;
+  document.querySelectorAll('#listTable tr.item-row').forEach(r => {
+    const ok = !q || r.dataset.search.includes(q);
+    r.style.display = ok ? '' : 'none';
+    if (ok) { shown++; r.querySelector('.row-idx').textContent = ++i; }
+  });
+  const total = document.querySelectorAll('#listTable tr.item-row').length;
+  const empty = document.getElementById('emptyMsg');
+  empty.style.display = shown ? 'none' : 'block';
+  document.getElementById('emptyText').textContent = total ? 'Không tìm thấy học sinh phù hợp' : 'Chưa có học sinh đăng ký lớp này';
+  document.getElementById('shownCount').textContent = shown + ' học sinh';
+  document.getElementById('enrolledCount').textContent = total;
+  const badge = document.querySelector('.op-count'); if (badge) badge.textContent = total;
+}
+function removeStudent(id, name) {
+  showConfirm('Xoá học sinh khỏi lớp?',
+    'Xoá <strong>' + name + '</strong> khỏi lớp học này. Đăng ký của học sinh ở lớp này sẽ bị huỷ.',
+    async () => {
+      try {
+        const res  = await fetch(`/op/class-students/${_CLASS_ID}/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.ok) { document.getElementById('stu-row-' + id)?.remove(); applyFilter(); showAlert('Đã xoá học sinh khỏi lớp.', 'success'); }
+        else showAlert(data.error || 'Không thể xoá.', 'error');
+      } catch { showAlert('Lỗi kết nối.', 'error'); }
+    },
+    { confirmText: 'Xoá', confirmClass: 'btn-danger' });
+}
+applyFilter();
+</script>
+{% endblock %}

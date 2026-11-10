@@ -3332,7 +3332,7 @@ function _renderGd2Vis(list) {
         row.style = 'background:#FFFFFF;border-radius:7px;border:1px solid #E2E8F0;';
         row.innerHTML = `
           <div style="flex:1;min-width:0;font-size:.77rem;color:#1E293B;word-break:break-word;">
-            ${c.teacher ? '<span class="fw-semibold">' + c.teacher + '</span> · ' : ''}${timeLabel}
+            ${c.chuyen_de ? '<span style="background:#EDE9FE;color:#6D28D9;border-radius:5px;padding:1px 7px;font-size:.7rem;font-weight:700;margin-right:4px;">Chuyên đề: ' + String(c.chuyen_de).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])) + '</span>' : ''}${c.teacher ? '<span class="fw-semibold">' + c.teacher + '</span> · ' : ''}${timeLabel}
             <span style="color:#94A3B8;font-size:.7rem;"> · ${c.enrolled}/${c.max_capacity} HS</span>
           </div>
           <button onclick="_gd2VisToggle(${c.id},${pub})"

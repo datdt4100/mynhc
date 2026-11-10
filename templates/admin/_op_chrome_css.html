@@ -1,0 +1,20 @@
+<style>
+  /* ── Operator chrome (fixed geometry shared by all operator pages) ── */
+  .op-page { max-width: 1140px; margin: 0 auto; padding: 0 12px 40px; }
+  .op-bar { display:flex; align-items:center; gap:8px; height:56px; padding-top:8px; border-bottom:1.5px solid #E9D5FF; }
+  .op-bar-name { flex:1; min-width:0; font-size:.8rem; color:#64748B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .op-logout { border-radius:8px; height:30px; padding:0 10px; font-size:.76rem; }
+  .op-tabs { display:flex; gap:8px; height:50px; align-items:center; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .op-tab { border-radius:8px; font-size:.78rem; padding:5px 12px; white-space:nowrap; font-weight:600; text-decoration:none;
+            background:#EDE9FE; color:#5B21B6; border:1.5px solid #C4B5FD; line-height:1.4; }
+  .op-tab:hover { background:#DDD6FE; color:#4C1D95; }
+  .op-tab.active { background:#7C3AED; border-color:#7C3AED; color:#fff; }
+  .op-title-row { display:flex; align-items:center; gap:8px; height:40px; margin-bottom:14px; }
+  .op-title { font-size:1.05rem; font-weight:800; color:#0c4a6e; margin:0; min-width:0; }
+  .op-back { width:34px; height:34px; border-radius:8px; border:1.5px solid #CBD5E1; background:#fff; color:#475569; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; text-decoration:none; transition:background .15s,border-color .15s; }
+  .op-back:hover { background:#F5F3FF; border-color:#C4B5FD; color:#6D28D9; }
+  .op-count { background:#F5F3FF; color:#6D28D9; font-size:.74rem; font-weight:700; border-radius:20px; padding:2px 10px; }
+  @media (max-width: 575px) { .op-title { font-size:.92rem; } }
+
+</style>
+<style>@media (max-width:575px){.rg-container{padding-left:10px!important;padding-right:10px!important}}</style>

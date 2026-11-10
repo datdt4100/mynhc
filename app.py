@@ -259,6 +259,7 @@ operators = Table(
     Column("perm_room_swap",        Integer, nullable=False, server_default="0"),
     Column("perm_student_view",     Integer, nullable=False, server_default="0"),
     Column("perm_student_export",   Integer, nullable=False, server_default="0"),
+    Column("perm_delete_students",  Integer, nullable=False, server_default="0"),
     Column("perm_manage_teachers",  Integer, nullable=False, server_default="0"),
     Column("perm_manage_students",  Integer, nullable=False, server_default="0"),
 )
@@ -347,6 +348,7 @@ def init_db():
             "ALTER TABLE operators ADD COLUMN perm_student_export   INTEGER DEFAULT 0",
             "ALTER TABLE operators ADD COLUMN perm_manage_teachers  INTEGER DEFAULT 0",
             "ALTER TABLE operators ADD COLUMN perm_manage_students  INTEGER DEFAULT 0",
+            "ALTER TABLE operators ADD COLUMN perm_delete_students  INTEGER DEFAULT 0",
         ]:
             try:
                 conn.execute(text(col_def))
@@ -1490,6 +1492,7 @@ def login_step2():
         session["op_perm_student_export"]   = bool(op.perm_student_export)
         session["op_perm_manage_teachers"]  = bool(op.perm_manage_teachers)
         session["op_perm_manage_students"]  = bool(op.perm_manage_students)
+        session["op_perm_delete_students"]  = bool(op.perm_delete_students)
         return jsonify(ok=True, redirect=url_for("op_room_detail"))
 
     return jsonify(ok=False, error="Loại tài khoản không hợp lệ.")
@@ -2078,6 +2081,49 @@ def op_class_students_export(class_id):
     if not _op_has_perm("student_export"):
         return "Không có quyền tải danh sách học sinh.", 403
     return admin_class_students_export.__wrapped__(class_id)
+
+
+@app.route("/op/class-students/<int:class_id>")
+@operator_required
+def op_class_students_page(class_id):
+    """Full page (instead of a popup) listing the students enrolled in one class."""
+    if not _op_has_perm("student_view") and not _op_has_perm("student_export"):
+        return "Không có quyền xem danh sách học sinh.", 403
+    with engine.connect() as conn:
+        cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        if not cls:
+            return "Không tìm thấy lớp.", 404
+        teacher = conn.execute(select(teachers).where(teachers.c.id == cls.teacher_id)).fetchone() if cls.teacher_id else None
+        enrolled = conn.execute(
+            select(students, enrollments.c.enrolled_at)
+            .join(enrollments, students.c.id == enrollments.c.student_id)
+            .where(enrollments.c.class_id == class_id)
+            .order_by(students.c.class_name, students.c.full_name)
+        ).fetchall()
+    return render_template("admin/op_class_students.html", cls=cls, class_id=class_id,
+                           teacher_name=_name_fmt(teacher.full_name) if teacher else "",
+                           student_list=enrolled,
+                           can_export=_op_has_perm("student_export"),
+                           can_delete=_op_has_perm("delete_students"))
+
+
+@app.route("/op/class-students/<int:class_id>/<int:student_id>", methods=["DELETE"])
+@operator_required
+def op_class_student_remove(class_id, student_id):
+    """Remove one student from a class (needs the delete_students permission)."""
+    if not _op_has_perm("delete_students"):
+        return jsonify(ok=False, error="Không có quyền xoá học sinh khỏi lớp."), 403
+    with engine.begin() as conn:
+        row = conn.execute(select(enrollments).where(and_(
+            enrollments.c.class_id == class_id, enrollments.c.student_id == student_id))).fetchone()
+        if not row:
+            return jsonify(ok=False, error="Học sinh không còn trong lớp này."), 404
+        conn.execute(insert(student_enroll_log).values(
+            student_id=student_id, class_id=class_id, action="D", ts=now_vn(),
+            note=f"op:{session.get('operator_id')}"))
+        conn.execute(delete(enrollments).where(enrollments.c.id == row.id))
+    _bump()
+    return jsonify(ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -4943,6 +4989,7 @@ def admin_operators_create():
     perm_student_export  = 1 if request.form.get("perm_student_export")  else 0
     perm_manage_teachers = 1 if request.form.get("perm_manage_teachers") else 0
     perm_manage_students = 1 if request.form.get("perm_manage_students") else 0
+    perm_delete_students = 1 if request.form.get("perm_delete_students") else 0
     try:
         with engine.begin() as conn:
             conn.execute(insert(operators).values(
@@ -4950,6 +4997,7 @@ def admin_operators_create():
                 perm_room_assign=perm_room_assign, perm_room_swap=perm_room_swap,
                 perm_student_view=perm_student_view, perm_student_export=perm_student_export,
                 perm_manage_teachers=perm_manage_teachers, perm_manage_students=perm_manage_students,
+                perm_delete_students=perm_delete_students,
             ))
         flash(f"Đã tạo tài khoản '{full_name}'.", "success")
     except Exception:
@@ -4990,6 +5038,7 @@ def admin_operators_update_perms(op_id):
             perm_student_export  = 1 if data.get("perm_student_export")  else 0,
             perm_manage_teachers = 1 if data.get("perm_manage_teachers") else 0,
             perm_manage_students = 1 if data.get("perm_manage_students") else 0,
+            perm_delete_students = 1 if data.get("perm_delete_students") else 0,
         ))
     return jsonify(ok=True)
 
@@ -6969,6 +7018,7 @@ def admin_gd2_classes():
                 classes.c.id,
                 classes.c.grade,
                 classes.c.subject,
+                classes.c.chuyen_de,
                 classes.c.day_of_week,
                 classes.c.session_type,
                 classes.c.start_session,
@@ -7000,6 +7050,7 @@ def admin_gd2_classes():
             "id": r.id,
             "grade": r.grade,
             "subject": r.subject or "",
+            "chuyen_de": r.chuyen_de or "",
             "teacher": r.teacher_name or "",
             "day_of_week": r.day_of_week,
             "session_type": r.session_type,
@@ -7301,7 +7352,8 @@ def op_room_detail():
                            perm_student_view=_op_has_perm("student_view"),
                            perm_student_export=_op_has_perm("student_export"),
                            perm_manage_teachers=_op_has_perm("manage_teachers"),
-                           perm_manage_students=_op_has_perm("manage_students"))
+                           perm_manage_students=_op_has_perm("manage_students"),
+                           api_class_page=url_for("op_class_students_page", class_id=0).rsplit("/", 1)[0] + "/")
 
 
 @app.route("/op/room-grid")
@@ -8682,6 +8734,7 @@ def admin_manage_classes_data():
                 classes.c.id,
                 classes.c.grade,
                 classes.c.subject,
+                classes.c.chuyen_de,
                 classes.c.day_of_week,
                 classes.c.session_type,
                 classes.c.start_session,
@@ -8707,6 +8760,7 @@ def admin_manage_classes_data():
             "id": r.id,
             "grade": r.grade,
             "subject": r.subject or "",
+            "chuyen_de": r.chuyen_de or "",
             "subject_group": r.subject_group or "",
             "teacher": r.teacher_name or "",
             "day_of_week": r.day_of_week,

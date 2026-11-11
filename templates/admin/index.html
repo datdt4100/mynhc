@@ -1729,7 +1729,7 @@
         {# Subject row (only for "Do trường phân công") #}
         <div class="mb-2" id="manSubjectRow" style="display:none;">
           <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Môn học <span class="text-danger">*</span></label>
-          <select id="manSubject" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+          <select id="manSubject" onchange="_manLoadRooms()" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
             <option value="">-- Chọn môn --</option>
             {% for sg in subject_groups %}
             <option value="{{ sg }}">{{ sg }}</option>
@@ -1740,7 +1740,7 @@
         <div class="row g-2">
           <div class="col-4">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Khối</label>
-            <select id="manGrade" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+            <select id="manGrade" onchange="_manLoadRooms()" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
               <option value="">--</option>
               <option value="10">10</option>
               <option value="11">11</option>
@@ -1749,7 +1749,7 @@
           </div>
           <div class="col-4">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Buổi</label>
-            <select id="manSession" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+            <select id="manSession" onchange="_manLoadRooms()" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
               <option value="">--</option>
               <option value="morning">Sáng</option>
               <option value="afternoon">Chiều</option>
@@ -1757,7 +1757,7 @@
           </div>
           <div class="col-4">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Thứ</label>
-            <select id="manDay" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+            <select id="manDay" onchange="_manLoadRooms()" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
               <option value="">--</option>
               {% for d in range(2,8) %}
               <option value="{{ d }}">T{{ d }}</option>
@@ -1766,7 +1766,7 @@
           </div>
           <div class="col-6">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Tiết bắt đầu</label>
-            <select id="manStart" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+            <select id="manStart" onchange="_manLoadRooms()" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
               <option value="">--</option>
               <option value="1">Tiết 1</option>
               <option value="2">Tiết 2</option>
@@ -1776,7 +1776,7 @@
           </div>
           <div class="col-6">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Số tiết</label>
-            <select id="manDuration" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
+            <select id="manDuration" onchange="_manLoadRooms()" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;">
               <option value="2">2 tiết</option>
               <option value="1">1 tiết</option>
             </select>
@@ -1784,6 +1784,13 @@
           <div class="col-6">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Sĩ số tối đa</label>
             <input id="manMaxCap" type="number" min="1" max="200" value="50" class="form-control form-control-sm" style="font-size:.82rem;border-radius:8px;">
+          </div>
+          <div class="col-12">
+            <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Địa điểm <span class="text-muted fw-normal">(không bắt buộc)</span></label>
+            <select id="manLocation" class="form-select form-select-sm" style="font-size:.82rem;border-radius:8px;" disabled>
+              <option value="">Chọn khối, buổi, thứ, tiết để xem phòng trống</option>
+            </select>
+            <div id="manLocationHint" class="mt-1" style="font-size:.72rem;color:#94A3B8;"></div>
           </div>
           <div class="col-12">
             <label class="form-label" style="font-size:.78rem;font-weight:600;color:#374151;">Chuyên đề <span class="text-muted fw-normal">(không bắt buộc)</span></label>
@@ -2984,7 +2991,13 @@ function _buildManTeacherListIfNeeded() {
   if (list.dataset.built) return;
   list.dataset.built = '1';
   const teachers = JSON.parse(document.getElementById('manTeacherData').textContent);
-  let html = `<div class="man-teacher-item d-flex align-items-center gap-2 px-3 py-2"
+  let html = `<div style="position:sticky;top:0;z-index:2;background:#fff;padding:6px 8px;border-bottom:1px solid #E2E8F0;">
+    <input type="text" id="manTeacherSearch" autocomplete="off" placeholder="Tìm theo họ, tên giáo viên..."
+      oninput="_manFilterTeachers()" onclick="event.stopPropagation()"
+      style="width:100%;border:1.5px solid #E2E8F0;border-radius:6px;padding:5px 9px;font-size:.8rem;outline:none;">
+  </div>
+  <div id="manTeacherEmpty" style="display:none;padding:10px 12px;font-size:.8rem;color:#94A3B8;text-align:center;">Không có giáo viên phù hợp.</div>
+  <div class="man-teacher-item d-flex align-items-center gap-2 px-3 py-2"
     data-name="" data-subject="" onclick="_manSelectTeacher(this)"
     style="cursor:pointer;border-bottom:1px solid #F1F5F9;font-size:.82rem;">
     <i class="bi bi-building" style="color:#92400E;font-size:.85rem;flex-shrink:0;"></i>
@@ -2994,7 +3007,7 @@ function _buildManTeacherListIfNeeded() {
   teachers.forEach(t => {
     if (t.subject !== prevSubj) {
       prevSubj = t.subject;
-      html += `<div style="padding:3px 12px;font-size:.68rem;font-weight:700;color:#94A3B8;background:#F8FAFC;border-bottom:1px solid #F1F5F9;text-transform:uppercase;letter-spacing:.05em;">${_escHtml(t.subject||'—')}</div>`;
+      html += `<div class="man-teacher-group" style="padding:3px 12px;font-size:.68rem;font-weight:700;color:#94A3B8;background:#F8FAFC;border-bottom:1px solid #F1F5F9;text-transform:uppercase;letter-spacing:.05em;">${_escHtml(t.subject||'—')}</div>`;
     }
     html += `<div class="man-teacher-item d-flex align-items-center gap-2 px-3 py-2"
       data-name="${_escHtml(t.name)}" data-subject="${_escHtml(t.subject)}" onclick="_manSelectTeacher(this)"
@@ -3006,13 +3019,51 @@ function _buildManTeacherListIfNeeded() {
   list.innerHTML = html;
 }
 
+// accent-insensitive normalisation (đ/Đ handled separately; NFD strips the rest)
+function _manNorm(s) {
+  return String(s || '').toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+// Every search word must equal a whole word of the teacher's name.
+// Accent-insensitive only when the typed word has no accents (so "Hà" ≠ "Hạnh", but "ha" finds both).
+function _manFilterTeachers() {
+  const list = document.getElementById('manTeacherList');
+  const rawQ = document.getElementById('manTeacherSearch').value.trim().split(/\s+/).filter(Boolean);
+  const q = rawQ;
+  let shown = 0, groupEl = null, groupHas = false;
+  // .d-flex is display:flex !important, so hide with an !important inline style
+  const setVis = (el, on) => on ? el.style.removeProperty('display') : el.style.setProperty('display', 'none', 'important');
+  const flush = () => { if (groupEl) setVis(groupEl, !q.length || groupHas); };
+  list.querySelectorAll('.man-teacher-group, .man-teacher-item').forEach(el => {
+    if (el.classList.contains('man-teacher-group')) { flush(); groupEl = el; groupHas = false; return; }
+    const name = el.dataset.name;
+    let ok = true;
+    if (q.length) {
+      if (!name) ok = false;                       // "Do trường phân công" only when not searching
+      else { ok = rawQ.every(w => {
+          const plain = _manNorm(w) === w.toLowerCase().replace(/đ/g, 'd');
+          const words = (plain ? _manNorm(name) : name.normalize('NFC').toLowerCase()).split(/\s+/);
+          return words.includes(plain ? _manNorm(w) : w.normalize('NFC').toLowerCase());
+        }); }
+    }
+    setVis(el, ok);
+    if (ok) { shown++; groupHas = true; }
+  });
+  flush();
+  document.getElementById('manTeacherEmpty').style.display = (q.length && !shown) ? '' : 'none';
+}
+
 function toggleManTeacherList(e) {
   if (e) e.stopPropagation();
   const list    = document.getElementById('manTeacherList');
   const trigger = document.getElementById('manTeacherTrigger');
   const chevron = document.getElementById('manTeacherChevron');
   const open = list.style.display === 'none';
-  if (open) _buildManTeacherListIfNeeded();
+  if (open) {
+    _buildManTeacherListIfNeeded();
+    const si = document.getElementById('manTeacherSearch');
+    si.value = ''; _manFilterTeachers();
+    setTimeout(() => si.focus(), 0);
+  }
   list.style.display = open ? '' : 'none';
   trigger.classList.toggle('open', open);
   chevron.classList.toggle('open', open);
@@ -3062,7 +3113,36 @@ function _manSelectTeacher(item) {
     subjectRow.style.display = 'none';
     document.getElementById('manSubject').value = '';
   }
+  window._manTeacherSubject = subject || '';
   _closeManTeacherList();
+  _manLoadRooms();
+}
+
+// Optional room picker: lists only rooms free for the chosen slot (same rules as assigning a room later)
+let _manRoomSeq = 0;
+async function _manLoadRooms() {
+  const sel = document.getElementById('manLocation'), hint = document.getElementById('manLocationHint');
+  const g = document.getElementById('manGrade').value, s = document.getElementById('manSession').value,
+        d = document.getElementById('manDay').value, st = document.getElementById('manStart').value,
+        du = document.getElementById('manDuration').value;
+  const prev = sel.value;
+  if (!(g && s && d && st)) {
+    sel.innerHTML = '<option value="">Chọn khối, buổi, thứ, tiết để xem phòng trống</option>';
+    sel.disabled = true; hint.textContent = ''; return;
+  }
+  const isSchool = !document.getElementById('manTeacher').value;
+  const subject = isSchool ? (document.getElementById('manSubject').value || '') : (window._manTeacherSubject || '');
+  const seq = ++_manRoomSeq;
+  const qs = new URLSearchParams({grade:g, session_type:s, day_of_week:d, start_session:st, duration:du, subject});
+  try {
+    const rooms = await (await fetch('/api/available-rooms?' + qs)).json();
+    if (seq !== _manRoomSeq) return;
+    sel.innerHTML = '<option value="">— Chưa xếp phòng —</option>' +
+      rooms.map(r => `<option value="${_escHtml(r)}">${_escHtml(r)}</option>`).join('');
+    if (prev && rooms.includes(prev)) sel.value = prev;
+    sel.disabled = false;
+    hint.textContent = `${rooms.length} phòng trống trong khung giờ này.`;
+  } catch { sel.disabled = true; hint.textContent = 'Không tải được danh sách phòng.'; }
 }
 
 function openAddManual() {
@@ -3083,6 +3163,9 @@ function openAddManual() {
   });
   document.getElementById('manDuration').value = '2';
   document.getElementById('manMaxCap').value = '50';
+  window._manTeacherSubject = '';
+  document.getElementById('manLocation').value = '';
+  _manLoadRooms();
   new bootstrap.Modal(document.getElementById('addManualModal')).show();
 }
 
@@ -3100,6 +3183,7 @@ async function doAddManual() {
     duration     : document.getElementById('manDuration').value,
     max_capacity : parseInt(document.getElementById('manMaxCap')?.value || 50) || 50,
     chuyen_de    : (document.getElementById('manChuyenDe')?.value || '').trim(),
+    location     : document.getElementById('manLocation').value || '',
     notes        : (document.getElementById('manNotes')?.value || '').trim(),
   };
   if (!document.querySelector('.man-teacher-item.man-selected')) {

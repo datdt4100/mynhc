@@ -236,6 +236,7 @@
                     <thead>
                       <tr style="background:#2563EB;">
                         <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; white-space:nowrap;">Khối</th>
+                        <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; white-space:nowrap;">Chuyên đề</th>
                         <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; white-space:nowrap;">Thứ</th>
                         <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; white-space:nowrap;">Buổi / Tiết</th>
                         <th style="font-weight:700; color:#fff; border:none; padding:8px 10px; white-space:nowrap;">Số tiết</th>
@@ -253,6 +254,7 @@
                       {% set cls_warn = not cls.location or not cls.max_capacity %}
                       <tr id="cls-row-{{ cls.id }}" {% if cls_warn %}class="cls-row-warn"{% endif %}>
                         <td><span class="badge bg-light text-dark border" style="font-size:.72rem;">Khối {{ cls.grade }}</span></td>
+                        <td style="font-size:.78rem;">{% if cls.chuyen_de %}<span style="background:#EDE9FE;color:#6D28D9;border-radius:5px;padding:1px 7px;font-size:.72rem;font-weight:700;">{{ cls.chuyen_de }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
                         <td>{{ day_name(cls.day_of_week) if day_name is callable else cls.day_of_week }}</td>
                         <td>{{ session_label(cls.session_type, cls.start_session, cls.duration) if session_label is callable else cls.session_type }}</td>
                         <td>{{ cls.duration }} tiết</td>

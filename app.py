@@ -6559,6 +6559,15 @@ def admin_add_class_manual():
             max_capacity = int(data.get("max_capacity") or 50) or 50
         except (ValueError, TypeError):
             max_capacity = 50
+        # Optional room: must exist and be free for this slot (same rule as assigning a room later)
+        location_input = (data.get("location") or "").strip()
+        if location_input:
+            _all_r, _unavail = _available_rooms(conn, day_of_week, session_type, start_session,
+                                                duration, grade, subject)
+            if location_input not in _all_r:
+                return jsonify(ok=False, error=f"Phòng '{location_input}' không có trong danh sách phòng.")
+            if location_input in _unavail:
+                return jsonify(ok=False, error=f"Phòng '{location_input}' không dùng được: {_unavail[location_input]}.")
         result = conn.execute(insert(classes).values(
             teacher_id    = teacher_row.id,
             grade         = grade,
@@ -6567,7 +6576,7 @@ def admin_add_class_manual():
             session_type  = session_type,
             start_session = start_session,
             duration      = duration,
-            location      = None,
+            location      = location_input or None,
             max_capacity  = max_capacity,
             chuyen_de     = chuyen_de_input or None,
             notes         = notes_input or None,

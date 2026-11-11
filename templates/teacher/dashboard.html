@@ -1820,9 +1820,12 @@ async function loadOpenClasses() {
     document.getElementById('openCountBadge').textContent = d.classes.length;
     const note = document.getElementById('openPhaseNote');
     note.style.display = '';
-    note.innerHTML = d.phase3_open
-      ? '<span style="color:#92400E;"><i class="bi bi-pencil-square me-1"></i>Giai đoạn 3 (Hiệu chỉnh môn học) đang mở — bạn có thể đề xuất học sinh lớp mình tham gia các lớp bên dưới.</span>'
-      : '<span class="text-muted"><i class="bi bi-info-circle me-1"></i>Chỉ đề xuất được khi Giai đoạn 3 (Hiệu chỉnh môn học) đang mở.</span>';
+    const phaseName = d.phase === 2 ? 'Giai đoạn 2 (Đăng ký môn học)' : 'Giai đoạn 3 (Hiệu chỉnh môn học)';
+    note.innerHTML = !d.phase
+      ? '<span class="text-muted"><i class="bi bi-info-circle me-1"></i>Chỉ đề xuất được khi Giai đoạn 2 hoặc Giai đoạn 3 đang mở.</span>'
+      : !d.propose_enabled
+        ? `<span class="text-muted"><i class="bi bi-info-circle me-1"></i>${phaseName} đang mở, nhưng quản trị chưa bật chức năng GVCN đề xuất học sinh.</span>`
+        : `<span style="color:#92400E;"><i class="bi bi-pencil-square me-1"></i>${phaseName} đang mở — bạn có thể đề xuất học sinh lớp mình vào các lớp có nút <strong>Đề xuất</strong>.</span>`;
     renderOpenClasses();
   } catch (e) {}
 }
@@ -1838,7 +1841,9 @@ function renderOpenClasses() {
       <td style="font-size:.8rem;color:#64748B;">${_gEsc(c.location) || '—'}</td>
       <td class="text-center"><span class="badge rounded-pill ${full ? 'bg-danger' : 'bg-light text-dark border'}" style="font-size:.72rem;">${c.enrolled}${c.max_capacity ? '/' + c.max_capacity : ''}</span></td>
       <td class="text-center">${c.my_count ? `<span class="badge rounded-pill bg-success" style="font-size:.72rem;">${c.my_count}</span>${c.my_pending ? `<span class="badge rounded-pill ms-1" style="background:#FEF3C7;color:#92400E;font-size:.66rem;" title="Chưa xác nhận">${c.my_pending} chờ</span>` : ''}` : '<span class="text-muted">—</span>'}</td>
-      <td class="text-center"><button class="btn btn-sm fw-semibold" style="border:1.5px solid #2563EB;color:#1D4ED8;border-radius:8px;font-size:.74rem;" onclick="event.stopPropagation();openProposeModal(${c.id})"><i class="bi bi-send me-1"></i>Đề xuất</button></td></tr>`;
+      <td class="text-center">${c.can_propose
+        ? `<button class="btn btn-sm fw-semibold" style="border:1.5px solid #2563EB;color:#1D4ED8;border-radius:8px;font-size:.74rem;" onclick="event.stopPropagation();openProposeModal(${c.id})"><i class="bi bi-send me-1"></i>Đề xuất</button>`
+        : `<span class="text-muted" style="font-size:.72rem;" title="${_gEsc(c.propose_reason)}"><i class="bi bi-slash-circle me-1"></i>Chưa mở đề xuất</span>`}</td></tr>`;
   }).join('');
 }
 async function openGvcnClassStudents(classId) {
@@ -1878,7 +1883,7 @@ async function openProposeModal(classId) {
         if (['pending', 'accepted', 'registered'].includes(s.state)) status = _gBadge(s.state);
         else if (s.state === 'conflict') status = `<span style="font-size:.74rem;color:#B91C1C;"><i class="bi bi-exclamation-triangle-fill me-1"></i>Trùng lịch: ${_gEsc(s.detail)}</span>`;
         else if (s.state === 'full') status = '<span style="font-size:.74rem;color:#B91C1C;">Lớp đã đầy</span>';
-        else { canAdd = d.can_propose; status = (s.declined_before ? _gBadge('declined') + ' ' : '') + (d.can_propose ? '' : '<span class="text-muted" style="font-size:.74rem;">Giai đoạn 3 đang đóng</span>'); }
+        else { canAdd = d.can_propose; status = (s.declined_before ? _gBadge('declined') + ' ' : '') + (d.can_propose ? '' : `<span class="text-muted" style="font-size:.74rem;">${_gEsc(d.propose_reason || 'Chưa được phép đề xuất')}</span>`); }
         return `<tr id="gp-row-${s.student_id}"><td class="text-muted" style="font-size:.72rem;">${i + 1}</td><td class="fw-semibold" style="font-size:.85rem;white-space:nowrap;">${_gEsc(s.full_name)}</td>
           <td id="gp-status-${s.student_id}">${status}</td>
           <td class="text-center" id="gp-act-${s.student_id}">${canAdd ? `<button class="btn btn-sm p-0" title="Đề xuất học sinh này" style="width:32px;height:32px;border-radius:8px;border:1.5px solid #2563EB;color:#2563EB;background:#fff;" onclick="proposeStudent(${s.student_id}, this)"><i class="bi bi-person-plus-fill"></i></button>` : ''}</td></tr>`;

@@ -561,7 +561,7 @@
      MODAL: Xem học sinh của lớp
 ══════════════════════════════════════════ -->
 <div class="modal fade" id="modalStudents" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered {% if phase == 3 %}modal-xl{% else %}modal-lg{% endif %} modal-dialog-scrollable">
+  <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
     <div class="modal-content" style="border-radius:16px; overflow:hidden;">
       <div class="modal-header" style="background:linear-gradient(135deg,#065f46,#10B981); border:none;">
         <h5 class="modal-title fw-bold text-white"><i class="bi bi-people-fill me-2"></i><span id="studentsModalTitle">Học sinh đăng ký lớp</span></h5>
@@ -1232,12 +1232,13 @@ function viewStudents(classId) {
         body.innerHTML = (_PHASE === 3 ? header(0) : '') + '<div class="text-center text-muted py-4"><i class="bi bi-people" style="font-size:2rem;display:block;margin-bottom:8px;"></i>Chưa có học sinh đăng ký.</div>';
         return;
       }
+      const showConf = _PHASE === 3 || data.students.some(s => s.confirm_status) || (data.declined || []).length > 0;
       let html = header(data.students.length) + (_PHASE === 3 ? stuStatusSection(conf) : '') + `
         <div style="overflow:auto;max-height:420px;"><table class="sched-table">
-        <thead><tr><th style="width:38px;">STT</th><th>Họ tên</th><th>Mã đăng nhập</th><th>Khối</th><th>Lớp</th><th>Truy cập gần nhất</th>${_PHASE === 3 ? '<th>Xác nhận</th><th>Ghi chú</th>' : ''}<th style="width:44px;"></th></tr></thead><tbody>`;
+        <thead><tr><th style="width:38px;">STT</th><th>Họ tên</th><th>Mã đăng nhập</th><th>Khối</th><th>Lớp</th><th>Truy cập gần nhất</th>${showConf ? '<th>Xác nhận</th><th>Ghi chú</th>' : ''}<th style="width:44px;"></th></tr></thead><tbody>`;
       data.students.forEach((s, i) => {
         html += `<tr><td style="color:#94A3B8;">${i+1}</td><td class="fw-semibold" style="white-space:nowrap;">${s.full_name}</td><td><code style="font-size:.75rem;">${s.cccd}</code></td><td>${s.grade??'—'}</td><td>${s.class_name??'—'}</td><td style="font-size:.75rem;color:#64748B;white-space:nowrap;">${s.last_seen_at ? s.last_seen_at.slice(0,19) : '—'}</td>
-          ${_PHASE === 3 ? `<td style="white-space:nowrap;">${s.confirm_status ? confBadge(s.confirm_status, s.confirm_at) : '<span class="text-muted" style="font-size:.72rem;">—</span>'}</td>
+          ${showConf ? `<td style="white-space:nowrap;">${s.confirm_status ? confBadge(s.confirm_status, s.confirm_at) : '<span class="text-muted" style="font-size:.72rem;">—</span>'}</td>
           <td style="white-space:nowrap;">${s.note ? noteBadge(s.note, s.proposer_name) : ''}</td>` : ''}
           <td style="text-align:center;">
             <button class="btn btn-sm p-0" style="color:#EF4444;background:none;border:none;opacity:.75;" title="Xoá học sinh khỏi lớp"
@@ -1246,7 +1247,7 @@ function viewStudents(classId) {
                     onclick="removeStudentFromClass(this)"><i class="bi bi-person-dash"></i></button>
           </td></tr>`;
       });
-      body.innerHTML = html + '</tbody></table></div>' + (_PHASE === 3 ? confirmFooter(data) : '');
+      body.innerHTML = html + '</tbody></table></div>' + (showConf ? confirmFooter(data) : '');
     }).catch(() => { body.innerHTML = '<div class="alert alert-danger m-3">Không thể tải danh sách.</div>'; });
 }
 
@@ -1915,22 +1916,8 @@ async function confirmMerge() {
 }
 
 const _PHASE = {{ phase }};
-{% if phase == 3 %}
-/* ── GĐ3: thêm học sinh vào lớp ── */
-function _swapModal(fromId, toId, onShown) {
-  const from = document.getElementById(fromId), to = document.getElementById(toId);
-  from.addEventListener('hidden.bs.modal', function once() {
-    from.removeEventListener('hidden.bs.modal', once);
-    bootstrap.Modal.getOrCreateInstance(to).show();
-    if (onShown) onShown();
-  });
-  bootstrap.Modal.getInstance(from).hide();
-}
-['modalAddStudent', 'modalUploadStudents'].forEach(id => {
-  document.getElementById(id).addEventListener('hidden.bs.modal', () => { if (_stuClassId) viewStudents(_stuClassId); });
-});
-
-/* ── GĐ3: xác nhận của học sinh ── */
+const _esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* ── xác nhận của học sinh (GĐ2 + GĐ3) ── */
 const _CONF_META = {
   pending:  {t: 'Chưa xác nhận', bg: '#FEF3C7', c: '#92400E', i: 'hourglass-split'},
   accepted: {t: 'Xác nhận học',  bg: '#DCFCE7', c: '#166534', i: 'check-circle-fill'},
@@ -1956,6 +1943,21 @@ function confirmFooter(data) {
         <strong>Đã từ chối tham gia lớp này:</strong> ${dec.map(d => `${_esc(d.full_name)} <span class="text-muted">(${_esc(d.home_class)}, ${_esc(String(d.at).slice(0, 16))}${d.source === 'gvcn' ? ' · đề xuất bởi GVCN' : ''})</span>`).join(' · ')}</div>` : ''}
     </div>`;
 }
+{% if phase == 3 %}
+/* ── GĐ3: thêm học sinh vào lớp ── */
+function _swapModal(fromId, toId, onShown) {
+  const from = document.getElementById(fromId), to = document.getElementById(toId);
+  from.addEventListener('hidden.bs.modal', function once() {
+    from.removeEventListener('hidden.bs.modal', once);
+    bootstrap.Modal.getOrCreateInstance(to).show();
+    if (onShown) onShown();
+  });
+  bootstrap.Modal.getInstance(from).hide();
+}
+['modalAddStudent', 'modalUploadStudents'].forEach(id => {
+  document.getElementById(id).addEventListener('hidden.bs.modal', () => { if (_stuClassId) viewStudents(_stuClassId); });
+});
+
 let _confirmData = [], _confirmFilter = 'all';
 function openConfirmTab(filter) { _confirmFilter = filter || 'all'; switchTab('confirm'); }
 async function loadConfirmDash(manual) {
@@ -2065,7 +2067,6 @@ function openAddStudent() {
 }
 let _addStuTimer = null;
 function addStuSearchDebounced() { clearTimeout(_addStuTimer); _addStuTimer = setTimeout(addStuSearch, 300); }
-const _esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function addStuSearch() {
   const q = document.getElementById('addStuQuery').value.trim();
   const box = document.getElementById('addStuResults');

@@ -651,6 +651,28 @@
             <span id="teacher-view-enroll-label">{% if teacher_view_enrollments %}Bật{% else %}Tắt{% endif %}</span>
           </button>
         </div>
+        <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
+          <div>
+            <span style="font-size:.78rem; font-weight:600; color:#374151;">
+              <i class="bi bi-send me-1" style="color:#7C3AED;"></i>GVCN đề xuất học sinh
+            </span>
+            <span id="p3-gvcn_propose_p2-desc" style="font-size:.72rem; color:#64748B; display:block; margin-top:1px;">
+              {% if p2_gvcn_propose %}GVCN được đề xuất HS vào các lớp được phép{% else %}GVCN không được đề xuất học sinh{% endif %}
+            </span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <button type="button" title="Chọn lớp cho phép GVCN đề xuất" onclick="openGvcnProposeModal(2)"
+                    style="width:30px;height:30px;border-radius:8px;border:1.5px solid #DDD6FE;background:#F5F3FF;color:#6D28D9;display:inline-flex;align-items:center;justify-content:center;">
+              <i class="bi bi-pencil-fill" style="font-size:.75rem;"></i>
+            </button>
+            <button id="btn-p3-gvcn_propose_p2"
+                    class="reg-toggle {% if p2_gvcn_propose %}open{% else %}closed{% endif %}"
+                    onclick="toggleP3Setting('gvcn_propose_p2')">
+              <span class="toggle-dot"></span>
+              <span id="p3-gvcn_propose_p2-label">{% if p2_gvcn_propose %}Bật{% else %}Tắt{% endif %}</span>
+            </button>
+          </div>
+        </div>
         <div class="nav-footer">
           <button class="btn" onclick="openIdxPhase2Modal()"
                   style="background:#EFF6FF;color:#1D4ED8;border:1.5px solid #BFDBFE;">
@@ -740,6 +762,29 @@
             <span class="toggle-dot"></span>
             <span id="p3-teacher_view-label">{% if p3_teacher_view_enrollments %}Bật{% else %}Tắt{% endif %}</span>
           </button>
+        </div>
+        <div class="d-flex align-items-center justify-content-between pt-2 mt-1">
+          <div>
+            <span style="font-size:.78rem; font-weight:600; color:#374151;">
+              <i class="bi bi-send me-1" style="color:#7C3AED;"></i>GVCN đề xuất học sinh
+            </span>
+            <span id="p3-gvcn_propose-desc" style="font-size:.71rem;color:#64748B;display:block;margin-top:1px;">
+              {% if p3_gvcn_propose %}GVCN được đề xuất HS vào các lớp được phép{% else %}GVCN không được đề xuất học sinh{% endif %}
+            </span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <button type="button" id="btn-gvcn-propose-edit" title="Chọn lớp cho phép GVCN đề xuất"
+                    onclick="openGvcnProposeModal(3)"
+                    style="width:30px;height:30px;border-radius:8px;border:1.5px solid #DDD6FE;background:#F5F3FF;color:#6D28D9;display:inline-flex;align-items:center;justify-content:center;">
+              <i class="bi bi-pencil-fill" style="font-size:.75rem;"></i>
+            </button>
+            <button id="btn-p3-gvcn_propose"
+                    class="reg-toggle {% if p3_gvcn_propose %}open{% else %}closed{% endif %}"
+                    onclick="toggleP3Setting('gvcn_propose')">
+              <span class="toggle-dot"></span>
+              <span id="p3-gvcn_propose-label">{% if p3_gvcn_propose %}Bật{% else %}Tắt{% endif %}</span>
+            </button>
+          </div>
         </div>
         <div class="nav-footer">
           <button class="btn" onclick="openIdxPhase2Modal(3)"
@@ -1623,6 +1668,11 @@
         </p>
         <p style="font-size:.77rem;color:#64748B;margin-bottom:14px;">
           Cột hợp lệ: <strong>Tên giáo viên · Môn · Khối · Buổi · Thứ · Tiết bắt đầu · Số tiết</strong>
+          · <strong>Địa điểm</strong> (không bắt buộc).
+        </p>
+        <p style="font-size:.74rem;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:6px 10px;margin:-6px 0 14px;">
+          <i class="bi bi-geo-alt me-1"></i>Địa điểm phải có trong danh sách phòng và còn trống trong khung giờ đó.
+          Nếu để trống, sai tên hoặc trùng phòng, lớp vẫn được thêm nhưng <strong>chưa xếp phòng</strong>.
         </p>
         <input type="file" id="importExcelFile" accept=".xlsx"
                class="form-control form-control-sm" style="font-size:.8rem;border-radius:8px;">
@@ -1796,6 +1846,30 @@
         <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body" style="padding:14px 16px;max-height:72vh;overflow-y:auto;" id="gd2VisBody">
+        <div class="text-center text-muted py-4" style="font-size:.82rem;">Đang tải...</div>
+      </div>
+      <div class="modal-footer" style="border-top:1.5px solid #E2E8F0;padding:8px 16px;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" style="border-radius:8px;font-size:.8rem;">Đóng</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Modal: Lớp cho phép GVCN đề xuất (GĐ3) ── #}
+<div class="modal fade" id="idxModalGvcnPropose" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down" style="max-width:540px;">
+    <div class="modal-content" style="border-radius:16px;border:none;">
+      <div class="modal-header" style="border-bottom:1.5px solid #E2E8F0;padding:12px 16px;">
+        <div>
+          <div class="fw-bold" style="font-size:.88rem;color:#6D28D9;"><i class="bi bi-send me-2"></i><span id="gvcnPropTitle">Lớp cho phép GVCN đề xuất</span></div>
+          <div style="font-size:.72rem;color:#64748B;margin-top:2px;">Chỉ các lớp đang mở đăng ký. Lớp bật mới cho GVCN đề xuất học sinh vào.</div>
+        </div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div id="gvcnPropOffNote" class="px-3 py-2" style="display:none;background:#FEF3C7;color:#92400E;font-size:.76rem;border-bottom:1px solid #FDE68A;">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>Chức năng "GVCN đề xuất học sinh" đang <strong>tắt</strong> — bật công tắc ngoài trang thì GVCN mới đề xuất được.
+      </div>
+      <div class="modal-body" style="padding:14px 16px;max-height:72vh;overflow-y:auto;" id="gvcnPropBody">
         <div class="text-center text-muted py-4" style="font-size:.82rem;">Đang tải...</div>
       </div>
       <div class="modal-footer" style="border-top:1.5px solid #E2E8F0;padding:8px 16px;">
@@ -2043,6 +2117,8 @@ function toggleReq5() {
 const _P3_DESC = {
   multi_class:  ['Mỗi môn chỉ được đăng ký 1 lớp', 'Cho phép HS đăng ký nhiều lớp cùng môn'],
   teacher_view: ['GV không thấy danh sách HS đăng ký', 'GV thấy nút Chi tiết để xem danh sách HS'],
+  gvcn_propose: ['GVCN không được đề xuất học sinh', 'GVCN được đề xuất HS vào các lớp được phép'],
+  gvcn_propose_p2: ['GVCN không được đề xuất học sinh', 'GVCN được đề xuất HS vào các lớp được phép'],
 };
 function toggleP3Setting(key) {
   const btn = document.getElementById('btn-p3-' + key);
@@ -2055,6 +2131,8 @@ function toggleP3Setting(key) {
       btn.classList.toggle('closed', !data.on);
       document.getElementById('p3-' + key + '-label').textContent = data.on ? 'Bật' : 'Tắt';
       document.getElementById('p3-' + key + '-desc').textContent  = _P3_DESC[key][data.on ? 1 : 0];
+      if (key === 'gvcn_propose') _gvcnProposeOn[3] = data.on;
+      if (key === 'gvcn_propose_p2') _gvcnProposeOn[2] = data.on;
     })
     .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'))
     .finally(() => { btn.disabled = false; });
@@ -2870,6 +2948,16 @@ async function doImportExcel() {
         </div>
       </div>
     </div>`;
+    if (data.room_assigned || data.room_unassigned) {
+      html += `<div style="font-size:.76rem;color:#334155;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:6px 10px;margin-bottom:8px;">
+        <i class="bi bi-geo-alt me-1"></i>Địa điểm: <strong style="color:#15803D;">${data.room_assigned || 0}</strong> lớp đã xếp phòng
+        · <strong style="color:${data.room_unassigned ? '#D97706' : '#9CA3AF'};">${data.room_unassigned || 0}</strong> lớp chưa xếp phòng</div>`;
+    }
+    if (data.warnings && data.warnings.length) {
+      html += `<div style="font-size:.75rem;color:#92400E;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;padding:8px 10px;max-height:140px;overflow-y:auto;margin-bottom:8px;">
+        <strong><i class="bi bi-exclamation-circle me-1"></i>Địa điểm cần xem lại (${data.warnings.length}):</strong><br>` +
+        data.warnings.map(e => `<div style="margin-top:4px;padding-left:6px;border-left:2px solid #FCD34D;">· ${_escHtml(e)}</div>`).join('') + '</div>';
+    }
     if (data.errors && data.errors.length) {
       html += `<div style="font-size:.75rem;color:#991B1B;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 10px;max-height:160px;overflow-y:auto;">
         <strong><i class="bi bi-exclamation-triangle me-1"></i>Chi tiết lỗi (${errCnt}):</strong><br>` +
@@ -3846,6 +3934,93 @@ function toggleStudentLock(studentId, currentLocked, name) {
   );
 }
 
+
+// ── GVCN đề xuất: chọn lớp được phép ──
+let _gvcnProposeOn = {2: {{ 'true' if p2_gvcn_propose else 'false' }}, 3: {{ 'true' if p3_gvcn_propose else 'false' }}};
+let _gvcnPropPhase = 3;
+const _gvcnFlag = c => _gvcnPropPhase === 2 ? c.gvcn_propose_p2 : c.gvcn_propose;
+const _gpEsc = v => String(v ?? '').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+
+function openGvcnProposeModal(phase) {
+  _gvcnPropPhase = phase === 2 ? 2 : 3;
+  const body = document.getElementById('gvcnPropBody');
+  body.innerHTML = '<div class="text-center text-muted py-4" style="font-size:.82rem;">Đang tải...</div>';
+  document.getElementById('gvcnPropTitle').textContent = 'Lớp cho phép GVCN đề xuất — Giai đoạn ' + _gvcnPropPhase;
+  document.getElementById('gvcnPropOffNote').style.display = _gvcnProposeOn[_gvcnPropPhase] ? 'none' : '';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('idxModalGvcnPropose')).show();
+  fetch('/admin/gd2-classes').then(r => r.json())
+    .then(d => _renderGvcnPropose((d.classes || []).filter(c => _gvcnPropPhase === 2 ? c.is_published : c.phase3_published)))
+    .catch(() => { body.innerHTML = '<div class="text-danger text-center py-3">Lỗi tải dữ liệu</div>'; });
+}
+
+function _renderGvcnPropose(list) {
+  const body = document.getElementById('gvcnPropBody');
+  body.innerHTML = '';
+  if (!list.length) {
+    body.innerHTML = '<div class="text-center text-muted py-4" style="font-size:.82rem;">Chưa có lớp nào đang mở đăng ký ở Giai đoạn ' + _gvcnPropPhase + '.</div>';
+    return;
+  }
+  const dayNames = {2:'T2',3:'T3',4:'T4',5:'T5',6:'T6',7:'T7'};
+  const bySubj = {};
+  list.forEach(c => (bySubj[c.subject || '(Chưa có môn)'] = bySubj[c.subject || '(Chưa có môn)'] || []).push(c));
+  Object.keys(bySubj).sort().forEach(subj => {
+    const box = document.createElement('div');
+    box.className = 'mb-4 p-3';
+    box.style = 'background:#F8FAFC;border-radius:12px;border:1px solid #E2E8F0;';
+    box.innerHTML = `<div class="mb-2 pb-2" style="border-bottom:1.5px solid #E2E8F0;font-size:.85rem;font-weight:800;color:#1E3A8A;">${_gpEsc(subj)}</div>`;
+    [10, 11, 12].forEach(g => {
+      const cls = bySubj[subj].filter(c => c.grade === g);
+      if (!cls.length) return;
+      const ids = cls.map(c => c.id);
+      const sec = document.createElement('div');
+      sec.className = 'mb-3';
+      sec.innerHTML = `
+        <div class="d-flex align-items-center justify-content-between mb-1 flex-wrap gap-1">
+          <span style="font-size:.78rem;font-weight:700;color:#1D4ED8;">Khối ${g}</span>
+          <div class="d-flex gap-1">
+            <button class="btn btn-xs" data-all="1" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #10B981;color:#10B981;border-radius:6px;background:transparent;">Bật tất</button>
+            <button class="btn btn-xs" data-all="0" style="font-size:.69rem;padding:2px 8px;border:1.5px solid #EF4444;color:#EF4444;border-radius:6px;background:transparent;">Tắt tất</button>
+          </div>
+        </div>
+        <div class="d-flex flex-column gap-1"></div>`;
+      sec.querySelectorAll('[data-all]').forEach(b => b.onclick = () => _gvcnProposeSet(ids, b.dataset.all === '1'));
+      const wrap = sec.lastElementChild;
+      cls.forEach(c => {
+        const ses = c.session_type === 'morning' ? 'Sáng' : 'Chiều';
+        const row = document.createElement('div');
+        row.className = 'd-flex align-items-center gap-2 px-2 py-2 flex-wrap';
+        row.style = 'background:#fff;border-radius:7px;border:1px solid #E2E8F0;';
+        row.innerHTML = `
+          <div style="flex:1;min-width:0;font-size:.77rem;color:#1E293B;word-break:break-word;">
+            ${c.chuyen_de ? '<span style="background:#EDE9FE;color:#6D28D9;border-radius:5px;padding:1px 7px;font-size:.7rem;font-weight:700;margin-right:4px;">Chuyên đề: ' + _gpEsc(c.chuyen_de) + '</span>' : ''}${c.teacher ? '<span class="fw-semibold">' + _gpEsc(c.teacher) + '</span> · ' : ''}${dayNames[c.day_of_week] || '?'} ${ses} T${c.start_session}
+            <span style="color:#94A3B8;font-size:.7rem;"> · ${c.enrolled}/${c.max_capacity} HS</span>
+          </div>
+          <button id="gvp_${c.id}" class="reg-toggle ${_gvcnFlag(c) ? 'open' : 'closed'}" style="flex-shrink:0;" onclick="_gvcnProposeSet([${c.id}], ${!_gvcnFlag(c)})">
+            <span class="toggle-dot"></span><span>${_gvcnFlag(c) ? 'Bật' : 'Tắt'}</span>
+          </button>`;
+        wrap.appendChild(row);
+      });
+      box.appendChild(sec);
+    });
+    body.appendChild(box);
+  });
+}
+
+function _gvcnProposeSet(ids, on) {
+  fetch('/admin/classes/gvcn-propose', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ids, on, phase: _gvcnPropPhase}) })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) { showAlert(d.error || 'Có lỗi xảy ra.', 'error'); return; }
+      ids.forEach(id => {
+        const b = document.getElementById('gvp_' + id);
+        if (!b) return;
+        b.className = 'reg-toggle ' + (on ? 'open' : 'closed');
+        b.querySelector('span:last-child').textContent = on ? 'Bật' : 'Tắt';
+        b.onclick = () => _gvcnProposeSet([id], !on);
+      });
+    })
+    .catch(() => showAlert('Có lỗi xảy ra, vui lòng thử lại.', 'error'));
+}
 </script>
 
 <!-- ══ MODAL: Cài đặt môn học (tổ bộ môn) ══ -->

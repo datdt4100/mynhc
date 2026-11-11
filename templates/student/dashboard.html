@@ -395,7 +395,7 @@
     <div class="d-flex align-items-start gap-2 p-3 mb-3" style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:12px;font-size:.84rem;color:#92400E;">
       <i class="bi bi-info-circle-fill flex-shrink-0 mt-1" style="color:#F59E0B;"></i>
       <span>Nhà trường hoặc giáo viên chủ nhiệm đã đăng ký / đề xuất cho bạn các lớp dưới đây. Vui lòng chọn <strong>Tham gia</strong> hoặc <strong>Không tham gia</strong> cho từng lớp.
-        {% if not supplement_reg_open %}<strong class="d-block mt-1">Hiện chưa trong thời gian xác nhận (Giai đoạn 3 đang đóng).</strong>{% endif %}</span>
+        {% if not confirm_open %}<strong class="d-block mt-1">Hiện chưa trong thời gian xác nhận (Giai đoạn 2 và 3 đang đóng).</strong>{% endif %}</span>
     </div>
     <div class="d-flex flex-column gap-2" id="confirm-list">
       {% for c in pending_confirms %}
@@ -412,11 +412,11 @@
             </div>
           </div>
           <div class="d-flex gap-2 flex-shrink-0">
-            <button class="btn btn-sm btn-success fw-semibold" {% if not supplement_reg_open %}disabled{% endif %}
+            <button class="btn btn-sm btn-success fw-semibold" {% if not confirm_open %}disabled{% endif %}
                     onclick="answerConfirm({{ c.class_id }}, 'accept', '{{ (c.subject or c.subject_group or 'Lớp học') | e }}')">
               <i class="bi bi-check-lg me-1"></i>Tham gia
             </button>
-            <button class="btn btn-sm btn-outline-danger fw-semibold" {% if not supplement_reg_open %}disabled{% endif %}
+            <button class="btn btn-sm btn-outline-danger fw-semibold" {% if not confirm_open %}disabled{% endif %}
                     onclick="answerConfirm({{ c.class_id }}, 'decline', '{{ (c.subject or c.subject_group or 'Lớp học') | e }}')">
               <i class="bi bi-x-lg me-1"></i>Không tham gia
             </button>

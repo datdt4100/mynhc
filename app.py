@@ -154,6 +154,8 @@ classes = Table(
     Column("notes", Text, nullable=True),             # Admin note shown to students
     Column("is_published", Integer, default=0),
     Column("phase3_published", Integer, nullable=False, server_default="1"),  # visible to students in GĐ3
+    Column("gvcn_propose", Integer, nullable=False, server_default="0"),      # GVCN may propose students into this class (GĐ3)
+    Column("gvcn_propose_p2", Integer, nullable=False, server_default="0"),   # same, for GĐ2
     Column("is_active", Integer, default=0),
     Column("created_at", Text, default="CURRENT_TIMESTAMP"),
 )
@@ -465,6 +467,12 @@ def init_db():
             conn.commit()
         except Exception:
             conn.rollback()
+        for _col in ("gvcn_propose", "gvcn_propose_p2"):
+            try:
+                conn.execute(text(f"ALTER TABLE classes ADD COLUMN {_col} INTEGER NOT NULL DEFAULT 0"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
         try:
             conn.execute(text("ALTER TABLE homeroom_classes ADD COLUMN phase3_enabled INTEGER NOT NULL DEFAULT 1"))
             conn.commit()
@@ -2208,6 +2216,11 @@ def _teacher_view_enrollments_on() -> bool:
     return get_setting(key, "0") == "1"
 
 
+def _proposal_confirm_open() -> bool:
+    """Students may answer a proposal (Tham gia / Không tham gia) while GĐ2 or GĐ3 is open."""
+    return get_setting("student_reg_open", "0") == "1" or _phase3_mode()
+
+
 def _student_visible_clause(student_id, phase3):
     """Which classes a student may see: GĐ2 uses is_published; GĐ3 uses phase3_published
     (classes the student is already enrolled in always stay visible)."""
@@ -2362,6 +2375,7 @@ def student_dashboard():
         student_reg_open=student_reg_open,
         supplement_reg_open=supplement_reg_open,
         cancel_only=cancel_only,
+        confirm_open=_proposal_confirm_open(),
         locked_class_ids=locked_class_ids,
         require_5_subjects=require_5_subjects,
         needs_email=needs_email,
@@ -2835,8 +2849,8 @@ def student_confirm_class(class_id):
     action = (request.get_json(silent=True) or {}).get("action")
     if action not in ("accept", "decline"):
         return jsonify(ok=False, error="Yêu cầu không hợp lệ."), 400
-    if not _phase3_mode():
-        return jsonify(ok=False, error="Giai đoạn 3 hiện đang đóng, chưa thể xác nhận.")
+    if not _proposal_confirm_open():
+        return jsonify(ok=False, error="Hiện chưa trong thời gian xác nhận (Giai đoạn 2 và 3 đang đóng).")
     student_id = session["user_id"]
     with engine.begin() as conn:
         row = conn.execute(
@@ -2880,17 +2894,27 @@ def student_cancel_enroll(class_id):
             ).fetchone()
             if row and not row.phase3_added:
                 return jsonify(ok=False, error="Môn này đã đăng ký từ trước nên bị khoá trong giai đoạn hiệu chỉnh, không thể huỷ.")
+        pend = conn.execute(select(enrollments.c.proposed_by_teacher_id).where(and_(
+            enrollments.c.student_id == student_id, enrollments.c.class_id == class_id,
+            enrollments.c.confirm_status == "pending"))).fetchone()
         conn.execute(
             delete(enrollments).where(
                 and_(enrollments.c.student_id == student_id,
                      enrollments.c.class_id == class_id)
             )
         )
-        conn.execute(insert(student_enroll_log).values(
-            student_id=student_id, class_id=class_id, action='D', ts=now_vn()
-        ))
+        if pend is not None:      # cancelling an unanswered proposal counts as "Không tham gia"
+            conn.execute(insert(student_enroll_log).values(
+                student_id=student_id, class_id=class_id, action='N', ts=now_vn(),
+                note=f"gvcn:{pend.proposed_by_teacher_id}" if pend.proposed_by_teacher_id else "admin"))
+        else:
+            conn.execute(insert(student_enroll_log).values(
+                student_id=student_id, class_id=class_id, action='D', ts=now_vn()
+            ))
         conn.commit()
         covered = _student_covered_subjects(conn, student_id, student_grade)
+    if pend is not None:
+        _bump()
     return jsonify(ok=True, covered_subjects=covered)
 
 
@@ -3698,6 +3722,8 @@ def admin_index():
     teacher_view_enrollments = get_setting("teacher_view_enrollments", "0") == "1"
     p3_allow_multi_class = get_setting("p3_allow_multi_class", "1") == "1"
     p3_teacher_view_enrollments = get_setting("p3_teacher_view_enrollments", "0") == "1"
+    p3_gvcn_propose = get_setting("p3_gvcn_propose", "0") == "1"
+    p2_gvcn_propose = get_setting("p2_gvcn_propose", "0") == "1"
     teacher_room_select = get_setting("teacher_room_select", "0") == "1"
     with engine.connect() as conn2:
         busy_room_count = conn2.execute(
@@ -3736,6 +3762,8 @@ def admin_index():
         teacher_view_enrollments=teacher_view_enrollments,
         p3_allow_multi_class=p3_allow_multi_class,
         p3_teacher_view_enrollments=p3_teacher_view_enrollments,
+        p3_gvcn_propose=p3_gvcn_propose,
+        p2_gvcn_propose=p2_gvcn_propose,
         teacher_room_select=teacher_room_select,
         room_list=room_list,
         homeroom_list=homeroom_list,
@@ -4569,7 +4597,9 @@ def api_gvcn_open_classes():
         rows = conn.execute(
             select(classes.c.id, classes.c.subject, classes.c.chuyen_de, classes.c.day_of_week,
                    classes.c.session_type, classes.c.start_session, classes.c.duration, classes.c.location,
-                   classes.c.max_capacity, teachers.c.full_name.label("teacher_name"), teachers.c.subject_group)
+                   classes.c.max_capacity, classes.c.is_published, classes.c.phase3_published,
+                   classes.c.gvcn_propose, classes.c.gvcn_propose_p2,
+                   teachers.c.full_name.label("teacher_name"), teachers.c.subject_group)
             .select_from(classes.outerjoin(teachers, teachers.c.id == classes.c.teacher_id))
             .where(_gvcn_open_class_clause(grade))
             .order_by(classes.c.day_of_week, classes.c.session_type.desc(), classes.c.start_session)
@@ -4591,9 +4621,36 @@ def api_gvcn_open_classes():
     out = []
     for r in rows:
         m = mine.get(r.id, {"total": 0, "pending": 0})
+        why = _gvcn_propose_block_reason(r)
         out.append({"id": r.id, **_slot_dict(r), "enrolled": totals.get(r.id, 0), "max_capacity": r.max_capacity,
-                    "my_count": m["total"], "my_pending": m["pending"]})
-    return jsonify(ok=True, grade=grade, home_class=h.class_name, phase3_open=_phase3_mode(), classes=out)
+                    "my_count": m["total"], "my_pending": m["pending"],
+                    "can_propose": why is None, "propose_reason": why or ""})
+    phase = _gvcn_propose_phase()
+    return jsonify(ok=True, grade=grade, home_class=h.class_name, phase3_open=_phase3_mode(), phase=phase,
+                   propose_enabled=bool(phase) and get_setting("p2_gvcn_propose" if phase == 2 else "p3_gvcn_propose", "0") == "1",
+                   classes=out)
+
+
+def _gvcn_propose_phase():
+    """Phase in which a GVCN may currently propose: 2 (student registration open), 3 (adjustment) or None."""
+    if get_setting("student_reg_open", "0") == "1":
+        return 2
+    return 3 if _phase3_mode() else None
+
+
+def _gvcn_propose_block_reason(cls):
+    """None when GVCN may propose students into `cls` in the active phase; otherwise the reason
+    (shown to the teacher). Every proposal path (class list, candidate list, propose) uses this check."""
+    phase = _gvcn_propose_phase()
+    if phase is None:
+        return "Chỉ đề xuất được khi Giai đoạn 2 hoặc Giai đoạn 3 đang mở."
+    if get_setting("p2_gvcn_propose" if phase == 2 else "p3_gvcn_propose", "0") != "1":
+        return f"Quản trị chưa bật chức năng GVCN đề xuất học sinh (Giai đoạn {phase})."
+    if not (cls.is_published if phase == 2 else cls.phase3_published):
+        return "Lớp này hiện không mở đăng ký."
+    if not (cls.gvcn_propose_p2 if phase == 2 else cls.gvcn_propose):
+        return "Quản trị chưa cho phép đề xuất học sinh vào lớp này."
+    return None
 
 
 def _gvcn_class_or_error(conn, class_id):
@@ -4678,8 +4735,9 @@ def api_gvcn_class_candidates(class_id):
         out.append({"student_id": st.id, "full_name": _name_fmt(st.full_name), "state": state, "detail": detail,
                     "declined_before": st.id in declined})
     out.sort(key=lambda x: _fold(x["full_name"]))
+    why = _gvcn_propose_block_reason(cls)
     return jsonify(ok=True, class_info={"id": cls.id, **_slot_dict(cls)}, students=out,
-                   can_propose=_phase3_mode())
+                   can_propose=why is None, propose_reason=why or "")
 
 
 @app.route("/api/teacher/gvcn/class/<int:class_id>/propose", methods=["POST"])
@@ -4690,13 +4748,14 @@ def api_gvcn_propose(class_id):
         student_id = int((request.get_json(silent=True) or {}).get("student_id"))
     except (TypeError, ValueError):
         return jsonify(ok=False, error="Thiếu học sinh."), 400
-    if not _phase3_mode():
-        return jsonify(ok=False, error="Chỉ đề xuất được khi Giai đoạn 3 (Hiệu chỉnh môn học) đang mở.")
     with engine.connect() as conn:
         t, ctx, err = _gvcn_class_or_error(conn, class_id)
         if err:
             return err
         h, cls = ctx
+        why = _gvcn_propose_block_reason(cls)
+        if why:
+            return jsonify(ok=False, error=why)
         if not conn.execute(select(classes.c.id).where(and_(classes.c.id == class_id,
                                                            _gvcn_open_class_clause(cls.grade)))).fetchone():
             return jsonify(ok=False, error="Lớp này hiện không mở đăng ký.")
@@ -5627,8 +5686,8 @@ def admin_import_classes_template():
     hfont = Font(bold=True, color="FFFFFF", size=10)
     thin  = Side(style="thin", color="CBD5E1")
     bdr   = Border(left=thin, right=thin, top=thin, bottom=thin)
-    HEADERS = ["Tên giáo viên", "Môn (đầy đủ)", "Chuyên đề", "Khối", "Buổi", "Thứ", "Tiết bắt đầu", "Số tiết", "Sĩ số"]
-    WIDTHS  = [30, 16, 22, 8, 10, 8, 16, 10, 10]
+    HEADERS = ["Tên giáo viên", "Môn (đầy đủ)", "Chuyên đề", "Khối", "Buổi", "Thứ", "Tiết bắt đầu", "Số tiết", "Sĩ số", "Địa điểm"]
+    WIDTHS  = [30, 16, 22, 8, 10, 8, 16, 10, 10, 30]
     NOTES   = [
         "Để trống nếu do trường phân công",
         "Tiếng Anh / Ngữ Văn / Vật lý / Hóa học / Toán",
@@ -5639,6 +5698,7 @@ def admin_import_classes_template():
         "1 (Tiết 1-2) hoặc 3 (Tiết 3-4)",
         "Thường là 2",
         "Mặc định 50 nếu bỏ trống",
+        "Tên phòng đúng như sheet 'Danh sách phòng'. Để trống, sai tên hoặc trùng phòng cùng khung giờ → chưa xếp phòng",
     ]
     for c, (h, w) in enumerate(zip(HEADERS, WIDTHS), 1):
         cell = ws.cell(row=1, column=c, value=h)
@@ -5653,12 +5713,16 @@ def admin_import_classes_template():
         cell.font = Font(size=9, color="92400E", italic=True)
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     ws.row_dimensions[1].height = 30
-    ws.row_dimensions[2].height = 40
+    ws.row_dimensions[2].height = 64
+    with engine.connect() as _c:
+        room_names = sorted([r.name for r in _c.execute(select(rooms.c.name)).fetchall()], key=_room_sort_key)
+    r1 = room_names[0] if room_names else "Phòng 1 - Khu A- Tầng 1"
+    r2 = room_names[1] if len(room_names) > 1 else "Phòng 2 - Khu A- Tầng 1"
     # Sample rows
     samples = [
-        ("Nguyễn Văn A", "Toán", "Đại số và giải tích", 10, "Chiều", 3, 1, 2, 50),
-        ("Lê Thị B", "Tiếng Anh", "", 11, "Chiều", 4, 3, 2, 40),
-        ("", "Ngữ Văn", "Văn học dân gian", 12, "Sáng", 7, 1, 2, ""),
+        ("Nguyễn Văn A", "Toán", "Đại số và giải tích", 10, "Chiều", 3, 1, 2, 50, r1),
+        ("Lê Thị B", "Tiếng Anh", "", 11, "Chiều", 4, 3, 2, 40, r2),
+        ("", "Ngữ Văn", "Văn học dân gian", 12, "Sáng", 7, 1, 2, "", ""),
     ]
     sfill_a = PatternFill("solid", fgColor="F0F9FF")
     sfill_b = PatternFill("solid", fgColor="FFFFFF")
@@ -5668,9 +5732,21 @@ def admin_import_classes_template():
             cell = ws.cell(row=i+3, column=c, value=v)
             cell.fill = fill; cell.border = bdr
             cell.font = Font(size=10)
-            cell.alignment = Alignment(horizontal="center" if c >= 3 else "left", vertical="center")
+            cell.alignment = Alignment(horizontal="center" if 3 <= c <= 9 else "left", vertical="center")
     ws.freeze_panes = "A3"
-    ws.auto_filter.ref = f"A1:I{len(samples)+2}"
+    ws.auto_filter.ref = f"A1:J{len(samples)+2}"
+    # Sheet 2: valid room names, to copy into the "Địa điểm" column
+    ws2 = wb.create_sheet("Danh sách phòng")
+    for c, h in enumerate(["STT", "Tên phòng"], 1):
+        cell = ws2.cell(row=1, column=c, value=h)
+        cell.font = hfont; cell.fill = hfill; cell.border = bdr
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    for n, name in enumerate(room_names, 1):
+        ws2.cell(row=n + 1, column=1, value=n).border = bdr
+        ws2.cell(row=n + 1, column=2, value=name).border = bdr
+    ws2.column_dimensions["A"].width = 8
+    ws2.column_dimensions["B"].width = 40
+    ws2.freeze_panes = "A2"
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return send_file(buf, as_attachment=True,
                      download_name="mau_import_lop.xlsx",
@@ -6539,8 +6615,12 @@ def admin_import_classes_excel():
     is_format_b = "dấu thời gian" in header_row or "họ và tên" in " ".join(header_row)
     # Detect if new format with "Chuyên đề" column (col 3 = index 2)
     has_chuyen_de_col = any("chuy" in h for h in header_row[:4])
+    # Optional "Địa điểm" column (anywhere in the sheet; older files simply don't have it)
+    loc_idx = next((k for k, h in enumerate(header_row) if "địa điểm" in h or "dia diem" in h
+                    or h in ("phòng", "phòng học")), None)
 
     imported, skipped, errors_list = 0, 0, []
+    warnings_list, room_assigned, room_unassigned = [], 0, 0
 
     BUOI_LABEL = {"morning": "Sáng", "afternoon": "Chiều"}
 
@@ -6574,6 +6654,12 @@ def admin_import_classes_excel():
                 return placeholder_teacher
             return (teacher_map_exact.get(name.strip().lower()) or
                     teacher_map_stripped.get(_strip_diacritics(name)))
+
+        # room name lookup tolerant to case / accents / spacing / dashes ("Phòng 1 - Khu A- Tầng 1")
+        def _room_key(v):
+            import re as _re2
+            return _re2.sub(r'[^0-9a-z]', '', _strip_diacritics(str(v or '')))
+        room_by_key = {_room_key(r.name): r.name for r in conn.execute(select(rooms.c.name)).fetchall()}
 
         total_rows = sum(1 for row in rows if any(row))
         for i, row in enumerate(rows, start=2):
@@ -6722,6 +6808,25 @@ def admin_import_classes_excel():
                         )
                         continue
 
+                # Location: must be an existing room AND free in this time slot, otherwise the class
+                # is still imported but left without a room (admin assigns one later).
+                location = None
+                loc_raw = str(row[loc_idx]).strip() if (loc_idx is not None and loc_idx < len(row) and row[loc_idx] is not None) else ""
+                if loc_raw:
+                    room_name = room_by_key.get(_room_key(loc_raw))
+                    slot_txt = f"{buoi_label} T{thu} tiết {tiet}–{tiet + so_tiet - 1}"
+                    if not room_name:
+                        warnings_list.append(f"Dòng {i}: Địa điểm '{loc_raw}' không có trong danh sách phòng học → chưa xếp phòng.")
+                        room_unassigned += 1
+                    else:
+                        _all, _unavail = _available_rooms(conn, thu, buoi, tiet, so_tiet, grade, subject)
+                        if room_name in _unavail:
+                            warnings_list.append(f"Dòng {i}: Phòng '{room_name}' {_unavail[room_name]} trong khung giờ {slot_txt} → chưa xếp phòng.")
+                            room_unassigned += 1
+                        else:
+                            location = room_name
+                            room_assigned += 1
+
                 conn.execute(insert(classes).values(
                     teacher_id    = teacher_row.id,
                     grade         = grade,
@@ -6731,7 +6836,7 @@ def admin_import_classes_excel():
                     session_type  = buoi,
                     start_session = tiet,
                     duration      = so_tiet,
-                    location      = None,
+                    location      = location,
                     max_capacity  = max_capacity,
                     is_published  = 1,
                     created_at    = now_vn(),
@@ -6742,7 +6847,8 @@ def admin_import_classes_excel():
 
         if imported:
             _log_admin_action(conn, "import_excel",
-                f"Nhập Excel: {imported}/{total_rows} lớp thành công, {len(errors_list)} lỗi")
+                f"Nhập Excel: {imported}/{total_rows} lớp thành công, {len(errors_list)} lỗi, "
+                f"{room_assigned} lớp đã xếp phòng, {room_unassigned} lớp chưa xếp phòng")
         conn.commit()
 
     return jsonify(
@@ -6752,6 +6858,9 @@ def admin_import_classes_excel():
         skipped=skipped,
         errors=errors_list,
         error_count=len(errors_list),
+        warnings=warnings_list,
+        room_assigned=room_assigned,
+        room_unassigned=room_unassigned,
     )
 
 
@@ -7136,6 +7245,8 @@ def admin_gd2_classes():
                 classes.c.max_capacity,
                 classes.c.is_published,
                 classes.c.phase3_published,
+                classes.c.gvcn_propose,
+                classes.c.gvcn_propose_p2,
                 teachers.c.full_name.label("teacher_name"),
             )
             .select_from(classes.outerjoin(teachers, classes.c.teacher_id == teachers.c.id))
@@ -7170,6 +7281,8 @@ def admin_gd2_classes():
             "enrolled": enroll_counts.get(r.id, 0),
             "is_published": bool(r.is_published),
             "phase3_published": bool(r.phase3_published),
+            "gvcn_propose": bool(r.gvcn_propose),
+            "gvcn_propose_p2": bool(r.gvcn_propose_p2),
         }
         for r in rows
     ]
@@ -8049,7 +8162,9 @@ def admin_enrollment_toggle():
 
 
 _P3_TOGGLES = {"multi_class": ("p3_allow_multi_class", "1"),
-               "teacher_view": ("p3_teacher_view_enrollments", "0")}
+               "teacher_view": ("p3_teacher_view_enrollments", "0"),
+               "gvcn_propose": ("p3_gvcn_propose", "0"),
+               "gvcn_propose_p2": ("p2_gvcn_propose", "0")}
 
 
 @app.route("/admin/phase3-setting/<key>/toggle", methods=["POST"])
@@ -8060,7 +8175,27 @@ def admin_phase3_setting_toggle(key):
     setting, dflt = _P3_TOGGLES[key]
     new_val = "0" if get_setting(setting, dflt) == "1" else "1"
     set_setting(setting, new_val)
+    _bump()
     return jsonify(ok=True, on=new_val == "1")
+
+
+@app.route("/admin/classes/gvcn-propose", methods=["POST"])
+@admin_required
+def admin_classes_gvcn_propose():
+    """Allow / forbid GVCN proposals for one or many classes: {ids: [..], on: true|false, phase: 2|3}."""
+    data = request.get_json(silent=True) or {}
+    try:
+        ids = [int(i) for i in (data.get("ids") or [])]
+    except (TypeError, ValueError):
+        return jsonify(ok=False, error="Danh sách lớp không hợp lệ."), 400
+    if not ids:
+        return jsonify(ok=False, error="Chưa chọn lớp."), 400
+    on = 1 if data.get("on") else 0
+    flag = classes.c.gvcn_propose_p2 if str(data.get("phase")) == "2" else classes.c.gvcn_propose
+    with engine.begin() as conn:
+        res = conn.execute(update(classes).where(classes.c.id.in_(ids)).values({flag.key: on}))
+    _bump()
+    return jsonify(ok=True, updated=res.rowcount, on=bool(on))
 
 
 @app.route("/admin/enrollment/toggle-cancel-only", methods=["POST"])

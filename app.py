@@ -356,6 +356,15 @@ def init_db():
             except Exception:
                 conn.rollback()
 
+        # Migrate: export/delete are sub-permissions of view. Operators that had export
+        # without view could already open the list, so grant view to keep their access.
+        try:
+            conn.execute(text("UPDATE operators SET perm_student_view = 1 WHERE perm_student_export = 1 AND perm_student_view = 0"))
+            conn.execute(text("UPDATE operators SET perm_student_export = 0, perm_delete_students = 0 WHERE perm_student_view = 0"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
         # Migrate: update old default admin password
         try:
             conn.execute(text(
@@ -1045,6 +1054,58 @@ def _room_slot_booked(conn, location, day, session, start, end, subject, exclude
     if _is_pe_subject(subject):
         rows = [r for r in rows if not _is_pe_subject(r.subject)]
     return bool(rows)
+
+
+def _available_rooms(conn, dow, st, ss, dur, grade, subject, exclude_class_id=None):
+    """Rooms usable for a slot. Returns (all_rooms_sorted, {room: reason} for unavailable rooms).
+    Single source of truth for the room picker and for validating a room change."""
+    end = ss + dur - 1
+    room_rows_all = conn.execute(select(rooms)).fetchall()
+    all_rooms = sorted([r.name for r in room_rows_all], key=_room_sort_key)
+    conflict_rooms = {r.name for r in room_rows_all if r.conflict_check}
+    booked_filter = and_(classes.c.day_of_week == dow, classes.c.session_type == st,
+                         classes.c.location.isnot(None),
+                         classes.c.start_session <= end,
+                         (classes.c.start_session + classes.c.duration - 1) >= ss)
+    if exclude_class_id:
+        booked_filter = and_(booked_filter, classes.c.id != exclude_class_id)
+    pe_new = _is_pe_subject(subject)
+    booked_set = {r.location for r in conn.execute(
+        select(classes.c.location, classes.c.subject).where(booked_filter)).fetchall()
+        if r.location and not (pe_new and _is_pe_subject(r.subject))}
+    ext_busy_set = {r.room_name for r in conn.execute(
+        select(room_external_busy.c.room_name).where(and_(
+            room_external_busy.c.day_of_week == dow, room_external_busy.c.session_type == st,
+            room_external_busy.c.tiet >= ss, room_external_busy.c.tiet <= end))).fetchall()}
+    grade_blocked_set = set()
+    if grade:
+        for r in conn.execute(select(room_grade_slots.c.room_name, room_grade_slots.c.available_grades).where(and_(
+                room_grade_slots.c.day_of_week == dow, room_grade_slots.c.session_type == st,
+                room_grade_slots.c.tiet >= ss, room_grade_slots.c.tiet <= end))).fetchall():
+            if str(grade) not in [g.strip() for g in r.available_grades.split(",")]:
+                grade_blocked_set.add(r.room_name)
+    unavailable = {}
+    for r in all_rooms:
+        if r in booked_set and r in conflict_rooms:
+            unavailable[r] = "đã có lớp khác"
+        elif r in ext_busy_set:
+            unavailable[r] = "bận (lịch ngoài)"
+        elif r in grade_blocked_set:
+            unavailable[r] = "không dành cho khối này"
+    return all_rooms, unavailable
+
+
+def _remove_enrollments(conn, cond, note=None):
+    """Delete every enrollment matching `cond` and write one 'D' row per removal to the
+    student log. Single code path so every removal leaves the same trace. Returns the removed rows."""
+    rows = conn.execute(select(enrollments.c.id, enrollments.c.student_id, enrollments.c.class_id).where(cond)).fetchall()
+    if not rows:
+        return []
+    ts = now_vn()
+    conn.execute(insert(student_enroll_log), [
+        {"student_id": r.student_id, "class_id": r.class_id, "action": "D", "ts": ts, "note": note} for r in rows])
+    conn.execute(delete(enrollments).where(enrollments.c.id.in_([r.id for r in rows])))
+    return rows
 
 
 def _get_subj_grp_setting(conn, name):
@@ -2070,7 +2131,7 @@ def admin_class_students_export(class_id):
 @app.route("/op/classes/<int:class_id>/students")
 @operator_required
 def op_class_students(class_id):
-    if not _op_has_perm("student_view") and not _op_has_perm("student_export"):
+    if not _op_has_perm("student_view"):
         return jsonify(ok=False, error="Không có quyền xem danh sách học sinh."), 403
     return admin_class_students.__wrapped__(class_id)
 
@@ -2078,7 +2139,7 @@ def op_class_students(class_id):
 @app.route("/op/classes/<int:class_id>/students/export")
 @operator_required
 def op_class_students_export(class_id):
-    if not _op_has_perm("student_export"):
+    if not (_op_has_perm("student_view") and _op_has_perm("student_export")):
         return "Không có quyền tải danh sách học sinh.", 403
     return admin_class_students_export.__wrapped__(class_id)
 
@@ -2087,7 +2148,7 @@ def op_class_students_export(class_id):
 @operator_required
 def op_class_students_page(class_id):
     """Full page (instead of a popup) listing the students enrolled in one class."""
-    if not _op_has_perm("student_view") and not _op_has_perm("student_export"):
+    if not _op_has_perm("student_view"):
         return "Không có quyền xem danh sách học sinh.", 403
     with engine.connect() as conn:
         cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
@@ -2103,7 +2164,7 @@ def op_class_students_page(class_id):
     return render_template("admin/op_class_students.html", cls=cls, class_id=class_id,
                            teacher_name=_name_fmt(teacher.full_name) if teacher else "",
                            student_list=enrolled,
-                           can_export=_op_has_perm("student_export"),
+                           can_export=_op_has_perm("student_export"),   # view is already required above
                            can_delete=_op_has_perm("delete_students"))
 
 
@@ -2111,17 +2172,14 @@ def op_class_students_page(class_id):
 @operator_required
 def op_class_student_remove(class_id, student_id):
     """Remove one student from a class (needs the delete_students permission)."""
-    if not _op_has_perm("delete_students"):
+    if not (_op_has_perm("student_view") and _op_has_perm("delete_students")):
         return jsonify(ok=False, error="Không có quyền xoá học sinh khỏi lớp."), 403
     with engine.begin() as conn:
-        row = conn.execute(select(enrollments).where(and_(
-            enrollments.c.class_id == class_id, enrollments.c.student_id == student_id))).fetchone()
-        if not row:
+        removed = _remove_enrollments(conn, and_(enrollments.c.class_id == class_id,
+                                                 enrollments.c.student_id == student_id),
+                                      note=f"op:{session.get('operator_id')}")
+        if not removed:
             return jsonify(ok=False, error="Học sinh không còn trong lớp này."), 404
-        conn.execute(insert(student_enroll_log).values(
-            student_id=student_id, class_id=class_id, action="D", ts=now_vn(),
-            note=f"op:{session.get('operator_id')}"))
-        conn.execute(delete(enrollments).where(enrollments.c.id == row.id))
     _bump()
     return jsonify(ok=True)
 
@@ -2924,7 +2982,7 @@ def admin_seed_data():
     try:
         with engine.connect() as conn:
             # Clear all data first so reseed always works
-            for tbl in ("enrollments", "classes", "students", "teachers", "rooms"):
+            for tbl in ("enrollments", "student_enroll_log", "teacher_class_log", "classes", "students", "teachers", "rooms"):
                 conn.execute(text(f"DELETE FROM {tbl}"))
             # Reset PG sequences to 0 before re-seeding explicit IDs
             if not DATABASE_URL.startswith("sqlite"):
@@ -3484,63 +3542,12 @@ def api_available_rooms():
         exclude_class_id = int(exclude_class_id) if exclude_class_id else None
     except (KeyError, ValueError):
         return jsonify([]), 400
-    end = ss + dur - 1
     subject = request.args.get("subject")
     with engine.connect() as conn:
         if subject is None and exclude_class_id:
             subject = conn.execute(select(classes.c.subject).where(classes.c.id == exclude_class_id)).scalar()
-        room_rows_all = conn.execute(select(rooms)).fetchall()
-        all_rooms = sorted([r.name for r in room_rows_all], key=_room_sort_key)
-        # rooms that enforce conflict check (1 class per slot)
-        conflict_rooms = {r.name for r in room_rows_all if r.conflict_check}
-        # rooms already booked for overlapping slots (exclude current class if re-assigning)
-        booked_filter = and_(
-            classes.c.day_of_week == dow,
-            classes.c.session_type == st,
-            classes.c.location.isnot(None),
-            classes.c.start_session <= end,
-            (classes.c.start_session + classes.c.duration - 1) >= ss,
-        )
-        if exclude_class_id:
-            booked_filter = and_(booked_filter, classes.c.id != exclude_class_id)
-        booked = conn.execute(select(classes.c.location, classes.c.subject).where(booked_filter)).fetchall()
-        pe_new = _is_pe_subject(subject)
-        booked_set = {r.location for r in booked
-                      if r.location and not (pe_new and _is_pe_subject(r.subject))}
-        # rooms marked busy externally (any tiết in the requested range)
-        ext_busy = conn.execute(
-            select(room_external_busy.c.room_name).where(
-                and_(
-                    room_external_busy.c.day_of_week == dow,
-                    room_external_busy.c.session_type == st,
-                    room_external_busy.c.tiet >= ss,
-                    room_external_busy.c.tiet <= end,
-                )
-            )
-        ).fetchall()
-        ext_busy_set = {r.room_name for r in ext_busy}
-        # rooms grade-restricted and not allowed for this grade
-        grade_blocked_set = set()
-        if grade:
-            grade_rows = conn.execute(
-                select(room_grade_slots.c.room_name, room_grade_slots.c.available_grades).where(
-                    and_(
-                        room_grade_slots.c.day_of_week == dow,
-                        room_grade_slots.c.session_type == st,
-                        room_grade_slots.c.tiet >= ss,
-                        room_grade_slots.c.tiet <= end,
-                    )
-                )
-            ).fetchall()
-            for r in grade_rows:
-                allowed = [g.strip() for g in r.available_grades.split(",")]
-                if str(grade) not in allowed:
-                    grade_blocked_set.add(r.room_name)
-    available = [r for r in all_rooms
-                 if (r not in booked_set or r not in conflict_rooms)
-                 and r not in ext_busy_set
-                 and r not in grade_blocked_set]
-    return jsonify(available)
+        all_rooms, unavailable = _available_rooms(conn, dow, st, ss, dur, grade, subject, exclude_class_id)
+    return jsonify([r for r in all_rooms if r not in unavailable])
 
 
 @app.route("/api/slot-impact")
@@ -3961,23 +3968,21 @@ def admin_teachers_reset_password(teacher_id):
 @app.route("/admin/teachers/<int:teacher_id>", methods=["DELETE"])
 @admin_required
 def admin_teachers_delete(teacher_id):
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         teacher_classes = conn.execute(
             select(classes.c.id).where(classes.c.teacher_id == teacher_id)
         ).fetchall()
         class_ids = [c.id for c in teacher_classes]
 
         if class_ids:
-            conn.execute(
-                delete(enrollments).where(enrollments.c.class_id.in_(class_ids))
-            )
+            _remove_enrollments(conn, enrollments.c.class_id.in_(class_ids), note="teacher-deleted")
             conn.execute(
                 delete(classes).where(classes.c.teacher_id == teacher_id)
             )
 
+        conn.execute(delete(teacher_class_log).where(teacher_class_log.c.teacher_id == teacher_id))
         conn.execute(delete(teachers).where(teachers.c.id == teacher_id))
-        conn.commit()
-
+    _bump()
     return jsonify(ok=True)
 
 @app.route("/admin/teachers/clear", methods=["POST"])
@@ -3988,7 +3993,9 @@ def admin_teachers_clear():
         if all_class_ids:
             conn.execute(delete(enrollments).where(enrollments.c.class_id.in_(all_class_ids)))
         conn.execute(delete(classes))
+        conn.execute(delete(teacher_class_log))
         conn.execute(delete(teachers))
+    _bump()
     flash("Đã xóa toàn bộ danh sách giáo viên.", "success")
     return redirect(url_for("admin_index"))
 
@@ -4141,12 +4148,13 @@ def admin_students_add():
 @admin_required
 def admin_students_reset(student_id):
     with engine.begin() as conn:
-        conn.execute(delete(enrollments).where(enrollments.c.student_id == student_id))
+        _remove_enrollments(conn, enrollments.c.student_id == student_id, note="admin-reset")
         conn.execute(
             update(students).where(students.c.id == student_id).values(
                 password_hash=None, is_first_login=1
             )
         )
+    _bump()
     flash("Đã reset tài khoản và xóa đăng ký của học sinh.", "success")
     return redirect(url_for("admin_index"))
 
@@ -4178,12 +4186,12 @@ def admin_students_reset_password(student_id):
 @app.route("/admin/students/<int:student_id>", methods=["DELETE"])
 @admin_required
 def admin_students_delete(student_id):
-    with engine.connect() as conn:
-        conn.execute(
-            delete(enrollments).where(enrollments.c.student_id == student_id)
-        )
+    with engine.begin() as conn:
+        conn.execute(delete(enrollments).where(enrollments.c.student_id == student_id))
+        # the student is gone for good: drop their history too, so a reused id never inherits it
+        conn.execute(delete(student_enroll_log).where(student_enroll_log.c.student_id == student_id))
         conn.execute(delete(students).where(students.c.id == student_id))
-        conn.commit()
+    _bump()
     return jsonify(ok=True)
 
 
@@ -4201,6 +4209,7 @@ def admin_students_reset_all():
                 last_seen_at=None,
             )
         )
+    _bump()
     flash("Đã reset toàn bộ tài khoản học sinh.", "success")
     return redirect(url_for("admin_index"))
 
@@ -4210,7 +4219,9 @@ def admin_students_reset_all():
 def admin_students_clear():
     with engine.begin() as conn:
         conn.execute(delete(enrollments))
+        conn.execute(delete(student_enroll_log))
         conn.execute(delete(students))
+    _bump()
     flash("Đã xóa toàn bộ danh sách học sinh.", "success")
     return redirect(url_for("admin_index"))
 
@@ -4986,10 +4997,11 @@ def admin_operators_create():
     perm_room_assign     = 1 if request.form.get("perm_room_assign")     else 0
     perm_room_swap       = 1 if request.form.get("perm_room_swap")       else 0
     perm_student_view    = 1 if request.form.get("perm_student_view")    else 0
-    perm_student_export  = 1 if request.form.get("perm_student_export")  else 0
+    # Tải DS / Xoá HS là quyền cấp dưới của "Xem DS học sinh"
+    perm_student_export  = 1 if (perm_student_view and request.form.get("perm_student_export")) else 0
     perm_manage_teachers = 1 if request.form.get("perm_manage_teachers") else 0
     perm_manage_students = 1 if request.form.get("perm_manage_students") else 0
-    perm_delete_students = 1 if request.form.get("perm_delete_students") else 0
+    perm_delete_students = 1 if (perm_student_view and request.form.get("perm_delete_students")) else 0
     try:
         with engine.begin() as conn:
             conn.execute(insert(operators).values(
@@ -5035,10 +5047,10 @@ def admin_operators_update_perms(op_id):
             perm_room_assign     = 1 if data.get("perm_room_assign")     else 0,
             perm_room_swap       = 1 if data.get("perm_room_swap")       else 0,
             perm_student_view    = 1 if data.get("perm_student_view")    else 0,
-            perm_student_export  = 1 if data.get("perm_student_export")  else 0,
+            perm_student_export  = 1 if (data.get("perm_student_view") and data.get("perm_student_export")) else 0,
             perm_manage_teachers = 1 if data.get("perm_manage_teachers") else 0,
             perm_manage_students = 1 if data.get("perm_manage_students") else 0,
-            perm_delete_students = 1 if data.get("perm_delete_students") else 0,
+            perm_delete_students = 1 if (data.get("perm_student_view") and data.get("perm_delete_students")) else 0,
         ))
     return jsonify(ok=True)
 
@@ -5468,45 +5480,139 @@ def admin_bulk_capacity():
     return jsonify(ok=True, capacity=cap)
 
 
+@app.route("/admin/classes/<int:class_id>/edit-options")
+@admin_required
+def admin_class_edit_options(class_id):
+    """Everything the 'edit class' popup needs: current values, teachers without a time clash, rooms."""
+    with engine.connect() as conn:
+        cls = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
+        if not cls:
+            return jsonify(ok=False, error="Không tìm thấy lớp."), 404
+        end = cls.start_session + cls.duration - 1
+        pe = _is_pe_subject(cls.subject)
+        enrolled = conn.execute(select(func.count()).select_from(enrollments)
+                                .where(enrollments.c.class_id == class_id)).scalar() or 0
+        busy_ids = {r.teacher_id for r in conn.execute(
+            select(classes.c.teacher_id, classes.c.subject).where(and_(
+                classes.c.id != class_id, _slot_overlap(cls.day_of_week, cls.session_type, cls.start_session, end)))
+        ).fetchall() if not (pe and _is_pe_subject(r.subject))}
+        tlist = conn.execute(select(teachers).where(teachers.c.cccd != _UNASSIGNED_CCCD)
+                             .order_by(teachers.c.subject_group, teachers.c.full_name)).fetchall()
+        cur_t = conn.execute(select(teachers).where(teachers.c.id == cls.teacher_id)).fetchone() if cls.teacher_id else None
+        all_rooms, unavailable = _available_rooms(conn, cls.day_of_week, cls.session_type, cls.start_session,
+                                                  cls.duration, cls.grade, cls.subject, exclude_class_id=class_id)
+    return jsonify(
+        ok=True,
+        cls={"id": cls.id, "grade": cls.grade, "subject": cls.subject or "", "chuyen_de": cls.chuyen_de or "",
+             "location": cls.location or "", "max_capacity": cls.max_capacity or 0, "enrolled": enrolled,
+             "teacher_id": cls.teacher_id,
+             "teacher_name": _name_fmt(cur_t.full_name) if cur_t else "",
+             "teacher_unassigned": bool(cur_t and cur_t.cccd == _UNASSIGNED_CCCD),
+             "day_label": day_name(cls.day_of_week), "session_type": cls.session_type,
+             "start_session": cls.start_session, "duration": cls.duration, "is_pe": pe},
+        teachers=[{"id": t.id, "full_name": _name_fmt(t.full_name), "subject_group": t.subject_group or "",
+                   "current": t.id == cls.teacher_id}
+                  for t in tlist if t.id not in busy_ids or t.id == cls.teacher_id],
+        rooms=[{"name": r, "available": r not in unavailable, "reason": unavailable.get(r, ""),
+                "current": r == cls.location} for r in all_rooms],
+    )
+
+
 @app.route("/admin/classes/<int:class_id>", methods=["PATCH"])
 @admin_required
 def admin_class_update(class_id):
+    """Edit a class: location, capacity, teacher and/or chuyen_de. All fields are validated
+    first and applied together, so a failed check never leaves the class half-updated."""
     data = request.get_json(force=True, silent=True) or {}
-    updates = {}
-    if "location" in data:
-        updates["location"] = (data.get("location") or "").strip() or None
-    if "max_capacity" in data:
-        try:
-            updates["max_capacity"] = int(data["max_capacity"]) if data.get("max_capacity") else None
-        except (ValueError, TypeError):
-            updates["max_capacity"] = None
-    if not updates:
+    if not any(k in data for k in ("location", "max_capacity", "teacher_id", "chuyen_de")):
         return jsonify(ok=True)
     with engine.begin() as conn:
         row = conn.execute(select(classes).where(classes.c.id == class_id)).fetchone()
         if not row:
             return jsonify(ok=False, error="Không tìm thấy lớp.")
-        if updates.get("location"):
-            location = updates["location"]
-            end_session = row.start_session + row.duration - 1
-            if _room_slot_booked(conn, location, row.day_of_week, row.session_type, row.start_session,
-                                 end_session, row.subject, exclude_class_id=class_id):
-                return jsonify(ok=False, error=f"Phòng {location} đã được xếp cho lớp khác trong khung giờ này.")
-            ext_conflict = conn.execute(
-                select(room_external_busy.c.id).where(and_(
-                    room_external_busy.c.room_name   == location,
-                    room_external_busy.c.day_of_week == row.day_of_week,
-                    room_external_busy.c.session_type == row.session_type,
-                    room_external_busy.c.tiet >= row.start_session,
-                    room_external_busy.c.tiet <= end_session,
-                ))
-            ).fetchone()
-            if ext_conflict:
-                return jsonify(ok=False, error=f"Phòng {location} đang bận (lịch ngoài) trong khung giờ này.")
+        end_session = row.start_session + row.duration - 1
+        updates, notes = {}, []
+
+        if "max_capacity" in data:
+            raw = data.get("max_capacity")
+            if raw in (None, "", 0, "0"):
+                updates["max_capacity"] = None
+            else:
+                try:
+                    cap = int(raw)
+                except (ValueError, TypeError):
+                    return jsonify(ok=False, error="Sĩ số không hợp lệ.")
+                if cap < 1:
+                    return jsonify(ok=False, error="Sĩ số phải lớn hơn 0.")
+                enrolled = conn.execute(select(func.count()).select_from(enrollments)
+                                        .where(enrollments.c.class_id == class_id)).scalar() or 0
+                if cap < enrolled:
+                    return jsonify(ok=False, error=f"Sĩ số không thể nhỏ hơn số học sinh đã đăng ký ({enrolled}).")
+                updates["max_capacity"] = cap
+            if updates["max_capacity"] != row.max_capacity:
+                notes.append(f"sĩ số {row.max_capacity or '∞'} → {updates['max_capacity'] or '∞'}")
+
+        if "chuyen_de" in data:
+            cd = (data.get("chuyen_de") or "").strip() or None
+            if cd and len(cd) > 200:
+                return jsonify(ok=False, error="Tên chuyên đề quá dài (tối đa 200 ký tự).")
+            updates["chuyen_de"] = cd
+            if cd != (row.chuyen_de or None):
+                notes.append(f"chuyên đề '{row.chuyen_de or ''}' → '{cd or ''}'")
+
+        new_teacher = None
+        if "teacher_id" in data and str(data.get("teacher_id")) != str(row.teacher_id):
+            raw = data.get("teacher_id")
+            if raw == "unassigned":
+                new_teacher = conn.execute(select(teachers).where(teachers.c.cccd == _UNASSIGNED_CCCD)).fetchone()
+                if not new_teacher:
+                    return jsonify(ok=False, error="Không tìm thấy bản ghi 'Do trường phân công'.")
+            else:
+                try:
+                    new_teacher = conn.execute(select(teachers).where(teachers.c.id == int(raw))).fetchone()
+                except (ValueError, TypeError):
+                    return jsonify(ok=False, error="Giáo viên không hợp lệ.")
+                if not new_teacher:
+                    return jsonify(ok=False, error="Không tìm thấy giáo viên.")
+                if new_teacher.cccd != _UNASSIGNED_CCCD and _teacher_slot_busy(
+                        conn, new_teacher.id, row.day_of_week, row.session_type, row.start_session,
+                        end_session, row.subject, exclude_class_id=class_id):
+                    return jsonify(ok=False, error=f"{_name_fmt(new_teacher.full_name)} đã có lớp khác trong khung giờ này.")
+            updates["teacher_id"] = new_teacher.id
+
+        if "location" in data:
+            loc = (data.get("location") or "").strip() or None
+            if loc and loc != row.location:
+                all_rooms, unavailable = _available_rooms(conn, row.day_of_week, row.session_type, row.start_session,
+                                                          row.duration, row.grade, row.subject, exclude_class_id=class_id)
+                if loc not in all_rooms:
+                    return jsonify(ok=False, error=f"Phòng {loc} không có trong danh sách phòng.")
+                if loc in unavailable:
+                    return jsonify(ok=False, error=f"Phòng {loc} {unavailable[loc]} trong khung giờ này.")
+            updates["location"] = loc
+            if loc != (row.location or None):
+                notes.append(f"địa điểm '{row.location or ''}' → '{loc or ''}'")
+
         conn.execute(update(classes).where(classes.c.id == class_id).values(**updates))
-    grade = row.grade if row else None
-    _bump(event_type="class_update", grade=grade)
-    return jsonify(ok=True, **updates)
+
+        if new_teacher is not None:
+            old_t = conn.execute(select(teachers).where(teachers.c.id == row.teacher_id)).fetchone() if row.teacher_id else None
+            slot, ts = _cls_slot(row), now_vn()
+            if old_t and old_t.cccd != _UNASSIGNED_CCCD:
+                conn.execute(insert(teacher_class_log).values(
+                    teacher_id=old_t.id, class_id=class_id, action='U', slot=slot, ts=ts))
+            if new_teacher.cccd != _UNASSIGNED_CCCD:
+                conn.execute(insert(teacher_class_log).values(
+                    teacher_id=new_teacher.id, class_id=class_id, action='A', slot=slot, ts=ts))
+            notes.append(f"GV {_name_fmt(old_t.full_name) if old_t else '—'} → {_name_fmt(new_teacher.full_name)}")
+        if notes:
+            _log_admin_action(conn, "update_class", f"#{class_id} K{row.grade}: " + "; ".join(notes), class_id=class_id)
+        out = conn.execute(select(classes, teachers.c.full_name.label("teacher_name"))
+                           .select_from(classes.outerjoin(teachers, teachers.c.id == classes.c.teacher_id))
+                           .where(classes.c.id == class_id)).fetchone()
+    _bump(event_type="class_update", grade=row.grade)
+    return jsonify(ok=True, location=out.location, max_capacity=out.max_capacity, chuyen_de=out.chuyen_de or "",
+                   teacher_id=out.teacher_id, teacher_name=_name_fmt(out.teacher_name) if out.teacher_name else "")
 
 
 @app.route("/admin/classes/import-template")
@@ -5650,7 +5756,7 @@ def admin_class_reassign_teacher(class_id):
 def admin_class_assign_teacher(class_id):
     data       = request.get_json(force=True)
     teacher_id = data.get("teacher_id")
-    location   = (data.get("location") or "").strip() or None
+    location   = (data.get("location") or "").strip() or None   # None = keep the room the class already has
     if not teacher_id:
         return jsonify(ok=False, error="Chưa chọn giáo viên.")
     with engine.begin() as conn:
@@ -5668,11 +5774,15 @@ def admin_class_assign_teacher(class_id):
                                             teacher_row.subject_group or cls.subject, exclude_class_id=class_id)
             if t_conflict:
                 return jsonify(ok=False, error=f"{_name_fmt(teacher_row.full_name)} đã có lớp khác trong khung giờ này.")
+        keep_room = location is None
+        location  = cls.location if keep_room else location
         if location:
             end_session = cls.start_session + cls.duration - 1
             if _room_slot_booked(conn, location, cls.day_of_week, cls.session_type, cls.start_session,
                                  end_session, teacher_row.subject_group or cls.subject, exclude_class_id=class_id):
-                return jsonify(ok=False, error=f"Phòng {location} đã bị đặt trong khung giờ này.")
+                msg = (f"Phòng {location} (phòng hiện tại của lớp) không còn phù hợp sau khi đổi giáo viên. Vui lòng chọn phòng khác."
+                       if keep_room else f"Phòng {location} đã bị đặt trong khung giờ này.")
+                return jsonify(ok=False, error=msg)
         conn.execute(
             update(classes).where(classes.c.id == class_id).values(
                 teacher_id=teacher_id,
@@ -5917,7 +6027,7 @@ def admin_class_split(class_id):
     if not splits:
         return jsonify(ok=False, error="Không có lớp tách nào.")
     orig_teacher_id = original.get("teacher_id")
-    orig_location   = (original.get("location") or "").strip() or None
+    orig_location   = (original.get("location") or "").strip() or None   # None = keep current room
     orig_capacity   = int(original.get("max_capacity") or 0) or None
     if not orig_teacher_id:
         return jsonify(ok=False, error="Chưa chọn giáo viên cho lớp gốc.")
@@ -5979,7 +6089,7 @@ def admin_class_split(class_id):
         conn.execute(update(classes).where(classes.c.id == class_id).values(
             teacher_id  =orig_teacher_id,
             subject     =orig_subj,
-            location    =orig_location,
+            location    =orig_location if orig_location else cls.location,
             max_capacity=orig_capacity,
         ))
         conn.execute(insert(teacher_class_log).values(
@@ -7278,8 +7388,9 @@ def admin_class_delete(class_id):
             _log_admin_action(conn, "delete_class",
                 f"K{cls.grade} · {teacher_name} · T{cls.day_of_week} {ses_lbl} T{cls.start_session}",
                 class_id=class_id)
-        conn.execute(delete(enrollments).where(enrollments.c.class_id == class_id))
+        _remove_enrollments(conn, enrollments.c.class_id == class_id, note="class-deleted")
         conn.execute(delete(classes).where(classes.c.id == class_id))
+    _bump(event_type="class_update", grade=cls.grade if cls else None)
     return jsonify(ok=True)
 
 
@@ -7497,7 +7608,56 @@ def op_students():
         student_list = conn.execute(
             select(students).order_by(students.c.grade, students.c.class_name, students.c.full_name)
         ).fetchall()
-    return render_template("admin/op_students.html", student_list=student_list)
+    return render_template("admin/op_students.html", student_list=student_list,
+                           can_view_classes=_op_student_classes_perm(),
+                           can_delete=_op_has_perm("delete_students"))
+
+
+def _op_student_classes_perm():
+    """Operator may open a student's class list when they manage students and can view student lists."""
+    return _op_has_perm("manage_students") and _op_has_perm("student_view")
+
+
+@app.route("/op/students/<int:student_id>/classes")
+@operator_required
+def op_student_classes(student_id):
+    if not _op_student_classes_perm():
+        return jsonify(ok=False, error="Không có quyền xem danh sách lớp của học sinh."), 403
+    with engine.connect() as conn:
+        st = conn.execute(select(students).where(students.c.id == student_id)).fetchone()
+        if not st:
+            return jsonify(ok=False, error="Không tìm thấy học sinh."), 404
+        rows = conn.execute(
+            select(classes, teachers.c.full_name.label("teacher_name"), enrollments.c.confirm_status)
+            .select_from(enrollments.join(classes, classes.c.id == enrollments.c.class_id)
+                         .outerjoin(teachers, teachers.c.id == classes.c.teacher_id))
+            .where(enrollments.c.student_id == student_id)
+            .order_by(classes.c.day_of_week, classes.c.session_type.desc(), classes.c.start_session)
+        ).fetchall()
+    return jsonify(ok=True, student={"id": st.id, "full_name": _name_fmt(st.full_name), "class_name": st.class_name or ""},
+                   can_delete=_op_has_perm("delete_students"),
+                   classes=[{"class_id": c.id, "subject": c.subject or "", "chuyen_de": c.chuyen_de or "", "grade": c.grade,
+                             "teacher": _name_fmt(c.teacher_name) if c.teacher_name else "",
+                             "day_label": day_name(c.day_of_week),
+                             "session_label": "Sáng" if c.session_type == "morning" else "Chiều",
+                             "start_session": c.start_session, "end_session": c.start_session + c.duration - 1,
+                             "location": c.location or "", "confirm_status": c.confirm_status or ""} for c in rows])
+
+
+@app.route("/op/students/<int:student_id>/classes/<int:class_id>", methods=["DELETE"])
+@operator_required
+def op_student_class_remove(student_id, class_id):
+    """Same effect (and same log entry) as removing the student from the class page."""
+    if not (_op_student_classes_perm() and _op_has_perm("delete_students")):
+        return jsonify(ok=False, error="Không có quyền xoá học sinh khỏi lớp."), 403
+    with engine.begin() as conn:
+        removed = _remove_enrollments(conn, and_(enrollments.c.class_id == class_id,
+                                                 enrollments.c.student_id == student_id),
+                                      note=f"op:{session.get('operator_id')}")
+        if not removed:
+            return jsonify(ok=False, error="Học sinh không còn trong lớp này."), 404
+    _bump()
+    return jsonify(ok=True)
 
 
 @app.route("/op/students/<int:student_id>/reset-password", methods=["POST"])
@@ -7872,6 +8032,7 @@ def admin_enrollment_delete_all():
     with engine.begin() as conn:
         result = conn.execute(delete(enrollments))
         deleted = result.rowcount
+    _bump()
     return jsonify(ok=True, deleted=deleted)
 
 
@@ -7993,14 +8154,7 @@ def api_admin_enrollment_delete(enrollment_id):
             return jsonify(ok=False, error="Không tìm thấy đăng ký."), 404
         student_id = row.student_id
         class_id   = row.class_id
-        # Log the removal
-        conn.execute(insert(student_enroll_log).values(
-            student_id=student_id,
-            class_id=class_id,
-            action="D",
-            ts=now_vn(),
-        ))
-        conn.execute(delete(enrollments).where(enrollments.c.id == enrollment_id))
+        _remove_enrollments(conn, enrollments.c.id == enrollment_id)
     _bump()
     return jsonify(ok=True, enrollment_id=enrollment_id,
                    student_id=student_id, class_id=class_id)

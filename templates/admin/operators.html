@@ -37,6 +37,9 @@
   }
   .perm-check-row:last-child { border-bottom:none; }
   .perm-check-row input[type=checkbox] { width:17px;height:17px;margin-top:1px;flex-shrink:0;cursor:pointer; }
+  .perm-sub { margin-left:26px; border-left:2px solid #DDD6FE; padding-left:12px; }
+  .perm-sub.is-disabled { opacity:.5; }
+  .perm-sub.is-disabled * { cursor:not-allowed; }
   .perm-check-label { font-size:.83rem;font-weight:600;color:#1E293B;cursor:pointer; }
   .perm-check-desc  { font-size:.73rem;color:#64748B;margin-top:1px; }
 </style>
@@ -92,10 +95,11 @@
                 {% if op.perm_room_swap %}
                 <span class="perm-chip perm-chip-on"><i class="bi bi-arrow-left-right"></i>Đổi phòng</span>
                 {% endif %}
-                {% if op.perm_student_export %}
-                <span class="perm-chip perm-chip-on"><i class="bi bi-download"></i>Tải DS HS</span>
-                {% elif op.perm_student_view %}
+                {% if op.perm_student_view %}
                 <span class="perm-chip perm-chip-on"><i class="bi bi-people-fill"></i>Xem DS HS</span>
+                {% endif %}
+                {% if op.perm_student_view and op.perm_student_export %}
+                <span class="perm-chip perm-chip-on"><i class="bi bi-download"></i>Tải DS HS</span>
                 {% endif %}
                 {% if op.perm_manage_teachers %}
                 <span class="perm-chip perm-chip-on"><i class="bi bi-person-video3"></i>QL GV</span>
@@ -198,18 +202,18 @@
                   <div class="perm-check-desc">Được xem danh sách học sinh đã đăng ký vào lớp khi click vào phòng có lớp.</div>
                 </label>
               </div>
-              <div class="perm-check-row">
-                <input type="checkbox" name="perm_delete_students" id="c_perm_delete_students" value="1">
-                <label for="c_perm_delete_students">
-                  <div class="perm-check-label">Xoá học sinh khỏi lớp</div>
-                  <div class="perm-check-desc">Trong trang danh sách học sinh của lớp, có cột thao tác để xoá học sinh khỏi lớp học. Cần kèm quyền xem hoặc tải danh sách học sinh.</div>
-                </label>
-              </div>
-              <div class="perm-check-row">
-                <input type="checkbox" name="perm_student_export" id="c_perm_student_export" value="1">
+              <div class="perm-check-row perm-sub">
+                <input type="checkbox" name="perm_student_export" id="c_perm_student_export" value="1" disabled>
                 <label for="c_perm_student_export">
                   <div class="perm-check-label">Tải danh sách học sinh (Excel)</div>
-                  <div class="perm-check-desc">Được tải danh sách học sinh về file Excel. Bao gồm quyền xem danh sách.</div>
+                  <div class="perm-check-desc">Được tải danh sách học sinh về file Excel. Chỉ bật được khi đã bật quyền xem.</div>
+                </label>
+              </div>
+              <div class="perm-check-row perm-sub">
+                <input type="checkbox" name="perm_delete_students" id="c_perm_delete_students" value="1" disabled>
+                <label for="c_perm_delete_students">
+                  <div class="perm-check-label">Xoá học sinh khỏi lớp</div>
+                  <div class="perm-check-desc">Trang danh sách học sinh của lớp có thêm cột thao tác xoá học sinh khỏi lớp. Chỉ bật được khi đã bật quyền xem.</div>
                 </label>
               </div>
 
@@ -306,21 +310,21 @@
             <div class="perm-check-desc">Được xem danh sách học sinh đã đăng ký vào lớp.</div>
           </label>
         </div>
-        <div class="perm-check-row">
+        <div class="perm-check-row perm-sub">
           <input type="checkbox" id="ep_student_export">
           <label for="ep_student_export">
             <div class="perm-check-label">Tải danh sách học sinh (Excel)</div>
-            <div class="perm-check-desc">Được tải danh sách học sinh về Excel. Bao gồm quyền xem.</div>
+            <div class="perm-check-desc">Được tải danh sách học sinh về Excel. Chỉ bật được khi đã bật quyền xem.</div>
           </label>
         </div>
-        <span class="perm-section-label mt-3">Quản lý tài khoản</span>
-        <div class="perm-check-row">
+        <div class="perm-check-row perm-sub">
           <input type="checkbox" id="ep_delete_students">
           <label for="ep_delete_students">
             <div class="perm-check-label">Xoá học sinh khỏi lớp</div>
-            <div class="perm-check-desc">Có cột thao tác xoá học sinh trong trang danh sách học sinh của lớp. Cần kèm quyền xem hoặc tải danh sách.</div>
+            <div class="perm-check-desc">Có cột thao tác xoá học sinh trong trang danh sách học sinh của lớp. Chỉ bật được khi đã bật quyền xem.</div>
           </label>
         </div>
+        <span class="perm-section-label mt-3">Quản lý tài khoản</span>
         <div class="perm-check-row">
           <input type="checkbox" id="ep_manage_teachers">
           <label for="ep_manage_teachers">
@@ -404,9 +408,29 @@ function openEditPerms(btn) {
   document.getElementById('ep_manage_teachers').checked  = !!perms.perm_manage_teachers;
   document.getElementById('ep_manage_students').checked  = !!perms.perm_manage_students;
   document.getElementById('ep_delete_students').checked  = !!perms.perm_delete_students;
+  syncSubPerms('ep_student_view', ['ep_student_export', 'ep_delete_students']);
   document.getElementById('permSaveError').classList.add('d-none');
   new bootstrap.Modal(document.getElementById('modalEditPerms')).show();
 }
+
+// Tải DS / Xoá HS chỉ bật được khi đã bật "Xem DS học sinh"
+function syncSubPerms(viewId, subIds) {
+  const on = document.getElementById(viewId).checked;
+  subIds.forEach(id => {
+    const cb = document.getElementById(id);
+    if (!on) cb.checked = false;
+    cb.disabled = !on;
+    cb.closest('.perm-sub').classList.toggle('is-disabled', !on);
+  });
+}
+function wireSubPerms(viewId, subIds) {
+  document.getElementById(viewId).addEventListener('change', () => syncSubPerms(viewId, subIds));
+  syncSubPerms(viewId, subIds);
+}
+document.addEventListener('DOMContentLoaded', () => {
+  wireSubPerms('c_perm_student_view', ['c_perm_student_export', 'c_perm_delete_students']);
+  wireSubPerms('ep_student_view', ['ep_student_export', 'ep_delete_students']);
+});
 
 async function savePerms() {
   if (!_epOpId) return;
@@ -433,11 +457,11 @@ async function savePerms() {
         let html = '';
         if (payload.perm_room_assign)    html += '<span class="perm-chip perm-chip-on"><i class="bi bi-geo-alt-fill"></i>Xếp/Gỡ phòng</span> ';
         if (payload.perm_room_swap)      html += '<span class="perm-chip perm-chip-on"><i class="bi bi-arrow-left-right"></i>Đổi phòng</span> ';
-        if (payload.perm_student_export) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-download"></i>Tải DS HS</span> ';
-        else if (payload.perm_student_view) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-people-fill"></i>Xem DS HS</span> ';
+        if (payload.perm_student_view) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-people-fill"></i>Xem DS HS</span> ';
+        if (payload.perm_student_view && payload.perm_student_export) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-download"></i>Tải DS HS</span> ';
         if (payload.perm_manage_teachers) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-person-video3"></i>QL GV</span> ';
         if (payload.perm_manage_students) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-people"></i>QL HS</span> ';
-        if (payload.perm_delete_students) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-person-dash"></i>Xoá HS khỏi lớp</span>';
+        if (payload.perm_student_view && payload.perm_delete_students) html += '<span class="perm-chip perm-chip-on"><i class="bi bi-person-dash"></i>Xoá HS khỏi lớp</span>';
         if (!payload.perm_room_assign && !payload.perm_room_swap && !payload.perm_student_view && !payload.perm_student_export && !payload.perm_manage_teachers && !payload.perm_manage_students && !payload.perm_delete_students)
           html = '<span class="perm-chip perm-chip-off"><i class="bi bi-eye"></i>Chỉ xem</span>';
         chipsEl.innerHTML = html;

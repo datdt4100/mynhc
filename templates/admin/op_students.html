@@ -52,7 +52,7 @@
               <th>Lớp</th>
               <th>Email</th>
               <th>Trạng thái</th>
-              <th style="width:90px;">Thao tác</th>
+              <th style="width:{{ 110 if can_view_classes else 90 }}px;">Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -73,10 +73,16 @@
               <td style="font-size:.77rem;">{% if s.email %}<a href="mailto:{{ s.email }}" class="text-primary text-decoration-none">{{ s.email }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td>{% if s.is_first_login %}<span class="badge bg-secondary" style="font-size:.7rem;">Chưa kích hoạt</span>{% else %}<span class="badge bg-success" style="font-size:.7rem;">Đã kích hoạt</span>{% endif %}</td>
               <td>
-                {% if not s.is_first_login %}
-                <button type="button" class="adm-icon-btn btn-outline-info" title="Cấp lại mật khẩu"
-                        onclick="resetPassword({{ s.id }}, '{{ s.full_name | name_fmt | e }}')"><i class="bi bi-key"></i></button>
-                {% else %}<span style="font-size:.72rem;color:#CBD5E1;">—</span>{% endif %}
+                <div class="d-flex gap-1 align-items-center">
+                  {% if can_view_classes %}
+                  <button type="button" class="adm-icon-btn btn-outline-primary" title="Xem các lớp đã đăng ký"
+                          onclick="openStudentClasses({{ s.id }})"><i class="bi bi-journal-text"></i></button>
+                  {% endif %}
+                  {% if not s.is_first_login %}
+                  <button type="button" class="adm-icon-btn btn-outline-info" title="Cấp lại mật khẩu"
+                          onclick="resetPassword({{ s.id }}, '{{ s.full_name | name_fmt | e }}')"><i class="bi bi-key"></i></button>
+                  {% elif not can_view_classes %}<span style="font-size:.72rem;color:#CBD5E1;">—</span>{% endif %}
+                </div>
               </td>
             </tr>
             {% endfor %}
@@ -86,6 +92,35 @@
           </tbody>
         </table>
         <div class="search-empty" id="emptyMsg"><i class="bi bi-search" style="font-size:1.4rem;display:block;margin-bottom:6px;"></i>Không tìm thấy học sinh phù hợp</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Student's registered classes -->
+<div class="modal fade" id="stuClassesModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content" style="border-radius:14px;overflow:hidden;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#075985,#0EA5E9);border:none;padding:12px 16px;">
+        <div>
+          <h5 class="modal-title text-white fw-bold mb-0" style="font-size:.92rem;"><i class="bi bi-journal-text me-2"></i>Lớp đã đăng ký</h5>
+          <div id="scSubtitle" style="font-size:.73rem;color:rgba(255,255,255,.85);margin-top:2px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="scLoading" class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm me-2"></div>Đang tải…</div>
+        <div id="scEmpty" class="text-center text-muted py-4" style="display:none;"><i class="bi bi-inbox" style="font-size:1.5rem;display:block;margin-bottom:6px;"></i>Học sinh chưa đăng ký lớp nào</div>
+        <div id="scTable" style="display:none;overflow-x:auto;">
+          <table class="table table-hover admin-table mb-0" style="min-width:560px;">
+            <thead><tr>
+              <th style="width:44px;">STT</th><th>Lớp học</th><th>Giáo viên</th><th>Thời gian</th><th>Phòng</th>
+              {% if can_delete %}<th style="width:70px;text-align:center;">Xoá</th>{% endif %}
+            </tr></thead>
+            <tbody id="scBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -113,6 +148,12 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+  .adm-icon-btn.btn-outline-primary { color:#2563EB; border-color:#2563EB; }
+  .adm-icon-btn.btn-outline-primary:hover { background:#2563EB; color:#fff; }
+  .adm-icon-btn.btn-outline-danger { color:#DC2626; border-color:#DC2626; }
+  .adm-icon-btn.btn-outline-danger:hover { background:#DC2626; color:#fff; }
+</style>
 <script>
 let _grade = 'all';
 function setGrade(g, btn) {
@@ -157,6 +198,69 @@ async function resetPassword(id, name) {
   document.getElementById('pwName').textContent  = data.name;
   document.getElementById('pwValue').textContent = data.new_password;
   new bootstrap.Modal(document.getElementById('pwModal')).show();
+}
+
+// ── Student's registered classes (popup) ──
+let _scStudent = null;
+const _scEsc = v => String(v ?? '').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+const _SC_STATUS = {pending: ['Chưa xác nhận', '#FEF3C7', '#92400E'], accepted: ['Đã xác nhận', '#DCFCE7', '#15803D']};
+async function openStudentClasses(id) {
+  _scStudent = id;
+  document.getElementById('scLoading').style.display = '';
+  document.getElementById('scEmpty').style.display = 'none';
+  document.getElementById('scTable').style.display = 'none';
+  document.getElementById('scSubtitle').textContent = '';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('stuClassesModal')).show();
+  try {
+    const d = await (await fetch(`/op/students/${id}/classes`)).json();
+    document.getElementById('scLoading').style.display = 'none';
+    if (!d.ok) { document.getElementById('scEmpty').textContent = d.error || 'Lỗi tải dữ liệu.'; document.getElementById('scEmpty').style.display = ''; return; }
+    document.getElementById('scSubtitle').textContent = d.student.full_name + (d.student.class_name ? ' · ' + d.student.class_name : '');
+    _renderStudentClasses(d.classes, d.can_delete);
+  } catch { document.getElementById('scLoading').style.display = 'none'; document.getElementById('scEmpty').textContent = 'Lỗi kết nối.'; document.getElementById('scEmpty').style.display = ''; }
+}
+function _renderStudentClasses(list, canDelete) {
+  const empty = document.getElementById('scEmpty'), tbl = document.getElementById('scTable');
+  empty.textContent = 'Học sinh chưa đăng ký lớp nào';
+  if (!list.length) { tbl.style.display = 'none'; empty.style.display = ''; return; }
+  empty.style.display = 'none'; tbl.style.display = '';
+  document.getElementById('scBody').innerHTML = list.map((c, i) => {
+    const st = _SC_STATUS[c.confirm_status];
+    return `<tr id="sc-row-${c.class_id}">
+      <td class="text-muted" style="font-size:.72rem;">${i + 1}</td>
+      <td><div class="fw-semibold">${_scEsc(c.subject || '—')} <span class="badge bg-light text-dark border" style="font-size:.66rem;">K${c.grade}</span>
+          ${st ? `<span class="badge" style="font-size:.64rem;background:${st[1]};color:${st[2]};">${st[0]}</span>` : ''}</div>
+          ${c.chuyen_de ? `<div style="font-size:.72rem;color:#6D28D9;">Chuyên đề: ${_scEsc(c.chuyen_de)}</div>` : ''}</td>
+      <td style="font-size:.78rem;">${_scEsc(c.teacher || '—')}</td>
+      <td style="font-size:.78rem;white-space:nowrap;">${_scEsc(c.day_label)} ${_scEsc(c.session_label)} · T${c.start_session}${c.end_session > c.start_session ? '–' + c.end_session : ''}</td>
+      <td style="font-size:.78rem;">${_scEsc(c.location || '—')}</td>
+      ${canDelete ? `<td class="text-center"><button type="button" class="adm-icon-btn btn-outline-danger" title="Xoá học sinh khỏi lớp này" onclick="removeFromClass(${c.class_id})"><i class="bi bi-trash"></i></button></td>` : ''}
+    </tr>`;
+  }).join('');
+}
+// Two-step delete inside the row (no second popup stacked on top of this one)
+function removeFromClass(classId) {
+  const cell = document.querySelector('#sc-row-' + classId + ' td:last-child');
+  if (!cell) return;
+  cell.dataset.html = cell.innerHTML;
+  cell.innerHTML = `<div class="d-flex gap-1 justify-content-center">
+      <button type="button" class="btn btn-sm btn-danger" style="font-size:.7rem;padding:2px 8px;border-radius:6px;" onclick="confirmRemove(${classId})">Xoá</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:.7rem;padding:2px 8px;border-radius:6px;" onclick="cancelRemove(${classId})">Huỷ</button></div>`;
+}
+function cancelRemove(classId) {
+  const cell = document.querySelector('#sc-row-' + classId + ' td:last-child');
+  if (cell && cell.dataset.html) cell.innerHTML = cell.dataset.html;
+}
+async function confirmRemove(classId) {
+  try {
+    const d = await (await fetch(`/op/students/${_scStudent}/classes/${classId}`, { method: 'DELETE' })).json();
+    if (!d.ok) { cancelRemove(classId); showAlert(d.error || 'Không thể xoá.', 'error'); return; }
+    document.getElementById('sc-row-' + classId)?.remove();
+    const rows = document.querySelectorAll('#scBody tr');
+    rows.forEach((r, i) => r.querySelector('td').textContent = i + 1);
+    if (!rows.length) { document.getElementById('scTable').style.display = 'none'; document.getElementById('scEmpty').style.display = ''; }
+    showAlert('Đã xoá học sinh khỏi lớp.', 'success');
+  } catch { cancelRemove(classId); showAlert('Lỗi kết nối.', 'error'); }
 }
 applyFilter();
 </script>

@@ -430,7 +430,7 @@
             <td>
               <div class="d-flex gap-1">
                 <button class="btn btn-sm" style="border-radius:7px;padding:4px 7px;background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;" title="Phân công giáo viên"
-                        onclick="openAssignModal({{ cls.id }}, '{{ cls.subject or '' }}', {{ cls.grade }}, '{{ day_name(cls.day_of_week) }}', '{{ session_label(cls.session_type, cls.start_session, cls.duration) }}', '{{ cls.session_type }}', {{ cls.day_of_week }}, {{ cls.start_session }}, {{ cls.duration }}, {{ ec }}, {{ cls.max_capacity or 0 }})">
+                        onclick="openAssignModal({{ cls.id }}, '{{ cls.subject or '' }}', {{ cls.grade }}, '{{ day_name(cls.day_of_week) }}', '{{ session_label(cls.session_type, cls.start_session, cls.duration) }}', '{{ cls.session_type }}', {{ cls.day_of_week }}, {{ cls.start_session }}, {{ cls.duration }}, {{ ec }}, {{ cls.max_capacity or 0 }}, '{{ (cls.location or '') | e }}')">
                   <i class="bi bi-person-check"></i>
                 </button>
                 <button class="btn btn-sm btn-outline-danger" style="border-radius:7px;padding:4px 7px;" title="Xoá lớp"
@@ -574,7 +574,9 @@ let _atClassId = null, _atSubject = null, _atGrade = null,
     _atStartSession = null, _atDuration = null,
     _atEnrollCount = 0, _atMaxCapacity = 0, _atSplitCounter = 0;
 
-function openAssignModal(classId, subject, grade, dayLabel, sessionLabel, sessionType, dayOfWeek, startSession, duration, enrollCount, maxCap) {
+let _atCurLoc = '';
+function openAssignModal(classId, subject, grade, dayLabel, sessionLabel, sessionType, dayOfWeek, startSession, duration, enrollCount, maxCap, curLoc) {
+  _atCurLoc = curLoc || '';
   _atClassId = classId; _atSubject = subject; _atGrade = grade;
   _atSessionType = sessionType; _atDayOfWeek = dayOfWeek;
   _atStartSession = startSession; _atDuration = duration;
@@ -589,7 +591,10 @@ function openAssignModal(classId, subject, grade, dayLabel, sessionLabel, sessio
   tSel.innerHTML = '<option value="">— Nhấn để xem danh sách —</option>';
   delete tSel.dataset.loaded;
   const rSel = document.getElementById('atRoomSelect');
-  rSel.innerHTML = '<option value="">— Nhấn để xem phòng trống —</option>';
+  // Keep the room the class already has: it stays selected unless the admin picks another one
+  rSel.innerHTML = _atCurLoc
+    ? '<option value="' + _atCurLoc.replace(/"/g, '&quot;') + '" selected>' + _atCurLoc.replace(/</g, '&lt;') + '</option>'
+    : '<option value="">— Nhấn để xem phòng trống —</option>';
   delete rSel.dataset.loaded;
   // Reset split UI
   document.getElementById('split-classes-container').innerHTML = '';
@@ -636,6 +641,7 @@ function _atOnSelectTeacher(sel) {}
 async function _atLoadRoomOptions(sel) {
   if (sel.dataset.loaded) return;
   sel.dataset.loaded = '1';
+  const keep = sel.value || _atCurLoc;
   sel.innerHTML = '<option value="">Đang tải…</option>';
   try {
     const res = await fetch(`/api/available-rooms?day_of_week=${_atDayOfWeek}&session_type=${_atSessionType}&start_session=${_atStartSession}&duration=${_atDuration}&grade=${_atGrade}&exclude_class_id=${_atClassId}`);
@@ -643,7 +649,9 @@ async function _atLoadRoomOptions(sel) {
     const rooms = Array.isArray(data) ? data : (data.rooms || []);
     sel.innerHTML = '<option value="">— Chọn phòng —</option>';
     rooms.forEach(r => sel.add(new Option(r, r)));
-    if (!rooms.length) sel.add(new Option('Không có phòng trống', ''));
+    if (keep && !rooms.includes(keep)) sel.add(new Option(keep, keep));   // current room is always kept in the list
+    if (keep) sel.value = keep;
+    if (!rooms.length && !keep) sel.add(new Option('Không có phòng trống', ''));
   } catch {
     sel.innerHTML = '<option value="">Lỗi tải phòng</option>';
   }

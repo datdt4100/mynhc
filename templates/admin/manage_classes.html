@@ -90,6 +90,50 @@
     </div>
   </div>
 </div>
+
+<!-- Edit class modal -->
+<div class="modal fade" id="modalClassEdit" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:480px;">
+    <div class="modal-content" style="border-radius:14px;border:none;">
+      <div class="modal-header" style="background:linear-gradient(135deg,#1e40af,#3b82f6);border:none;padding:12px 18px;">
+        <div>
+          <div class="fw-bold text-white" style="font-size:.9rem;"><i class="bi bi-pencil-square me-2"></i>Điều chỉnh thông tin lớp</div>
+          <div id="ceSubtitle" style="font-size:.73rem;color:rgba(255,255,255,.85);margin-top:2px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:16px 18px;">
+        <div id="ceLoading" class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm me-2"></div>Đang tải…</div>
+        <div id="ceForm" style="display:none;">
+          <div class="mb-3">
+            <label class="form-label fw-semibold mb-1" style="font-size:.8rem;"><i class="bi bi-geo-alt me-1"></i>Địa điểm</label>
+            <select id="ceRoom" class="form-select form-select-sm"></select>
+            <div id="ceRoomHint" class="form-text" style="font-size:.7rem;"></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold mb-1" style="font-size:.8rem;"><i class="bi bi-people me-1"></i>Sĩ số</label>
+            <input type="number" id="ceCap" class="form-control form-control-sm" min="1" style="width:140px;">
+            <div id="ceCapHint" class="form-text" style="font-size:.7rem;"></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold mb-1" style="font-size:.8rem;"><i class="bi bi-person-badge me-1"></i>Giáo viên giảng dạy</label>
+            <select id="ceTeacher" class="form-select form-select-sm"></select>
+            <div class="form-text" style="font-size:.7rem;">Chỉ hiện giáo viên không bị trùng giờ dạy.</div>
+          </div>
+          <div class="mb-1">
+            <label class="form-label fw-semibold mb-1" style="font-size:.8rem;"><i class="bi bi-bookmark-star me-1"></i>Tên chuyên đề</label>
+            <input type="text" id="ceTopic" class="form-control form-control-sm" maxlength="200" placeholder="Để trống nếu không có chuyên đề">
+          </div>
+          <div id="ceError" class="text-danger mt-3 d-none" style="font-size:.8rem;"></div>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding:10px 18px;gap:8px;">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Huỷ</button>
+        <button class="btn btn-sm btn-primary fw-semibold" id="ceSaveBtn" onclick="_saveClassEdit()" disabled><i class="bi bi-check2 me-1"></i>Lưu</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -192,6 +236,9 @@ function _renderClasses() {
               <span class="badge ms-1 flex-shrink-0" style="font-size:.65rem;background:${c.is_active ? '#DCFCE7' : '#F1F5F9'};color:${c.is_active ? '#15803D' : '#64748B'};">
                 ${c.is_active ? 'Hoạt động' : 'Chưa đủ điều kiện'}
               </span>
+              <button type="button" class="btn btn-sm flex-shrink-0 ms-1" title="Điều chỉnh thông tin lớp"
+                      style="width:26px;height:26px;padding:0;border-radius:7px;border:1.5px solid #BFDBFE;background:#EFF6FF;color:#1D4ED8;line-height:1;"
+                      onclick="event.stopPropagation(); _openClassEdit(${c.id})"><i class="bi bi-pencil-fill" style="font-size:.7rem;"></i></button>
             </div>
             <div style="font-size:.75rem;color:#64748B;margin-bottom:6px;">
               <i class="bi bi-clock me-1"></i>${slot}
@@ -297,5 +344,87 @@ async function _removeStudent(enrollmentId, name) {
 }
 
 document.addEventListener('DOMContentLoaded', _loadClasses);
+
+// ── Edit class (location / capacity / teacher / chuyên đề) ──
+let _ceId = null, _ceOrig = null;
+function _ceEsc(v) { return String(v ?? '').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+
+async function _openClassEdit(classId) {
+  _ceId = classId; _ceOrig = null;
+  document.getElementById('ceLoading').style.display = '';
+  document.getElementById('ceForm').style.display = 'none';
+  document.getElementById('ceError').classList.add('d-none');
+  document.getElementById('ceSaveBtn').disabled = true;
+  document.getElementById('ceSubtitle').textContent = '';
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalClassEdit'));
+  modal.show();
+  try {
+    const d = await (await fetch(`/admin/classes/${classId}/edit-options`)).json();
+    if (!d.ok) throw new Error(d.error || 'Lỗi tải dữ liệu.');
+    _ceOrig = d.cls;
+    const c = d.cls;
+    document.getElementById('ceSubtitle').textContent =
+      `${c.subject || 'Lớp'} · Khối ${c.grade} · ${c.day_label} ${c.session_type === 'morning' ? 'Sáng' : 'Chiều'} T${c.start_session}${c.duration > 1 ? '–' + (c.start_session + c.duration - 1) : ''}`;
+
+    // Địa điểm: PE shows every room (busy ones disabled), other subjects only the free rooms
+    const rs = document.getElementById('ceRoom');
+    let rooms = c.is_pe ? d.rooms : d.rooms.filter(r => r.available || r.current);
+    rs.innerHTML = '<option value="">— Chưa xếp phòng —</option>' + rooms.map(r =>
+      `<option value="${_ceEsc(r.name)}" ${r.current ? 'selected' : ''} ${(!r.available && !r.current) ? 'disabled' : ''}>${_ceEsc(r.name)}${(!r.available && !r.current) ? ' — ' + _ceEsc(r.reason) : ''}</option>`).join('');
+    if (c.location && !rooms.some(r => r.name === c.location)) rs.add(new Option(c.location, c.location, true, true));
+    document.getElementById('ceRoomHint').textContent = c.is_pe ? 'Môn Thể dục: hiện tất cả địa điểm.' : `${rooms.filter(r => r.available).length} địa điểm trống trong khung giờ này.`;
+
+    document.getElementById('ceCap').value = c.max_capacity || '';
+    document.getElementById('ceCap').min = Math.max(1, c.enrolled);
+    document.getElementById('ceCapHint').textContent = `Đã có ${c.enrolled} học sinh đăng ký — sĩ số không được nhỏ hơn con số này.`;
+
+    // Giáo viên: same subject group first, then the others
+    const ts = document.getElementById('ceTeacher');
+    const grp = (c.subject || '').toLowerCase();
+    const opt = t => `<option value="${t.id}" ${t.current ? 'selected' : ''}>${_ceEsc(t.full_name)}${t.subject_group ? ' · ' + _ceEsc(t.subject_group) : ''}</option>`;
+    const same = d.teachers.filter(t => (t.subject_group || '').toLowerCase() === grp);
+    const other = d.teachers.filter(t => (t.subject_group || '').toLowerCase() !== grp);
+    ts.innerHTML = `<option value="unassigned" ${c.teacher_unassigned ? 'selected' : ''}>Do trường phân công</option>` +
+      (same.length ? `<optgroup label="Cùng tổ bộ môn${c.subject ? ' – ' + _ceEsc(c.subject) : ''}">${same.map(opt).join('')}</optgroup>` : '') +
+      (other.length ? `<optgroup label="Giáo viên khác">${other.map(opt).join('')}</optgroup>` : '');
+
+    document.getElementById('ceTopic').value = c.chuyen_de || '';
+    document.getElementById('ceLoading').style.display = 'none';
+    document.getElementById('ceForm').style.display = '';
+    document.getElementById('ceSaveBtn').disabled = false;
+  } catch (e) {
+    document.getElementById('ceLoading').innerHTML = '<span class="text-danger">' + _ceEsc(e.message || 'Lỗi tải dữ liệu.') + '</span>';
+  }
+}
+
+async function _saveClassEdit() {
+  if (!_ceId || !_ceOrig) return;
+  const err = document.getElementById('ceError'); err.classList.add('d-none');
+  const body = {};
+  const room = document.getElementById('ceRoom').value;
+  if (room !== (_ceOrig.location || '')) body.location = room;
+  const cap = document.getElementById('ceCap').value.trim();
+  if (cap !== String(_ceOrig.max_capacity || '')) body.max_capacity = cap;
+  const tv = document.getElementById('ceTeacher').value;
+  const curT = _ceOrig.teacher_unassigned ? 'unassigned' : String(_ceOrig.teacher_id ?? '');
+  if (tv !== curT) body.teacher_id = tv;
+  const topic = document.getElementById('ceTopic').value.trim();
+  if (topic !== (_ceOrig.chuyen_de || '')) body.chuyen_de = topic;
+  if (!Object.keys(body).length) { bootstrap.Modal.getInstance(document.getElementById('modalClassEdit')).hide(); return; }
+  const btn = document.getElementById('ceSaveBtn'); btn.disabled = true;
+  try {
+    const res = await fetch(`/admin/classes/${_ceId}`, { method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+    const d = await res.json();
+    if (!d.ok) { err.textContent = d.error || 'Không thể lưu.'; err.classList.remove('d-none'); btn.disabled = false; return; }
+    bootstrap.Modal.getInstance(document.getElementById('modalClassEdit')).hide();
+    await _refreshClasses();
+    showAlert('Đã cập nhật thông tin lớp.', 'success');
+  } catch { err.textContent = 'Lỗi kết nối.'; err.classList.remove('d-none'); btn.disabled = false; }
+}
+
+// reload the data but keep the current grade / subject filters
+async function _refreshClasses() {
+  try { _allClasses = (await (await fetch('/admin/manage-classes/data')).json()).classes || []; _renderClasses(); } catch {}
+}
 </script>
 {% endblock %}

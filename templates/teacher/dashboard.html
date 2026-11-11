@@ -513,7 +513,7 @@
                         {% if teacher_view_enrollments %}
                         <button class="cal-detail-inline"
                                 data-cid="{{ cls.id }}"
-                                data-label="Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}"
+                                data-label="Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}{% if cls.chuyen_de %} – {{ cls.chuyen_de }}{% endif %}"
                                 data-slot="{{ day_name(cls.day_of_week) }} Sáng"
                                 data-day="{{ cls.day_of_week }}" data-ses="morning"
                                 data-start="{{ cls.start_session }}" data-dur="{{ cls.duration }}"
@@ -572,7 +572,7 @@
                         {% if teacher_view_enrollments %}
                         <button class="cal-detail-inline"
                                 data-cid="{{ cls.id }}"
-                                data-label="Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}"
+                                data-label="Khối {{ cls.grade }}{% if cls.subject %} – {{ cls.subject }}{% endif %}{% if cls.chuyen_de %} – {{ cls.chuyen_de }}{% endif %}"
                                 data-slot="{{ day_name(cls.day_of_week) }} Chiều"
                                 data-day="{{ cls.day_of_week }}" data-ses="afternoon"
                                 data-start="{{ cls.start_session }}" data-dur="{{ cls.duration }}"
@@ -2021,7 +2021,7 @@ function viewHmStudentDetail(studentId, studentName) {
         </tr></thead><tbody>`;
       data.schedule.forEach(c => {
         html += `<tr>
-          <td class="fw-semibold">${c.subject}</td>
+          <td class="fw-semibold">${c.subject}${c.chuyen_de ? `<div style="font-size:.72rem;font-weight:500;color:#7C3AED;"><i class="bi bi-bookmark-star-fill me-1"></i>Chuyên đề: ${_gEsc(c.chuyen_de)}</div>` : ''}</td>
           <td>${c.teacher}</td>
           <td style="white-space:nowrap;">${c.day_label}</td>
           <td><span class="badge ${c.session_type==='morning'?'bg-warning text-dark':'bg-primary'}" style="font-size:.68rem;">${c.session_label}</span></td>
@@ -2062,7 +2062,7 @@ function viewHmStudentLog(studentId, studentName) {
         const col = ACTION_COLOR[r.action] || '#64748B';
         html += `<tr style="background:${bg};border-bottom:1px solid #F1F5F9;">
           <td style="padding:7px 8px;"><span style="color:${col};font-weight:600;">${r.action}</span></td>
-          <td style="padding:7px 8px;">${r.subject}</td>
+          <td style="padding:7px 8px;">${r.subject}${r.chuyen_de ? `<div style="font-size:.72rem;color:#7C3AED;"><i class="bi bi-bookmark-star-fill me-1"></i>Chuyên đề: ${_gEsc(r.chuyen_de)}</div>` : ''}</td>
           <td style="padding:7px 8px;color:#475569;">${r.teacher}</td>
           <td style="padding:7px 8px;white-space:nowrap;color:#475569;font-size:.78rem;">${r.slot}</td>
           <td style="padding:7px 8px;font-size:.74rem;color:#94A3B8;white-space:nowrap;">${r.ts ? r.ts.slice(0,19) : '—'}</td>

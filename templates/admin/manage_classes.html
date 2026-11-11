@@ -155,11 +155,14 @@ function _setGrade(g) {
 
 function _setSubject(s) {
   _filterSubject = s;
+  _setSubjectActive(s);
+  _renderClasses();
+}
+function _setSubjectActive(s) {
   document.querySelectorAll('.subj-tab-btn').forEach(btn => {
     const v = btn.dataset.subj;
     btn.className = 'filter-tab subj-tab-btn' + ((s === null ? v === '' : v === s) ? ' active' : '');
   });
-  _renderClasses();
 }
 
 function _buildSubjectTabs(classes) {
@@ -168,8 +171,10 @@ function _buildSubjectTabs(classes) {
   row.innerHTML = '<span style="font-size:.74rem;font-weight:700;color:#374151;min-width:36px;">Môn</span>' +
     `<button class="filter-tab subj-tab-btn active" data-subj="" onclick="_setSubject(null)">Tất cả</button>` +
     subjects.map(s =>
-      `<button class="filter-tab subj-tab-btn" data-subj="${s.replace(/"/g,'&quot;')}" onclick="_setSubject(${JSON.stringify(s)})">${s}</button>`
+      `<button class="filter-tab subj-tab-btn" data-subj="${_escCd(s)}" onclick="_setSubject(this.dataset.subj)">${_escCd(s)}</button>`
     ).join('');
+  // keep the current selection highlighted after a rebuild
+  if (_filterSubject !== null) _setSubjectActive(_filterSubject);
 }
 
 async function _loadClasses() {

@@ -70,6 +70,12 @@
 {# ── Main content ────────────────────────────────────────────── #}
 {% block content %}
 <style>
+  .stu-topic-line { font-size:.76rem; color:#7C3AED; line-height:1.3; }
+  .stu-topic-line strong { font-weight:700; }
+  .stu-topic { font-size:.62rem; color:#7C3AED; line-height:1.25; margin-top:1px; word-break:break-word; }
+  .stu-topic i { font-size:.55rem; }
+</style>
+<style>
 @media (max-width: 575.98px) {
   .action-col {
     flex-direction: row-reverse !important;
@@ -266,6 +272,7 @@
                   <div class="stu-class-card">
                     <div>
                       <div class="stu-subject">{{ cls.subject or cls.subject_group }}</div>
+                      {% if cls.chuyen_de %}<div class="stu-topic" title="Chuyên đề: {{ cls.chuyen_de }}"><i class="bi bi-bookmark-star-fill"></i> {{ cls.chuyen_de }}</div>{% endif %}
                       <div class="stu-teacher"><i class="bi bi-person-fill" style="font-size:.6rem;"></i> {{ cls.teacher_name }}</div>
                       <div class="stu-room" id="cal-room-{{ cls.id }}">{% if cls.location %}<i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> {{ cls.location }}{% endif %}</div>
                     </div>
@@ -300,6 +307,7 @@
                   <div class="stu-class-card">
                     <div>
                       <div class="stu-subject">{{ cls.subject or cls.subject_group }}</div>
+                      {% if cls.chuyen_de %}<div class="stu-topic" title="Chuyên đề: {{ cls.chuyen_de }}"><i class="bi bi-bookmark-star-fill"></i> {{ cls.chuyen_de }}</div>{% endif %}
                       <div class="stu-teacher"><i class="bi bi-person-fill" style="font-size:.6rem;"></i> {{ cls.teacher_name }}</div>
                       <div class="stu-room" id="cal-room-{{ cls.id }}">{% if cls.location %}<i class="bi bi-geo-alt-fill" style="font-size:.6rem;"></i> {{ cls.location }}{% endif %}</div>
                     </div>
@@ -407,6 +415,7 @@
               {% if c.proposed_by_teacher_id %}<span class="badge ms-1" style="background:#EDE9FE;color:#6D28D9;font-size:.66rem;font-weight:700;" title="{{ (c.proposer_name or '') | name_fmt }}"><i class="bi bi-person-hearts me-1"></i>Đề xuất bởi GVCN</span>
               {% else %}<span class="badge ms-1" style="background:#E0F2FE;color:#075985;font-size:.66rem;font-weight:700;"><i class="bi bi-building me-1"></i>Nhà trường đăng ký</span>{% endif %}
             </div>
+            {% if c.chuyen_de %}<div class="stu-topic-line"><i class="bi bi-bookmark-star-fill me-1"></i>Chuyên đề: <strong>{{ c.chuyen_de }}</strong></div>{% endif %}
             <div class="text-muted" style="font-size:.78rem;">
               {% if c.teacher_name %}{{ c.teacher_name | name_fmt }} &middot; {% endif %}{{ day_name(c.day_of_week) }} &middot; {{ session_label(c.session_type, c.start_session, c.duration) }}{% if c.location %} &middot; <i class="bi bi-geo-alt"></i> {{ c.location }}{% endif %}
             </div>
@@ -449,6 +458,7 @@
               <div class="fw-bold text-truncate" style="font-size:.88rem;color:#065f46;">
                 {{ cls.subject or cls.subject_group }}
               </div>
+              {% if cls.chuyen_de %}<div class="stu-topic-line text-truncate"><i class="bi bi-bookmark-star-fill me-1"></i>Chuyên đề: <strong>{{ cls.chuyen_de }}</strong></div>{% endif %}
               <div class="text-muted" style="font-size:.75rem;">
                 {{ cls.teacher_name }}
                 &middot;
@@ -543,7 +553,7 @@
               <div class="fw-bold" style="font-size:1.05rem;color:var(--p-deep);line-height:1.3;">
                 {{ cls.subject or cls.subject_group }}
               </div>
-              {% if cls.chuyen_de %}<div style="font-size:.82rem;color:#6B7280;margin-top:2px;line-height:1.3;">{{ cls.chuyen_de }}</div>{% endif %}
+              {% if cls.chuyen_de %}<div class="stu-topic-line" style="font-size:.84rem;margin-top:2px;"><i class="bi bi-bookmark-star-fill me-1"></i>Chuyên đề: <strong>{{ cls.chuyen_de }}</strong></div>{% endif %}
               <div class="mt-2 small fw-semibold" style="color:#334155;">
                 <i class="bi bi-person-fill me-1" style="color:var(--p);"></i>{{ cls.teacher_name }}
               </div>

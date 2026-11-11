@@ -918,6 +918,7 @@ def _fill_attendance_sheet(ws, cls, teacher_row, enrolled):
     info_rows = [
         ("Giáo viên", _name_fmt(teacher_row.full_name) if teacher_row else ""),
         ("Tổ bộ môn", teacher_row.subject_group if teacher_row and teacher_row.subject_group else cls.subject or ""),
+        *([("Chuyên đề", cls.chuyen_de)] if getattr(cls, "chuyen_de", None) else []),
         ("Thời gian",  time_str),
         ("Địa điểm",  cls.location or "(chưa xếp)"),
         ("Sĩ số",     f"{len(enrolled)} / {cls.max_capacity or '?'}"),
@@ -2353,7 +2354,7 @@ def student_dashboard():
     }
     with engine.connect() as conn:
         pending_confirms = conn.execute(
-            select(classes.c.id.label("class_id"), classes.c.subject, classes.c.day_of_week, classes.c.session_type,
+            select(classes.c.id.label("class_id"), classes.c.subject, classes.c.chuyen_de, classes.c.day_of_week, classes.c.session_type,
                    classes.c.start_session, classes.c.duration, classes.c.location,
                    teachers.c.full_name.label("teacher_name"), teachers.c.subject_group,
                    enrollments.c.enrolled_at, enrollments.c.proposed_by_teacher_id,
@@ -2594,7 +2595,8 @@ def student_export_schedule():
         ).fetchall()
 
     slots = [{'day': c.day_of_week, 'session': c.session_type, 'start': c.start_session,
-               'duration': c.duration or 1, 'line1': c.subject or c.subject_group or '—',
+               'duration': c.duration or 1,
+               'line1': (c.subject or c.subject_group or '—') + (f"\nChuyên đề: {c.chuyen_de}" if c.chuyen_de else ''),
                'line2': _name_fmt(c.teacher_name), 'line3': ''}
              for c in enrolled]
     title    = "THỜI KHOÁ BIỂU"
@@ -2629,7 +2631,7 @@ def teacher_export_schedule():
 
     slots = [{'day': c.day_of_week, 'session': c.session_type, 'start': c.start_session,
                'duration': c.duration or 1, 'line1': tv.subject_group or '—',
-               'line2': f"Khối {c.grade}", 'line3': c.location or ''}
+               'line2': f"Khối {c.grade}" + (f" · CĐ: {c.chuyen_de}" if c.chuyen_de else ''), 'line3': c.location or ''}
              for c in tclasses]
     title    = "THỜI KHOÁ BIỂU GIẢNG DẠY"
     subtitle = f"{_name_fmt(tv.full_name)} — {tv.subject_group}"
@@ -4813,6 +4815,7 @@ def api_teacher_homeroom_export():
                     enrollments.c.student_id,
                     classes.c.id.label("class_id"),
                     classes.c.subject,
+                    classes.c.chuyen_de,
                     classes.c.day_of_week,
                     classes.c.session_type,
                     classes.c.start_session,
@@ -4858,7 +4861,7 @@ def api_teacher_homeroom_export():
     if cols["schedule"]:
         _subj_map = _dd(set)
         for r in all_enrolls:
-            _subj_map[r.student_id].add(r.subject)
+            _subj_map[r.student_id].add(f"{r.subject} ({r.chuyen_de})" if r.chuyen_de else r.subject)
         subjects_by_student = {sid: " - ".join(sorted(subjs)) for sid, subjs in _subj_map.items()}
 
     # ══ Sheet 1: Danh sách học sinh ════════════════════════════════════════
@@ -4943,8 +4946,9 @@ def api_teacher_homeroom_export():
                 day_str = DAY.get(ci_row.day_of_week, str(ci_row.day_of_week))
                 tiet_str = f"Tiết {ci_row.start_session}–{ci_row.start_session + ci_row.duration - 1}"
                 loc_str = ci_row.location or "Chưa xếp phòng"
+                cd_str = f"Chuyên đề: {ci_row.chuyen_de}   |   " if ci_row.chuyen_de else ""
                 cls_header = (
-                    f"GV: {ci_row.teacher_name}   |   "
+                    f"{cd_str}GV: {ci_row.teacher_name}   |   "
                     f"{day_str} – {buoi} – {tiet_str}   |   "
                     f"Phòng: {loc_str}"
                 )
@@ -5264,14 +5268,14 @@ def admin_room_detail_export():
                     bk = book_map.get((ses, room, d, s))
                     if bk:
                         subj = bk.subject or bk.subject_group or ""
-                        row_data.append(f"K{bk.grade} – {subj}\n{bk.teacher_name}")
+                        row_data.append(f"K{bk.grade} – {subj}\n{bk.teacher_name}" + (f"\nCĐ: {bk.chuyen_de}" if bk.chuyen_de else ""))
                     elif is_ext_busy(ses, room, d, s):
                         row_data.append("Bận")
                     else:
                         row_data.append("")
             ws.append(row_data)
             r_idx = ws.max_row
-            ws.row_dimensions[r_idx].height = 32
+            ws.row_dimensions[r_idx].height = 44
             for col_idx in range(1, 14):
                 c = ws.cell(r_idx, col_idx)
                 c.alignment = Alignment(horizontal="center", vertical="center",
@@ -5433,7 +5437,7 @@ def admin_class_reg_export():
     ws = wb.active
     ws.title = "Đăng ký mở lớp"
     headers = ["STT", "Họ và tên GV", "Email GV", "Tổ bộ môn", "Khối", "Thứ",
-               "Buổi / Tiết", "Số tiết", "Môn học", "Địa điểm",
+               "Buổi / Tiết", "Số tiết", "Môn học", "Chuyên đề", "Địa điểm",
                "Sĩ số", "HS đăng ký", "Thời gian đăng ký"]
     ws.append(headers)
     from openpyxl.styles import PatternFill, Font, Alignment
@@ -5458,13 +5462,14 @@ def admin_class_reg_export():
             f"{buoi} – {tiet_label}",
             c.duration,
             c.subject or "",
+            c.chuyen_de or "",
             c.location or "",
             c.max_capacity or "",
             enroll_counts.get(c.id, 0),
             c.created_at or "",
         ])
-    for col, width in zip(range(1, 14),
-                          [5, 22, 26, 14, 7, 8, 16, 7, 16, 20, 7, 10, 20]):
+    for col, width in zip(range(1, 15),
+                          [5, 22, 26, 14, 7, 8, 16, 7, 16, 22, 20, 7, 10, 20]):
         ws.column_dimensions[get_column_letter(col)].width = width
 
     buf = io.BytesIO()
@@ -6367,7 +6372,7 @@ def api_teacher_student_schedule(student_id):
             select(
                 classes.c.id.label("class_id"),
                 classes.c.grade, classes.c.day_of_week, classes.c.session_type,
-                classes.c.start_session, classes.c.duration, classes.c.subject, classes.c.location,
+                classes.c.start_session, classes.c.duration, classes.c.subject, classes.c.chuyen_de, classes.c.location,
                 teachers.c.full_name.label("teacher_name"), teachers.c.subject_group,
                 enrollments.c.enrolled_at,
             )
@@ -6379,6 +6384,7 @@ def api_teacher_student_schedule(student_id):
     schedule = [{
         "class_id": e.class_id,
         "subject": e.subject or e.subject_group or "—",
+        "chuyen_de": e.chuyen_de or "",
         "teacher": _name_fmt(e.teacher_name),
         "day_label": day_name(e.day_of_week),
         "session_type": e.session_type,
@@ -6410,7 +6416,7 @@ def api_teacher_student_log(student_id):
             return jsonify(ok=False, error="Không có quyền"), 403
         rows = conn.execute(
             select(student_enroll_log, classes.c.day_of_week, classes.c.session_type,
-                   classes.c.start_session, classes.c.duration, classes.c.subject,
+                   classes.c.start_session, classes.c.duration, classes.c.subject, classes.c.chuyen_de,
                    teachers.c.full_name.label("teacher_name"), teachers.c.subject_group)
             .outerjoin(classes, student_enroll_log.c.class_id == classes.c.id)
             .outerjoin(teachers, classes.c.teacher_id == teachers.c.id)
@@ -6424,6 +6430,7 @@ def api_teacher_student_log(student_id):
         result.append({
             "action": _ENROLL_LABEL.get(r.action, r.action),
             "subject": subject,
+            "chuyen_de": r.chuyen_de or "",
             "teacher": _name_fmt(r.teacher_name) if r.teacher_name else "—",
             "slot": slot_label,
             "ts": r.ts,
@@ -7026,7 +7033,7 @@ def admin_class_schedule_export():
                     items = grid.get((d, slot_start), [])
                     if i < len(items):
                         c = items[i]
-                        row.append(f"K{c.grade} — {c.teacher_name}")
+                        row.append(f"K{c.grade} — {c.teacher_name}" + (f"\nCĐ: {c.chuyen_de}" if c.chuyen_de else ""))
                     else:
                         row.append("")
                 ws.append(row)
@@ -8024,6 +8031,8 @@ def admin_enrollment_export():
             enrolled_count = len(enrolled_students)
             summary_rows.append([
                 cls.id,
+                cls.subject or "",
+                cls.chuyen_de or "",
                 cls.teacher_name,
                 cls.subject_group or cls.subject or "",
                 cls.grade,
@@ -8054,6 +8063,7 @@ def admin_enrollment_export():
             info_data = [
                 ("Giáo viên",  cls.teacher_name),
                 ("Tổ bộ môn", cls.subject_group or cls.subject or "—"),
+                *([("Chuyên đề", cls.chuyen_de)] if cls.chuyen_de else []),
                 ("Thời gian",  f"{day_name(cls.day_of_week)}, {buoi}, {tiet_str}"),
                 ("Địa điểm",   cls.location or "—"),
                 ("Sĩ số",      f"{enrolled_count} / {cls.max_capacity or '—'}"),
@@ -8102,7 +8112,7 @@ def admin_enrollment_export():
     ws_sum = wb.create_sheet(title="Tổng hợp", index=0)
 
     # Title
-    ws_sum.merge_cells("A1:J1")
+    ws_sum.merge_cells("A1:L1")
     tc = ws_sum["A1"]
     tc.value     = "TỔNG HỢP ĐĂNG KÝ MÔN HỌC"
     tc.font      = Font(bold=True, size=14, color="FFFFFF")
@@ -8110,9 +8120,9 @@ def admin_enrollment_export():
     tc.alignment = Alignment(horizontal="center", vertical="center")
     ws_sum.row_dimensions[1].height = 32
 
-    sum_headers = ["ID Lớp", "Giáo viên", "Tổ bộ môn", "Khối", "Thứ", "Buổi",
+    sum_headers = ["ID Lớp", "Môn", "Chuyên đề", "Giáo viên", "Tổ bộ môn", "Khối", "Thứ", "Buổi",
                    "Tiết", "Địa điểm", "Sĩ số ĐK", "Sĩ số tối đa"]
-    sum_widths  = [9, 28, 16, 8, 8, 8, 14, 20, 12, 14]
+    sum_widths  = [9, 16, 22, 28, 16, 8, 8, 8, 14, 20, 12, 14]
     for ci, (h, w) in enumerate(zip(sum_headers, sum_widths), 1):
         hdr_cell(ws_sum, 2, ci, h, bg="10B981")
         ws_sum.column_dimensions[get_column_letter(ci)].width = w
@@ -8120,13 +8130,13 @@ def admin_enrollment_export():
 
     for ri, row in enumerate(summary_rows, 3):
         fill_bg = "F0FDF4" if ri % 2 == 0 else "FFFFFF"
-        aligns  = ["center", "left", "center", "center", "center", "center",
-                   "center", "left", "center", "center"]
+        aligns  = ["center", "left", "left", "left", "center", "center", "center",
+                   "center", "center", "left", "center", "center"]
         for ci, (v, al) in enumerate(zip(row, aligns), 1):
             data_cell(ws_sum, ri, ci, v, align=al, fill_color=fill_bg)
 
     ws_sum.freeze_panes = "A3"
-    ws_sum.auto_filter.ref = f"A2:J{1 + len(summary_rows) + 1}"
+    ws_sum.auto_filter.ref = f"A2:L{1 + len(summary_rows) + 1}"
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -9128,13 +9138,13 @@ def admin_manage_classes_export_all():
 
     title_fill = PatternFill("solid", fgColor="DBEAFE")
     ws_sum.append(["TỔNG HỢP DANH SÁCH LỚP ĐĂNG KÝ TỰ CHỌN"])
-    ws_sum.merge_cells("A1:I1")
+    ws_sum.merge_cells("A1:J1")
     ws_sum["A1"].font = Font(bold=True, size=13)
     ws_sum["A1"].alignment = center
     ws_sum["A1"].fill = title_fill
     ws_sum.row_dimensions[1].height = 22
 
-    sum_headers = ["STT", "Môn", "Khối", "Giáo viên", "Tổ bộ môn", "Lịch", "Địa điểm", "Sĩ số ĐK", "Sĩ số tối đa"]
+    sum_headers = ["STT", "Môn", "Chuyên đề", "Khối", "Giáo viên", "Tổ bộ môn", "Lịch", "Địa điểm", "Sĩ số ĐK", "Sĩ số tối đa"]
     ws_sum.append(sum_headers)
     hr = ws_sum.max_row
     for col in range(1, len(sum_headers) + 1):
@@ -9158,6 +9168,7 @@ def admin_manage_classes_export_all():
         row_data = [
             idx,
             r.subject or "",
+            r.chuyen_de or "",
             r.grade,
             _name_fmt(teacher_row.full_name) if teacher_row else "",
             r.subject_group or r.subject or "",
@@ -9171,7 +9182,7 @@ def admin_manage_classes_export_all():
         for col in range(1, len(sum_headers) + 1):
             c = ws_sum.cell(data_r, col)
             c.border = border
-            c.alignment = center if col in (1, 3, 8, 9) else left
+            c.alignment = center if col in (1, 4, 9, 10) else left
             if alt:
                 c.fill = alt
 
@@ -9188,7 +9199,7 @@ def admin_manage_classes_export_all():
         _fill_attendance_sheet(ws_cls, r, teacher_row, enrolled)
 
     # summary column widths
-    for col_letter, w in zip("ABCDEFGHI", [5, 16, 7, 22, 14, 22, 14, 9, 10]):
+    for col_letter, w in zip("ABCDEFGHIJ", [5, 16, 22, 7, 22, 14, 22, 14, 9, 10]):
         ws_sum.column_dimensions[col_letter].width = w
 
     buf = io.BytesIO()

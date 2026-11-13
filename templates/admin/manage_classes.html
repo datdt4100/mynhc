@@ -51,9 +51,13 @@
       <button class="filter-tab"        id="gradeTab_11"   onclick="_setGrade(11)">Khối 11</button>
       <button class="filter-tab"        id="gradeTab_12"   onclick="_setGrade(12)">Khối 12</button>
     </div>
-    <div class="d-flex align-items-center gap-2 flex-wrap" id="subjectFilterRow">
+    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap" id="subjectFilterRow">
       <span style="font-size:.74rem;font-weight:700;color:#374151;min-width:36px;">Môn</span>
       <button class="filter-tab active" id="subjTab_all" onclick="_setSubject(null)">Tất cả</button>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap" id="topicFilterRow">
+      <span style="font-size:.74rem;font-weight:700;color:#374151;min-width:36px;">Chuyên đề</span>
+      <button class="filter-tab active" id="topicTab_all" onclick="_setTopic(null)">Tất cả</button>
     </div>
   </div>
 
@@ -141,6 +145,7 @@
 let _allClasses   = [];
 let _filterGrade  = null;
 let _filterSubject = null;
+let _filterTopic = null;      // null = all, '' = "Cơ bản" (no chuyên đề), else the chuyên đề name
 let _currentClassId = null;
 const DAY_NAMES = {2:'Thứ 2',3:'Thứ 3',4:'Thứ 4',5:'Thứ 5',6:'Thứ 6',7:'Thứ 7'};
 
@@ -158,6 +163,29 @@ function _setSubject(s) {
   _setSubjectActive(s);
   _renderClasses();
 }
+function _setTopic(v) {
+  _filterTopic = v;
+  _setTopicActive(v);
+  _renderClasses();
+}
+function _setTopicActive(v) {
+  document.querySelectorAll('.topic-tab-btn').forEach(btn => {
+    const k = btn.dataset.topic;   // 'all' | '' (Cơ bản) | name
+    const on = v === null ? k === '\u0000all' : k === v;
+    btn.className = 'filter-tab topic-tab-btn' + (on ? ' active' : '');
+  });
+}
+function _buildTopicTabs(classes) {
+  const topics = [...new Set(classes.map(c => (c.chuyen_de || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
+  const row = document.getElementById('topicFilterRow');
+  const btn = (key, label, extra='') => `<button class="filter-tab topic-tab-btn" data-topic="${_escCd(key)}" onclick="_setTopic(this.dataset.topic === '\u0000all' ? null : this.dataset.topic)">${_escCd(label)}${extra}</button>`;
+  row.innerHTML = '<span style="font-size:.74rem;font-weight:700;color:#374151;min-width:36px;">Chuyên đề</span>' +
+    btn('\u0000all', 'Tất cả') + btn('', 'Cơ bản') + topics.map(x => btn(x, x)).join('');
+  // a topic that no longer exists falls back to "Tất cả"
+  if (_filterTopic !== null && _filterTopic !== '' && !topics.includes(_filterTopic)) _filterTopic = null;
+  _setTopicActive(_filterTopic);
+}
+
 function _setSubjectActive(s) {
   document.querySelectorAll('.subj-tab-btn').forEach(btn => {
     const v = btn.dataset.subj;
@@ -182,6 +210,7 @@ async function _loadClasses() {
     const d = await (await fetch('/admin/manage-classes/data')).json();
     _allClasses = d.classes || [];
     _buildSubjectTabs(_allClasses);
+    _buildTopicTabs(_allClasses);
     _renderClasses();
   } catch(e) {
     document.getElementById('classesBody').innerHTML = '<div class="text-danger text-center py-4">Lỗi tải dữ liệu.</div>';
@@ -194,6 +223,7 @@ function _filtered() {
   return _allClasses.filter(c => {
     if (_filterGrade !== null && c.grade !== _filterGrade) return false;
     if (_filterSubject !== null && (c.subject || c.subject_group || '') !== _filterSubject) return false;
+    if (_filterTopic !== null && (c.chuyen_de || '').trim() !== _filterTopic) return false;
     return true;
   });
 }
@@ -429,7 +459,7 @@ async function _saveClassEdit() {
 
 // reload the data but keep the current grade / subject filters
 async function _refreshClasses() {
-  try { _allClasses = (await (await fetch('/admin/manage-classes/data')).json()).classes || []; _renderClasses(); } catch {}
+  try { _allClasses = (await (await fetch('/admin/manage-classes/data')).json()).classes || []; _buildTopicTabs(_allClasses); _renderClasses(); } catch {}
 }
 </script>
 {% endblock %}

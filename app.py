@@ -4685,9 +4685,11 @@ def api_gvcn_class_students(class_id):
             "status": r.confirm_status or "registered",
             "source": "me" if r.proposed_by_teacher_id == t.id else ("gvcn" if r.proposed_by_teacher_id else
                                                                       ("admin" if r.confirm_status else "self")),
+            "can_withdraw": r.confirm_status == "pending" and r.proposed_by_teacher_id == t.id,
             "at": r.confirm_at or r.enrolled_at} for r in rows]
     out += [{"student_id": d["student_id"], "full_name": d["full_name"], "status": "declined",
-             "source": "me" if d["proposer_id"] == t.id else d["source"], "at": d["at"]} for d in declined]
+             "source": "me" if d["proposer_id"] == t.id else d["source"], "can_withdraw": False,
+             "at": d["at"]} for d in declined]
     order = {"pending": 0, "accepted": 1, "declined": 2, "registered": 3}
     out.sort(key=lambda x: (order.get(x["status"], 9), _fold(x["full_name"])))
     return jsonify(ok=True, class_info={"id": cls.id, **_slot_dict(cls)}, students=out)
@@ -4707,6 +4709,7 @@ def api_gvcn_class_candidates(class_id):
         sids = [x.id for x in studs] or [0]
         sched = conn.execute(
             select(enrollments.c.student_id, enrollments.c.class_id, enrollments.c.confirm_status,
+                   enrollments.c.proposed_by_teacher_id,
                    classes.c.subject, classes.c.day_of_week, classes.c.session_type, classes.c.start_session,
                    classes.c.duration, teachers.c.subject_group)
             .select_from(enrollments.join(classes, classes.c.id == enrollments.c.class_id)
@@ -4721,10 +4724,11 @@ def api_gvcn_class_candidates(class_id):
     new_start, new_end = cls.start_session, cls.start_session + cls.duration - 1
     out = []
     for st in studs:
-        state, detail = "ok", None
+        state, detail, mine = "ok", None, False
         for r in by_student.get(st.id, []):
             if r.class_id == class_id:
                 state = r.confirm_status or "registered"
+                mine = state == "pending" and r.proposed_by_teacher_id == t.id
                 break
             if (r.day_of_week == cls.day_of_week and r.session_type == cls.session_type
                     and r.start_session <= new_end and new_start <= r.start_session + r.duration - 1):
@@ -4735,7 +4739,7 @@ def api_gvcn_class_candidates(class_id):
         if state == "ok" and full:
             state = "full"
         out.append({"student_id": st.id, "full_name": _name_fmt(st.full_name), "state": state, "detail": detail,
-                    "declined_before": st.id in declined})
+                    "can_withdraw": mine, "declined_before": st.id in declined})
     out.sort(key=lambda x: _fold(x["full_name"]))
     why = _gvcn_propose_block_reason(cls)
     return jsonify(ok=True, class_info={"id": cls.id, **_slot_dict(cls)}, students=out,
@@ -4768,6 +4772,38 @@ def api_gvcn_propose(class_id):
     if ok:
         _bump()
     return jsonify(ok=ok, error=error)
+
+
+@app.route("/api/teacher/gvcn/class/<int:class_id>/propose/<int:student_id>", methods=["DELETE"])
+@teacher_required
+def api_gvcn_withdraw_proposal(class_id, student_id):
+    """GVCN withdraws a proposal they made, while the student has not answered it yet."""
+    with engine.begin() as conn:
+        t, ctx, err = _gvcn_class_or_error(conn, class_id)
+        if err:
+            return err
+        h, cls = ctx
+        st = conn.execute(select(students.c.class_name).where(students.c.id == student_id)).fetchone()
+        if not st or st.class_name != h.class_name:
+            return jsonify(ok=False, error="Học sinh không thuộc lớp chủ nhiệm của bạn."), 403
+        row = conn.execute(select(enrollments.c.id, enrollments.c.confirm_status, enrollments.c.proposed_by_teacher_id)
+                           .where(and_(enrollments.c.student_id == student_id,
+                                       enrollments.c.class_id == class_id))).fetchone()
+        if not row:
+            return jsonify(ok=False, error="Không còn đề xuất nào cho học sinh này (có thể học sinh đã từ chối hoặc đã được xử lý).")
+        if row.confirm_status != "pending":
+            return jsonify(ok=False, error="Học sinh đã xác nhận tham gia nên không thể thu hồi.")
+        if row.proposed_by_teacher_id != t.id:
+            return jsonify(ok=False, error="Chỉ thu hồi được đề xuất do chính bạn gửi.")
+        # conditional delete: if the student answered in the meantime, nothing is removed
+        res = conn.execute(delete(enrollments).where(and_(enrollments.c.id == row.id,
+                                                          enrollments.c.confirm_status == "pending")))
+        if not res.rowcount:
+            return jsonify(ok=False, error="Học sinh vừa phản hồi đề xuất, vui lòng tải lại danh sách.")
+        conn.execute(insert(student_enroll_log).values(
+            student_id=student_id, class_id=class_id, action="W", ts=now_vn(), note=f"gvcn:{t.id}"))
+    _bump()
+    return jsonify(ok=True)
 
 
 @app.route("/api/teacher/homeroom-students/export")
@@ -8751,7 +8787,8 @@ def admin_class_add_students_upload(class_id):
 # ---------------------------------------------------------------------------
 
 _ACTION_LABEL = {'A': 'Phân công', 'U': 'Gỡ bỏ (đổi GV)', 'C': 'Tạo lớp', 'D': 'Xóa lớp'}
-_ENROLL_LABEL = {'A': 'Đăng ký', 'D': 'Hủy đăng ký', 'Y': 'Xác nhận tham gia', 'N': 'Từ chối tham gia'}
+_ENROLL_LABEL = {'A': 'Đăng ký', 'D': 'Hủy đăng ký', 'Y': 'Xác nhận tham gia', 'N': 'Từ chối tham gia',
+                 'W': 'GVCN thu hồi đề xuất'}
 
 def _decode_slot(slot: str) -> str:
     """Decode compact slot 'T3S1x2' → 'T3 Sáng T1–2' (ignores extended pipe fields)"""

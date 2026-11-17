@@ -171,16 +171,16 @@ function _setTopic(v) {
 function _setTopicActive(v) {
   document.querySelectorAll('.topic-tab-btn').forEach(btn => {
     const k = btn.dataset.topic;   // 'all' | '' (Cơ bản) | name
-    const on = v === null ? k === '\u0000all' : k === v;
+    const on = v === null ? k === '__all__' : k === v;
     btn.className = 'filter-tab topic-tab-btn' + (on ? ' active' : '');
   });
 }
 function _buildTopicTabs(classes) {
   const topics = [...new Set(classes.map(c => (c.chuyen_de || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi'));
   const row = document.getElementById('topicFilterRow');
-  const btn = (key, label, extra='') => `<button class="filter-tab topic-tab-btn" data-topic="${_escCd(key)}" onclick="_setTopic(this.dataset.topic === '\u0000all' ? null : this.dataset.topic)">${_escCd(label)}${extra}</button>`;
+  const btn = (key, label, extra='') => `<button class="filter-tab topic-tab-btn" data-topic="${_escCd(key)}" onclick="_setTopic(this.dataset.topic === '__all__' ? null : this.dataset.topic)">${_escCd(label)}${extra}</button>`;
   row.innerHTML = '<span style="font-size:.74rem;font-weight:700;color:#374151;min-width:36px;">Chuyên đề</span>' +
-    btn('\u0000all', 'Tất cả') + btn('', 'Cơ bản') + topics.map(x => btn(x, x)).join('');
+    btn('__all__', 'Tất cả') + btn('', 'Cơ bản') + topics.map(x => btn(x, x)).join('');
   // a topic that no longer exists falls back to "Tất cả"
   if (_filterTopic !== null && _filterTopic !== '' && !topics.includes(_filterTopic)) _filterTopic = null;
   _setTopicActive(_filterTopic);

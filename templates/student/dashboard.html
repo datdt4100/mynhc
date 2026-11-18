@@ -357,13 +357,13 @@
   <div id="tab-enroll" style="display:none;">
 
   {# Registration status banner #}
-  {% if supplement_reg_open and phase2_allowed and cancel_only %}
+  {% if supplement_reg_open and phase2_allowed and propose_only %}
   <div class="alert d-flex align-items-center gap-2 mb-4 reveal" role="alert"
        style="background:#FEF2F2;border:1.5px solid #FECACA;color:#991B1B;">
     <i class="bi bi-x-octagon-fill fs-5 flex-shrink-0" style="color:#EF4444;"></i>
     <div>
-      <span class="fw-bold">Giai đoạn 3 — Chỉ huỷ môn học.</span>
-      <span style="font-size:.88rem;"> Bạn chỉ có thể <strong>huỷ</strong> các môn đã đăng ký. Không thể đăng ký mới, và môn đã huỷ sẽ <strong>không đăng ký lại được</strong>.</span>
+      <span class="fw-bold">Giai đoạn 3 — Chỉ đề xuất.</span>
+      <span style="font-size:.88rem;"> Bạn không thể tự đăng ký hay huỷ môn. Chỉ giáo viên chủ nhiệm có thể <strong>đề xuất</strong> lớp, và bạn chọn <strong>Tham gia / Không tham gia</strong>.</span>
     </div>
   </div>
   {% elif supplement_reg_open and phase2_allowed %}
@@ -617,9 +617,9 @@
               <button class="btn btn-sm btn-secondary action-btn-{{ cls.id }}" disabled>
                 <i class="bi bi-slash-circle me-1"></i>Đã đủ
               </button>
-              {% elif cancel_only %}
+              {% elif propose_only %}
               <button class="btn btn-sm btn-secondary action-btn-{{ cls.id }}" disabled>
-                <i class="bi bi-ban me-1"></i>Chỉ huỷ
+                <i class="bi bi-ban me-1"></i>Chỉ đề xuất
               </button>
               {% else %}
               <button class="btn btn-sm btn-primary action-btn-{{ cls.id }}"
@@ -901,10 +901,10 @@ async function refreshStudentSchedule() {
           btn.disabled  = true;
           btn.onclick   = null;
         } else {
-          if (cancelOnly) {
+          if (proposeOnly) {
             btn.className = 'btn btn-sm btn-secondary action-btn-' + classId;
             btn.style.cssText = '';
-            btn.innerHTML = '<i class="bi bi-ban me-1"></i>Chỉ huỷ';
+            btn.innerHTML = '<i class="bi bi-ban me-1"></i>Chỉ đề xuất';
             btn.disabled  = true;
             btn.onclick   = null;
           } else {
@@ -1025,7 +1025,7 @@ async function refreshStudentSchedule() {
   var supplementOpen = {{ 'true' if supplement_reg_open else 'false' }};
   var phase2Allowed = {{ phase2_allowed | tojson }};
   var anyRegOpen  = (regOpen || supplementOpen) && phase2Allowed;
-  var cancelOnly  = {{ 'true' if cancel_only else 'false' }};
+  var proposeOnly  = {{ 'true' if propose_only else 'false' }};
   var lockedClassIds = new Set({{ locked_class_ids | list | tojson }});
 
   function isLocked(classId) {
@@ -1131,11 +1131,11 @@ async function refreshStudentSchedule() {
           btn.style.cssText = '';
           btn.innerHTML = '<i class="bi bi-slash-circle me-1"></i>Đã đủ';
           btn.onclick = null;
-        } else if (cancelOnly) {
+        } else if (proposeOnly) {
           btn.disabled = true;
           btn.className = 'btn btn-sm btn-secondary action-btn-' + id;
           btn.style.cssText = '';
-          btn.innerHTML = '<i class="bi bi-ban me-1"></i>Chỉ huỷ';
+          btn.innerHTML = '<i class="bi bi-ban me-1"></i>Chỉ đề xuất';
           btn.onclick = null;
         } else if (anyRegOpen) {
           btn.disabled = false;

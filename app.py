@@ -553,7 +553,7 @@ def init_db():
                            ("teacher_reg_open", "0"),
                            ("student_reg_open", "0"),
                            ("supplement_reg_open", "0"),
-                           ("cancel_only", "0"),
+                           ("propose_only", "0"),
                            ("maintenance_mode", "0"),
                            ("schedule_constraint", "1"),
                            ("allow_multi_class", "1"),
@@ -2206,9 +2206,10 @@ def _phase3_mode() -> bool:
             and get_setting("student_reg_open", "0") != "1")
 
 
-def _cancel_only_mode() -> bool:
-    """GĐ3 'Chỉ huỷ': students may only cancel; no new registrations."""
-    return _phase3_mode() and get_setting("cancel_only", "0") == "1"
+def _propose_only_mode() -> bool:
+    """GĐ3 'Chỉ đề xuất': students cannot self-register or self-cancel; only GVCN proposals
+    which the student confirms / declines."""
+    return _phase3_mode() and get_setting("propose_only", "0") == "1"
 
 
 def _teacher_view_enrollments_on() -> bool:
@@ -2312,7 +2313,7 @@ def student_dashboard():
 
     student_reg_open    = get_setting("student_reg_open",    "0") == "1"
     supplement_reg_open = phase3_mode
-    cancel_only = _cancel_only_mode()
+    propose_only = _propose_only_mode()
     require_5_subjects  = get_setting("require_5_subjects",  "1") == "1" and not phase3_mode
     # Per-homeroom-class access for the open phase (GĐ2 → phase2_enabled, GĐ3 → phase3_enabled)
     phase2_allowed = True
@@ -2324,18 +2325,15 @@ def student_dashboard():
             ).fetchone()
             if hroom is not None:
                 phase2_allowed = bool(hroom.phase3_enabled if supplement_reg_open else hroom.phase2_enabled)
-    # GĐ3: subjects registered before the adjustment phase are hard-locked (cannot be cancelled)
+    # GĐ3: subjects registered before the adjustment phase are hard-locked (cannot be cancelled);
+    # with "Chỉ đề xuất" ON every registered subject is locked (students only answer proposals).
     locked_class_ids = set()
-    if supplement_reg_open and not cancel_only:
+    if supplement_reg_open:
         with engine.connect() as conn:
-            locked_class_ids = {
-                r.class_id for r in conn.execute(
-                    select(enrollments.c.class_id).where(and_(
-                        enrollments.c.student_id == student_id,
-                        enrollments.c.phase3_added == 0,
-                    ))
-                ).fetchall()
-            }
+            _lq = select(enrollments.c.class_id).where(enrollments.c.student_id == student_id)
+            if not propose_only:
+                _lq = _lq.where(enrollments.c.phase3_added == 0)
+            locked_class_ids = {r.class_id for r in conn.execute(_lq).fetchall()}
     needs_email = (
         get_setting("require_email_check", "0") == "1"
         and not phase3_mode
@@ -2375,7 +2373,7 @@ def student_dashboard():
         student_schedule=student_schedule,
         student_reg_open=student_reg_open,
         supplement_reg_open=supplement_reg_open,
-        cancel_only=cancel_only,
+        propose_only=propose_only,
         confirm_open=_proposal_confirm_open(),
         locked_class_ids=locked_class_ids,
         require_5_subjects=require_5_subjects,
@@ -2659,8 +2657,8 @@ def student_enroll():
     if not reg_open and not suppl_open:
         return jsonify(ok=False, error="Chưa mở đăng ký.")
     phase3 = suppl_open and not reg_open
-    if phase3 and get_setting("cancel_only", "0") == "1":
-        return jsonify(ok=False, error="Hiện chỉ cho phép huỷ môn đã đăng ký, không thể đăng ký mới.")
+    if phase3 and get_setting("propose_only", "0") == "1":
+        return jsonify(ok=False, error="Hiện chỉ cho phép giáo viên chủ nhiệm đề xuất, học sinh không thể tự đăng ký.")
     # Per-homeroom-class access gate (GĐ2 → phase2_enabled, GĐ3 → phase3_enabled)
     student_id_check = session.get("user_id")
     with engine.connect() as conn:
@@ -2884,10 +2882,25 @@ def student_cancel_enroll(class_id):
         return jsonify(ok=False, error="Đăng ký đã đóng.")
     student_id   = session["user_id"]
     student_grade = session.get("grade")
+    phase3_now = suppl_open and not reg_open
     with engine.connect() as conn:
-        # GĐ3: only subjects added during this phase can be cancelled; earlier ones are hard-locked
-        # (unless "Chỉ huỷ" is on, where every registered subject may be cancelled)
-        if suppl_open and not reg_open and get_setting("cancel_only", "0") != "1":
+        # Same gates as enrolling: per-homeroom-class phase switch and account lock
+        st = conn.execute(select(students.c.class_name, students.c.reg_locked)
+                          .where(students.c.id == student_id)).fetchone()
+        if st:
+            if st.reg_locked:
+                return jsonify(ok=False, error="Tài khoản của bạn đang bị khoá đăng ký. Vui lòng liên hệ nhà trường.")
+            hroom = conn.execute(
+                select(homeroom_classes.c.phase2_enabled, homeroom_classes.c.phase3_enabled)
+                .where(homeroom_classes.c.class_name == st.class_name)
+            ).fetchone()
+            if hroom is not None and not (hroom.phase3_enabled if phase3_now else hroom.phase2_enabled):
+                return jsonify(ok=False, error="Lớp của bạn chưa được mở khoá cho giai đoạn này nên không thể huỷ môn.")
+        # GĐ3: only subjects added during this phase can be cancelled; earlier ones (GĐ2) are hard-locked.
+        # With "Chỉ đề xuất" ON students cannot cancel anything themselves.
+        if suppl_open and not reg_open:
+            if get_setting("propose_only", "0") == "1":
+                return jsonify(ok=False, error="Hiện chỉ cho phép giáo viên chủ nhiệm đề xuất, học sinh không thể tự huỷ môn.")
             row = conn.execute(
                 select(enrollments.c.phase3_added).where(and_(
                     enrollments.c.student_id == student_id,
@@ -3715,7 +3728,7 @@ def admin_index():
     teacher_reg_open     = get_setting("teacher_reg_open", "0") == "1"
     student_reg_open     = get_setting("student_reg_open", "0") == "1"
     supplement_reg_open  = get_setting("supplement_reg_open", "0") == "1"
-    cancel_only = get_setting("cancel_only", "0") == "1"
+    propose_only = get_setting("propose_only", "0") == "1"
     maintenance = get_setting("maintenance_mode", "0") == "1"
     schedule_constraint = get_setting("schedule_constraint", "1") == "1"
     allow_multi_class = get_setting("allow_multi_class", "1") == "1"
@@ -3755,7 +3768,7 @@ def admin_index():
         teacher_reg_open=teacher_reg_open,
         student_reg_open=student_reg_open,
         supplement_reg_open=supplement_reg_open,
-        cancel_only=cancel_only,
+        propose_only=propose_only,
         maintenance=maintenance,
         schedule_constraint=schedule_constraint,
         allow_multi_class=allow_multi_class,
@@ -8253,11 +8266,11 @@ def admin_classes_gvcn_propose():
     return jsonify(ok=True, updated=res.rowcount, on=bool(on))
 
 
-@app.route("/admin/enrollment/toggle-cancel-only", methods=["POST"])
+@app.route("/admin/enrollment/toggle-propose-only", methods=["POST"])
 @admin_required
-def admin_enrollment_toggle_cancel_only():
-    new_val = "0" if get_setting("cancel_only", "0") == "1" else "1"
-    set_setting("cancel_only", new_val)
+def admin_enrollment_toggle_propose_only():
+    new_val = "0" if get_setting("propose_only", "0") == "1" else "1"
+    set_setting("propose_only", new_val)
     _bump()
     return jsonify(ok=True, on=new_val == "1")
 

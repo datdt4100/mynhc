@@ -9026,6 +9026,61 @@ def admin_logs():
                            action_filter=action_filter)
 
 
+@app.route("/admin/student-logs")
+@admin_required
+def admin_student_logs():
+    """Lịch sử hoạt động của học sinh (đăng ký, huỷ, xác nhận...) – mới nhất trước."""
+    page     = request.args.get("page", 1, type=int)
+    per_page = 50
+    action_filter = request.args.get("action", "")
+    grade_filter  = request.args.get("grade", type=int)
+    q_text        = (request.args.get("q", "") or "").strip()
+    L = student_enroll_log
+    with engine.connect() as conn:
+        base = (select(L.c.id, L.c.action, L.c.ts,
+                       students.c.full_name.label("student_name"),
+                       students.c.grade.label("student_grade"),
+                       students.c.class_name.label("student_class"),
+                       classes.c.subject, classes.c.chuyen_de,
+                       classes.c.day_of_week, classes.c.session_type,
+                       classes.c.start_session, classes.c.duration,
+                       teachers.c.full_name.label("teacher_name"),
+                       teachers.c.subject_group)
+                .select_from(L.join(students, L.c.student_id == students.c.id)
+                              .outerjoin(classes, L.c.class_id == classes.c.id)
+                              .outerjoin(teachers, classes.c.teacher_id == teachers.c.id)))
+        if action_filter in _ENROLL_LABEL:
+            base = base.where(L.c.action == action_filter)
+        if grade_filter in (10, 11, 12):
+            base = base.where(students.c.grade == grade_filter)
+        if q_text:
+            like = f"%{q_text}%"
+            base = base.where(or_(students.c.full_name.ilike(like), students.c.class_name.ilike(like)))
+        total = conn.execute(select(func.count()).select_from(base.subquery())).scalar() or 0
+        rows = conn.execute(base.order_by(L.c.ts.desc(), L.c.id.desc())
+                                .offset((page - 1) * per_page).limit(per_page)).fetchall()
+    items = []
+    for r in rows:
+        has_cls = bool(r.day_of_week)
+        items.append({
+            "student": _name_fmt(r.student_name), "grade": r.student_grade, "sclass": r.student_class,
+            "action": r.action, "action_label": _ENROLL_LABEL.get(r.action, r.action),
+            "subject": (r.subject or r.subject_group or "—") if (r.subject or r.subject_group or has_cls) else "(lớp đã xoá)",
+            "chuyen_de": r.chuyen_de,
+            "teacher": _name_fmt(r.teacher_name) if r.teacher_name else "",
+            "day": day_name(r.day_of_week) if has_cls else "—",
+            "period": (("Sáng" if r.session_type == "morning" else "Chiều") +
+                       (f", tiết {r.start_session}" if int(r.duration or 1) == 1 else
+                        f", tiết {r.start_session}-{int(r.start_session) + int(r.duration) - 1}")) if has_cls else "—",
+            "duration": f"{r.duration} tiết" if has_cls else "—",
+            "ts": r.ts,
+        })
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    return render_template("admin/student_logs.html", items=items, page=page, total_pages=total_pages,
+                           total=total, action_filter=action_filter, grade_filter=grade_filter,
+                           q=q_text, labels=_ENROLL_LABEL)
+
+
 @app.route("/api/admin/logs/clear", methods=["POST"])
 @admin_required
 def admin_logs_clear():
